@@ -1,0 +1,51 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#01696F", "primaryTextColor": "#28251D", "primaryBorderColor": "#0C4E54", "lineColor": "#7A7974", "secondaryColor": "#F7F6F2"}}}%%
+
+sequenceDiagram
+    actor Dev as Разработчик
+    participant GIT as Bitbucket Server<br/>(Git repo)
+    participant PIPE as Bitbucket Pipelines<br/>(Runner)
+    participant MVN as Maven<br/>(build + test)
+    participant DOCKER as Docker<br/>(build + push)
+    participant REG as Docker Registry<br/>:5000
+    participant HELM as Helm
+    participant K8S as Kubernetes<br/>(Timeweb Cloud)
+    participant APP as greeting-service<br/>pod
+
+    Dev->>GIT: git push origin develop
+
+    GIT->>PIPE: webhook: new commit on develop
+
+    Note over PIPE: Шаг 1 — Build & Test
+    PIPE->>MVN: mvn clean verify -B
+    MVN-->>PIPE: ✅ тесты прошли, JAR собран
+
+    Note over PIPE: Шаг 2 — Docker Build & Push
+    PIPE->>DOCKER: docker build -t registry/greeting-service:abc12345 .
+    DOCKER-->>PIPE: ✅ image собран
+    PIPE->>REG: docker push registry/greeting-service:abc12345
+    REG-->>PIPE: ✅ image загружен
+
+    Note over PIPE: Шаг 3 — Deploy to Dev
+    PIPE->>HELM: helm upgrade --install greeting-service<br/>--set image.tag=abc12345<br/>--namespace dev --atomic
+    HELM->>K8S: apply Deployment, Service, Ingress
+    K8S->>REG: imagePull: greeting-service:abc12345
+    REG-->>K8S: ✅ image получен
+    K8S->>APP: запуск нового пода
+    APP-->>K8S: /actuator/health/readiness → UP
+    K8S-->>HELM: ✅ rollout complete
+    HELM-->>PIPE: ✅ deploy success
+
+    Note over PIPE: Шаг 4 — Post-deploy check
+    PIPE->>K8S: kubectl rollout status deployment/...
+    K8S-->>PIPE: ✅ deployment rolled out
+    PIPE->>APP: curl http://ingress-ip/api/greeting
+    APP-->>PIPE: 200 OK {"message": "Hello, World!"}
+
+    PIPE-->>Dev: ✅ Pipeline SUCCESS — commit abc12345 задеплоен в dev
+
+    Note over Dev,K8S: Деплой в prod — ручное подтверждение в UI Bitbucket
+    Dev->>PIPE: ▶️ Ручной запуск "Deploy to Production"
+    PIPE->>HELM: helm upgrade --install greeting-service<br/>--namespace prod --atomic --timeout 10m
+    HELM->>K8S: rolling update (maxSurge=1, maxUnavailable=0)
+    K8S-->>HELM: ✅ all pods ready
+    PIPE-->>Dev: ✅ Production deploy SUCCESS

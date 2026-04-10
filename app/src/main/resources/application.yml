@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+# Значения по умолчанию для локальной разработки.
+# В Kubernetes они будут переопределены через ConfigMap и env vars.
+app:
+  env: ${APP_ENV:local}
+  version: ${APP_VERSION:unknown}
+
+spring:
+  application:
+    name: greeting-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      # Kubernetes probes видят подробный статус — полезно при отладке.
+      # В prod можно выставить 'never' для внешнего доступа.
+      show-details: always
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true

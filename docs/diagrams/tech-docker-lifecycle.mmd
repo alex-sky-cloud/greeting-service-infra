@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8F4F8', 'primaryTextColor': '#1B474D', 'primaryBorderColor': '#20808D', 'lineColor': '#20808D', 'secondaryColor': '#FFF8E8', 'tertiaryColor': '#F0F9F0', 'background': '#FFFFFF', 'mainBkg': '#E8F4F8', 'nodeBorder': '#20808D', 'clusterBkg': '#F4FAFB', 'titleColor': '#1B474D', 'edgeLabelBackground': '#FFFFFF', 'fontFamily': 'Arial'}}}%%
+flowchart LR
+    subgraph DEV["💻 Локальный ПК разработчика"]
+        direction TB
+        A["📄 Исходный код\n(.java файлы)"]
+        B["📋 Dockerfile\n(инструкция сборки)"]
+    end
+
+    subgraph BUILD["🏗️ docker build"]
+        direction TB
+        C["🔧 Gradle\nкомпиляция + bootJar"]
+        D["📦 Docker Image\n(слои файловой системы)"]
+    end
+
+    subgraph REGISTRY["🗄️ Docker Registry\n(distribution/registry:2)"]
+        direction TB
+        E["🏷️ image:abc12345\n(по commit hash)"]
+        F["🏷️ image:latest"]
+    end
+
+    subgraph K8S["☸️ Kubernetes"]
+        direction TB
+        G["📥 docker pull"]
+        H["🟢 Pod 1\nконтейнер"]
+        I["🟢 Pod 2\nконтейнер"]
+    end
+
+    A --> C
+    B --> BUILD
+    C --> D
+    D -->|"docker push"| E
+    D -->|"docker tag + push"| F
+    E -->|"image pull"| G
+    G --> H
+    G --> I
+
+    style DEV fill:#FFF3E0,stroke:#FF8C00,stroke-width:2px,color:#5D3A00
+    style BUILD fill:#E8F4F8,stroke:#20808D,stroke-width:2px,color:#1B474D
+    style REGISTRY fill:#F3E8FF,stroke:#7A39BB,stroke-width:2px,color:#3D1B5E
+    style K8S fill:#E8F5E9,stroke:#437A22,stroke-width:2px,color:#1B3A0E

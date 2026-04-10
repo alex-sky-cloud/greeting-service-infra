@@ -1,0 +1,52 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8F4F8', 'primaryTextColor': '#1B474D', 'primaryBorderColor': '#20808D', 'lineColor': '#20808D', 'secondaryColor': '#FFF8E8', 'tertiaryColor': '#F0F9F0', 'background': '#FFFFFF', 'mainBkg': '#E8F4F8', 'nodeBorder': '#20808D', 'clusterBkg': '#F4FAFB', 'titleColor': '#1B474D', 'edgeLabelBackground': '#FFFFFF', 'fontFamily': 'Arial'}}}%%
+flowchart TB
+    subgraph INTERNET["🌐 Интернет"]
+        USER["👤 Пользователь\nGET /api/greeting"]
+    end
+
+    subgraph CP["⚙️ Control Plane (управляется Timeweb Cloud)"]
+        direction LR
+        API["🔵 API Server\nединственная точка входа"]
+        ETCD["🗄️ etcd\nбаза состояния кластера"]
+        SCHED["📋 Scheduler\nвыбирает, куда поставить Pod"]
+        CM["🔄 Controller Manager\nследит за desired state"]
+        API <--> ETCD
+        API --> SCHED
+        API --> CM
+    end
+
+    subgraph NODE1["🖥️ Worker Node 1"]
+        direction TB
+        KUB1["kubelet"]
+        subgraph NS_DEV["namespace: dev"]
+            P1["🟢 Pod\ngreeting-service"]
+        end
+        KUB1 --- NS_DEV
+    end
+
+    subgraph NODE2["🖥️ Worker Node 2"]
+        direction TB
+        KUB2["kubelet"]
+        subgraph NS_PROD["namespace: prod"]
+            P2["🟢 Pod\ngreeting-service"]
+            P3["🟢 Pod\ngreeting-service"]
+        end
+        KUB2 --- NS_PROD
+    end
+
+    INGRESS["🔀 NGINX Ingress Controller\ngreeting.example.com"]
+    SVC["⚖️ Service ClusterIP\nбалансировщик внутри кластера"]
+
+    USER --> INGRESS
+    INGRESS --> SVC
+    SVC --> P2
+    SVC --> P3
+    API -->|"schedule"| KUB1
+    API -->|"schedule"| KUB2
+
+    style INTERNET fill:#FFF3E0,stroke:#FF8C00,stroke-width:2px,color:#5D3A00
+    style CP fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D2B6E
+    style NODE1 fill:#E8F5E9,stroke:#437A22,stroke-width:2px,color:#1B3A0E
+    style NODE2 fill:#E8F5E9,stroke:#437A22,stroke-width:2px,color:#1B3A0E
+    style INGRESS fill:#F3E8FF,stroke:#7A39BB,stroke-width:2px,color:#3D1B5E
+    style SVC fill:#FCE4EC,stroke:#C62828,stroke-width:2px,color:#6B0E1E

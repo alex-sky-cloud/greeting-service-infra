@@ -1,0 +1,92 @@
+# =============================================================================
+# values.yaml — значения по умолчанию для Helm chart.
+# Для переопределения используйте values-<env>.yaml или --set в CLI.
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  # Адрес Docker Registry на вашем devtools-сервере.
+  # Формат: <IP или hostname>:<port>/<image-name>
+  repository: registry.example.com/greeting-service
+  pullPolicy: Always
+  # tag переопределяется в pipeline через --set image.tag=$IMAGE_TAG
+  tag: "latest"
+
+# Имя Secret, содержащего учётные данные для pull из приватного registry.
+imagePullSecrets:
+  - name: registry-credentials
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  # Используем NGINX Ingress Controller, установленный Timeweb Cloud автоматически
+  # при создании кластера с параметром ingress = true.
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  host: greeting.example.com
+  path: /
+  pathType: Prefix
+  # tls — раскомментируйте после настройки cert-manager или ручного TLS.
+  # tls:
+  #   - secretName: greeting-tls
+  #     hosts:
+  #       - greeting.example.com
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Переменные окружения для приложения.
+# Чувствительные значения (пароли, токены) берутся из Kubernetes Secrets.
+env:
+  APP_ENV: "production"
+  APP_VERSION: "0.0.1"
+
+# Ссылки на Kubernetes Secret для переменных окружения приложения.
+# Secret создаётся отдельно (см. k8s/secret.yaml или инструкция).
+envFromSecret:
+  secretName: "greeting-service-secret"
+
+# Kubernetes health probes.
+# Spring Boot Actuator предоставляет /actuator/health/liveness и /actuator/health/readiness.
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  initialDelaySeconds: 20
+  periodSeconds: 5
+  failureThreshold: 3
+
+# Kubernetes Horizontal Pod Autoscaler.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# Node selectors, tolerations, affinity — опционально для prod.
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  name: ""

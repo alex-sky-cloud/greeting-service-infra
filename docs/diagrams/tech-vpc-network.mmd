@@ -1,0 +1,42 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8F4F8', 'primaryTextColor': '#1B474D', 'primaryBorderColor': '#20808D', 'lineColor': '#20808D', 'background': '#FFFFFF', 'mainBkg': '#E8F4F8', 'nodeBorder': '#20808D', 'clusterBkg': '#F4FAFB', 'titleColor': '#1B474D', 'edgeLabelBackground': '#FFFFFF', 'fontFamily': 'Arial'}}}%%
+flowchart TB
+    INET["🌐 Интернет"]
+
+    subgraph TWC["☁️ Timeweb Cloud"]
+        subgraph VPC["🔒 VPC: 10.10.0.0/24 (изолированная сеть)"]
+            direction TB
+            subgraph K8S_NODES["☸️ K8S Worker Nodes\n10.10.0.10–10.10.0.50"]
+                N1["Node 1\n(Pod: greeting-service)"]
+                N2["Node 2\n(Pod: greeting-service)"]
+            end
+
+            subgraph DEVTOOLS["🖥️ VPS devtools\n10.10.0.5"]
+                BB["Bitbucket Server\n:7990"]
+                REG["Docker Registry\n:5000"]
+                RUNNER["Pipelines Runner"]
+            end
+
+            subgraph MANAGED["☁️ Managed Services"]
+                PG["🐘 PostgreSQL\n(внутренний endpoint)"]
+                S3["🗄️ S3 Bucket\n(endpoint: s3.timeweb.cloud)"]
+            end
+        end
+
+        LB["⚖️ LoadBalancer\nPublic IP"]
+        FW["🛡️ Firewall\n(разрешён только :80/:443 снаружи)"]
+    end
+
+    INET -->|"80/443"| FW
+    FW --> LB
+    LB -->|"к Ingress Controller"| K8S_NODES
+    RUNNER -->|"docker push :5000"| REG
+    RUNNER -->|"helm upgrade"| K8S_NODES
+    K8S_NODES -->|"JDBC :5432"| PG
+    K8S_NODES -->|"S3 API"| S3
+    REG -->|"image pull (VPC)"| K8S_NODES
+
+    style VPC fill:#EEF7FF,stroke:#1565C0,stroke-width:3px,color:#0D2B6E
+    style K8S_NODES fill:#E8F5E9,stroke:#437A22,stroke-width:2px,color:#1B3A0E
+    style DEVTOOLS fill:#FFF3E0,stroke:#FF8C00,stroke-width:2px,color:#5D3A00
+    style MANAGED fill:#F3E8FF,stroke:#7A39BB,stroke-width:2px,color:#3D1B5E
+    style FW fill:#FCE4EC,stroke:#C62828,stroke-width:2px,color:#6B0E1E

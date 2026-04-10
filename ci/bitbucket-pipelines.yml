@@ -1,0 +1,183 @@
+# =============================================================================
+# bitbucket-pipelines.yml
+#
+# CI/CD pipeline для greeting-service (Gradle).
+# Документация: https://support.atlassian.com/bitbucket-cloud/docs/configure-your-pipeline/
+#
+# Переменные окружения (Settings → Repository Variables):
+#
+#   REGISTRY_HOST       — hostname Docker Registry (пример: 1.2.3.4:5000)
+#   REGISTRY_USER       — логин для Docker Registry
+#   REGISTRY_PASSWORD   — пароль для Docker Registry (Secured)
+#   KUBE_CONFIG_BASE64  — kubeconfig в base64: cat ~/.kube/config | base64 -w0
+#   IMAGE_NAME          — имя образа (пример: greeting-service)
+#   HELM_RELEASE_NAME   — имя Helm release (пример: greeting-service)
+# =============================================================================
+
+image: eclipse-temurin:21-jdk
+
+definitions:
+  caches:
+    gradle: ~/.gradle
+
+  steps:
+    # ── Шаг: сборка и тесты ──────────────────────────────────────────────────
+    - step: &build-and-test
+        name: "Build & Test"
+        caches:
+          - gradle
+        script:
+          - cd app
+          # Запускаем тесты и сборку.
+          - ./gradlew clean test bootJar --no-daemon
+          # Сохраняем JAR как артефакт для следующего шага.
+          - cp build/libs/app.jar ../greeting-service.jar
+        artifacts:
+          - greeting-service.jar
+
+    # ── Шаг: сборка Docker image и push в Registry ───────────────────────────
+    - step: &build-and-push-docker
+        name: "Build & Push Docker Image"
+        services:
+          - docker
+        script:
+          # IMAGE_TAG = short git commit hash. Уникально идентифицирует каждую сборку.
+          - export IMAGE_TAG=${BITBUCKET_COMMIT::8}
+          - export FULL_IMAGE="${REGISTRY_HOST}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+          # Логинимся в приватный Docker Registry.
+          - echo "${REGISTRY_PASSWORD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USER}" --password-stdin
+
+          # Собираем Docker image.
+          - cd app
+          - docker build -t "${FULL_IMAGE}" .
+
+          # Помечаем образ тегом latest.
+          - docker tag "${FULL_IMAGE}" "${REGISTRY_HOST}/${IMAGE_NAME}:latest"
+
+          # Публикуем в Registry.
+          - docker push "${FULL_IMAGE}"
+          - docker push "${REGISTRY_HOST}/${IMAGE_NAME}:latest"
+
+          # Сохраняем IMAGE_TAG для следующего шага.
+          - echo "${IMAGE_TAG}" > ../image_tag.txt
+        artifacts:
+          - image_tag.txt
+
+    # ── Шаг: деплой в Kubernetes через Helm ──────────────────────────────────
+    - step: &deploy-to-k8s
+        name: "Deploy to Kubernetes"
+        image: alpine/helm:3.15.0
+        script:
+          - apk add --no-cache curl bash
+          - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          - chmod +x kubectl && mv kubectl /usr/local/bin/
+
+          # Восстанавливаем kubeconfig из переменной окружения.
+          - mkdir -p ~/.kube
+          - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+          - chmod 600 ~/.kube/config
+
+          - export IMAGE_TAG=$(cat image_tag.txt)
+          - export FULL_IMAGE="${REGISTRY_HOST}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+          # Деплоим через Helm. --atomic откатывает при ошибке.
+          - |
+            helm upgrade --install "${HELM_RELEASE_NAME}" infra/helm/greeting-service \
+              --namespace "${DEPLOY_NAMESPACE}" \
+              --create-namespace \
+              -f infra/helm/greeting-service/values.yaml \
+              -f "infra/helm/greeting-service/values-${DEPLOY_ENV}.yaml" \
+              --set image.repository="${REGISTRY_HOST}/${IMAGE_NAME}" \
+              --set image.tag="${IMAGE_TAG}" \
+              --atomic \
+              --timeout 5m
+
+          - kubectl rollout status deployment/"${HELM_RELEASE_NAME}-greeting-service" -n "${DEPLOY_NAMESPACE}" --timeout=300s
+
+# ── Основная конфигурация pipeline ─────────────────────────────────────────
+pipelines:
+
+  branches:
+
+    # feature/* — только сборка и тесты
+    feature/*:
+      - step:
+          <<: *build-and-test
+
+    # develop — сборка, тесты, деплой в dev
+    develop:
+      - step:
+          <<: *build-and-test
+      - step:
+          <<: *build-and-push-docker
+      - step:
+          name: "Deploy to Dev"
+          <<: *deploy-to-k8s
+          deployment: Development
+          script:
+            - export DEPLOY_NAMESPACE="dev"
+            - export DEPLOY_ENV="dev"
+            - apk add --no-cache curl bash
+            - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            - chmod +x kubectl && mv kubectl /usr/local/bin/
+            - mkdir -p ~/.kube
+            - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+            - chmod 600 ~/.kube/config
+            - export IMAGE_TAG=$(cat image_tag.txt)
+            - |
+              helm upgrade --install greeting-service infra/helm/greeting-service \
+                --namespace dev --create-namespace \
+                -f infra/helm/greeting-service/values.yaml \
+                -f infra/helm/greeting-service/values-dev.yaml \
+                --set image.repository="${REGISTRY_HOST}/${IMAGE_NAME}" \
+                --set image.tag="${IMAGE_TAG}" \
+                --atomic --timeout 5m
+            - kubectl rollout status deployment/greeting-service-greeting-service -n dev --timeout=300s
+
+    # main — деплой в prod с ручным подтверждением
+    main:
+      - step:
+          <<: *build-and-test
+      - step:
+          <<: *build-and-push-docker
+      - step:
+          name: "Deploy to Production"
+          deployment: Production
+          trigger: manual
+          image: alpine/helm:3.15.0
+          script:
+            - apk add --no-cache curl bash
+            - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            - chmod +x kubectl && mv kubectl /usr/local/bin/
+            - mkdir -p ~/.kube
+            - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+            - chmod 600 ~/.kube/config
+            - export IMAGE_TAG=$(cat image_tag.txt)
+            - |
+              helm upgrade --install greeting-service infra/helm/greeting-service \
+                --namespace prod --create-namespace \
+                -f infra/helm/greeting-service/values.yaml \
+                -f infra/helm/greeting-service/values-prod.yaml \
+                --set image.repository="${REGISTRY_HOST}/${IMAGE_NAME}" \
+                --set image.tag="${IMAGE_TAG}" \
+                --atomic --timeout 10m
+            - kubectl rollout status deployment/greeting-service-greeting-service -n prod --timeout=600s
+
+  pull-requests:
+    "**":
+      - step:
+          <<: *build-and-test
+
+  custom:
+    rollback-prod:
+      - step:
+          name: "Rollback Production"
+          image: alpine/helm:3.15.0
+          script:
+            - apk add --no-cache curl bash
+            - mkdir -p ~/.kube
+            - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+            - chmod 600 ~/.kube/config
+            - helm rollback greeting-service -n prod
+            - kubectl rollout status deployment/greeting-service-greeting-service -n prod --timeout=300s

@@ -1,0 +1,12 @@
+# Terraform state — никогда не коммитить в репозиторий
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.lock.hcl
+
+# Файл с реальными значениями переменных
+terraform.tfvars
+
+# Чувствительные outputs
+*.kubeconfig
+kubeconfig.yaml

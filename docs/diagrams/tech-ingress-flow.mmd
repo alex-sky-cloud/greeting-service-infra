@@ -1,0 +1,36 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8F4F8', 'primaryTextColor': '#1B474D', 'primaryBorderColor': '#20808D', 'lineColor': '#20808D', 'background': '#FFFFFF', 'mainBkg': '#E8F4F8', 'nodeBorder': '#20808D', 'clusterBkg': '#F4FAFB', 'titleColor': '#1B474D', 'edgeLabelBackground': '#FFFFFF', 'fontFamily': 'Arial'}}}%%
+flowchart LR
+    USER["👤 Браузер\nGET https://greeting.example.com/api/greeting"]
+
+    subgraph CLOUD_EDGE["☁️ Timeweb Cloud Edge"]
+        LB["⚖️ LoadBalancer\nPublic IP: 1.2.3.4"]
+    end
+
+    subgraph K8S["☸️ Kubernetes Cluster"]
+        direction TB
+        subgraph INGRESS_NS["kube-system"]
+            NGINX["🔀 NGINX Ingress Controller\nPod (авто-создан Timeweb Cloud)"]
+            IC["📋 Ingress Resource\nhost: greeting.example.com\npath: /  → Service:80"]
+        end
+
+        subgraph APP_NS["namespace: prod"]
+            SVC["⚖️ Service ClusterIP\nport: 80 → 8080"]
+            P1["🟢 Pod 1\ngreeting-service:8080"]
+            P2["🟢 Pod 2\ngreeting-service:8080"]
+        end
+    end
+
+    RESP["📤 HTTP 200 OK"]
+
+    USER -->|"HTTPS :443"| LB
+    LB -->|"TCP forward"| NGINX
+    IC -->|"routing rule"| NGINX
+    NGINX -->|"proxy_pass"| SVC
+    SVC -->|"round-robin"| P1
+    SVC -->|"round-robin"| P2
+    P1 -->|"response"| RESP
+    P2 -->|"response"| RESP
+
+    style CLOUD_EDGE fill:#FFF3E0,stroke:#FF8C00,stroke-width:2px,color:#5D3A00
+    style INGRESS_NS fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D2B6E
+    style APP_NS fill:#E8F5E9,stroke:#437A22,stroke-width:2px,color:#1B3A0E

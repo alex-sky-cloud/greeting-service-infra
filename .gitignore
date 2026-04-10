@@ -1,0 +1,37 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!app/src/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
+infra/terraform/.terraform.lock.hcl
+infra/terraform/terraform.tfvars
+infra/terraform/*.kubeconfig
+
+# Kubeconfig
+*.kube/
+kubeconfig.yaml
+*.kubeconfig
+
+# Secrets
+*.env
+.env
+secrets/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/app/.gradle/

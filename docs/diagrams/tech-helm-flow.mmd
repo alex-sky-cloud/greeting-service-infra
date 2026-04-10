@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#E8F4F8', 'primaryTextColor': '#1B474D', 'primaryBorderColor': '#20808D', 'lineColor': '#20808D', 'background': '#FFFFFF', 'mainBkg': '#E8F4F8', 'nodeBorder': '#20808D', 'clusterBkg': '#F4FAFB', 'titleColor': '#1B474D', 'edgeLabelBackground': '#FFFFFF', 'fontFamily': 'Arial'}}}%%
+flowchart LR
+    subgraph CHART["📦 Helm Chart\n/infra/helm/greeting-service/"]
+        direction TB
+        TMPL["📄 templates/\ndeployment.yaml\nservice.yaml\ningress.yaml"]
+        VALS["⚙️ values.yaml\nvalues-dev.yaml\nvalues-prod.yaml"]
+    end
+
+    subgraph HELM_CMD["🔧 helm upgrade --install"]
+        direction TB
+        RENDER["Template Engine\nподставляет values → YAML"]
+    end
+
+    subgraph K8S_API["☸️ Kubernetes API Server"]
+        direction TB
+        DEP["Deployment"]
+        SVC["Service"]
+        ING["Ingress"]
+        SEC["Secret"]
+    end
+
+    subgraph RELEASE["📋 Helm Release History"]
+        R1["revision 1"]
+        R2["revision 2 ← текущий"]
+        R3["revision 3 (при rollback)"]
+    end
+
+    TMPL --> RENDER
+    VALS --> RENDER
+    RENDER -->|"kubectl apply"| DEP
+    RENDER -->|"kubectl apply"| SVC
+    RENDER -->|"kubectl apply"| ING
+    RENDER -->|"kubectl apply"| SEC
+    HELM_CMD --> RELEASE
+    R2 -->|"helm rollback"| R3
+
+    style CHART fill:#FFF3E0,stroke:#FF8C00,stroke-width:2px,color:#5D3A00
+    style HELM_CMD fill:#E8F4F8,stroke:#20808D,stroke-width:2px,color:#1B474D
+    style K8S_API fill:#E8F5E9,stroke:#437A22,stroke-width:2px,color:#1B3A0E
+    style RELEASE fill:#F3E8FF,stroke:#7A39BB,stroke-width:2px,color:#3D1B5E

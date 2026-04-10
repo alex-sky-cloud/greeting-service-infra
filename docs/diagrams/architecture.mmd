@@ -1,0 +1,82 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#01696F", "primaryTextColor": "#28251D", "primaryBorderColor": "#0C4E54", "lineColor": "#7A7974", "secondaryColor": "#F7F6F2", "tertiaryColor": "#BCE2E7"}}}%%
+
+graph TB
+    subgraph DEV["💻 Локальный ПК разработчика"]
+        direction TB
+        IDEA["IntelliJ IDEA\nSpring Boot App"]
+        GIT["git"]
+        KUBECTL["kubectl"]
+        HELM["helm"]
+        TF["terraform"]
+    end
+
+    subgraph BITBUCKET_VPS["🖥️ VPS: devtools-сервер (Timeweb Cloud)"]
+        direction TB
+        BB["Bitbucket Server\n:7990"]
+        PIPELINE["Bitbucket Pipelines\n(Runner)"]
+        REGISTRY["Docker Registry\ndistribution/registry:2\n:5000"]
+    end
+
+    subgraph TWC_CLOUD["☁️ Timeweb Cloud — Managed Services"]
+        direction TB
+        subgraph VPC["VPC: 10.10.0.0/24"]
+            direction TB
+            subgraph K8S["Managed Kubernetes Cluster"]
+                direction TB
+                subgraph NS_PROD["namespace: prod"]
+                    DEPLOY["Deployment\ngreeting-service\n(2–10 pods)"]
+                    SVC["Service\nClusterIP :80"]
+                    INGRESS_RES["Ingress\ngreeting.example.com"]
+                    CM["ConfigMap\nAPP_ENV, APP_VERSION"]
+                    SEC["Secret\nDB_URL, DB_PASSWORD"]
+                end
+                subgraph NS_DEV["namespace: dev"]
+                    DEPLOY_DEV["Deployment\ngreeting-service\n(1 pod)"]
+                end
+                ING_CTRL["NGINX Ingress Controller\n(установлен Timeweb Cloud)"]
+            end
+            PG["Managed PostgreSQL\nTimeweb Cloud DB"]
+        end
+        LB_IP["Публичный IP\n(Ingress LoadBalancer)"]
+    end
+
+    INTERNET(["🌍 Интернет\nGET /api/greeting"])
+
+    %% Локальный ПК → Bitbucket
+    GIT -- "git push" --> BB
+    TF -- "terraform apply" --> TWC_CLOUD
+    KUBECTL -- "kubectl / helm" --> K8S
+
+    %% Bitbucket → Pipeline → Registry → K8S
+    BB -- "webhook trigger" --> PIPELINE
+    PIPELINE -- "mvn package\ndocker build\ndocker push" --> REGISTRY
+    PIPELINE -- "helm upgrade" --> K8S
+
+    %% Registry → K8S
+    REGISTRY -- "image pull" --> DEPLOY
+    REGISTRY -- "image pull" --> DEPLOY_DEV
+
+    %% K8S внутренние связи
+    ING_CTRL --> INGRESS_RES
+    INGRESS_RES --> SVC
+    SVC --> DEPLOY
+    DEPLOY --> CM
+    DEPLOY --> SEC
+    DEPLOY -- "JDBC" --> PG
+
+    %% Ingress → Internet
+    LB_IP --> ING_CTRL
+    INTERNET --> LB_IP
+
+    %% Стили
+    classDef cloud fill:#BCE2E7,stroke:#01696F,color:#28251D
+    classDef vps fill:#F7F6F2,stroke:#7A7974,color:#28251D
+    classDef k8sres fill:#E8F5E9,stroke:#437A22,color:#28251D
+    classDef devlocal fill:#FFF8F0,stroke:#964219,color:#28251D
+    classDef internet fill:#EDE7F6,stroke:#7A39BB,color:#28251D
+
+    class TWC_CLOUD,K8S,VPC,PG cloud
+    class BITBUCKET_VPS,BB,PIPELINE,REGISTRY vps
+    class DEPLOY,SVC,INGRESS_RES,CM,SEC,ING_CTRL,DEPLOY_DEV,LB_IP k8sres
+    class DEV,IDEA,GIT,KUBECTL,HELM,TF devlocal
+    class INTERNET internet

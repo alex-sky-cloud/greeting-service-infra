@@ -1,0 +1,65 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#01696F", "primaryTextColor": "#28251D", "primaryBorderColor": "#0C4E54", "lineColor": "#7A7974", "secondaryColor": "#F7F6F2"}}}%%
+
+graph LR
+    subgraph LOCAL["Локальный ПК"]
+        TF_FILES["Terraform файлы\n.tf"]
+        TF_CLI["terraform apply"]
+    end
+
+    subgraph TWC_API["Timeweb Cloud API\nhttps://api.timeweb.cloud"]
+        direction TB
+    end
+
+    subgraph RESOURCES["Создаваемые ресурсы"]
+        direction TB
+        VPC["twc_vpc\ngreeting-service-vpc\n10.10.0.0/24"]
+
+        subgraph INSIDE_VPC["Внутри VPC"]
+            direction TB
+            K8S_CLUSTER["twc_k8s_cluster\ngreeting-service-k8s\nv1.28 • flannel • ingress=true"]
+            K8S_NODES["twc_k8s_node_group\nworkers × 2\n2 CPU • 4 GB RAM • 50 GB"]
+            PG["twc_database_cluster\nPostgreSQL\ngreeting-db"]
+            DB_INST["twc_database_instance\ngreeting_db"]
+            DB_USER["twc_database_user\ngreeting_user"]
+        end
+
+        SSH_KEY["twc_ssh_key\noperator-key"]
+        VPS["twc_server\ndevtools\n4 CPU • 8 GB RAM • 100 GB"]
+        S3["twc_s3_bucket\ngreeting-service-artifacts"]
+    end
+
+    subgraph OUTPUTS["Terraform Outputs"]
+        OUT_KUBE["kubeconfig (sensitive)"]
+        OUT_DB_HOST["db_host"]
+        OUT_DB_PORT["db_port"]
+        OUT_S3_KEY["s3_access_key (sensitive)"]
+        OUT_VPS_IP["devtools_public_ip"]
+    end
+
+    TF_FILES --> TF_CLI
+    TF_CLI --> TWC_API
+
+    TWC_API --> VPC
+    VPC --> K8S_CLUSTER
+    K8S_CLUSTER --> K8S_NODES
+    VPC --> PG
+    PG --> DB_INST
+    PG --> DB_USER
+    TWC_API --> SSH_KEY
+    SSH_KEY --> VPS
+    VPS -.-> |"same VPC"| INSIDE_VPC
+    TWC_API --> S3
+
+    K8S_CLUSTER --> OUT_KUBE
+    PG --> OUT_DB_HOST
+    PG --> OUT_DB_PORT
+    S3 --> OUT_S3_KEY
+    VPS --> OUT_VPS_IP
+
+    classDef resource fill:#BCE2E7,stroke:#01696F,color:#28251D
+    classDef output fill:#E8F5E9,stroke:#437A22,color:#28251D
+    classDef local fill:#FFF8F0,stroke:#964219,color:#28251D
+
+    class VPC,K8S_CLUSTER,K8S_NODES,PG,DB_INST,DB_USER,SSH_KEY,VPS,S3 resource
+    class OUT_KUBE,OUT_DB_HOST,OUT_DB_PORT,OUT_S3_KEY,OUT_VPS_IP output
+    class LOCAL,TF_FILES,TF_CLI local

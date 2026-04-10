@@ -1,0 +1,29 @@
+# =============================================================================
+# values-prod.yaml — переопределения для production окружения.
+# =============================================================================
+
+replicaCount: 3
+
+ingress:
+  host: greeting.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Добавьте аннотацию cert-manager если используете TLS:
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+env:
+  APP_ENV: "production"
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"

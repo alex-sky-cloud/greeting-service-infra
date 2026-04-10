@@ -1,0 +1,44 @@
+# =============================================================================
+# terraform.tfvars.example
+#
+# Скопируйте этот файл:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# ВАЖНО: файл terraform.tfvars добавлен в .gitignore.
+# Никогда не коммитьте реальные секреты в репозиторий.
+#
+# Для чувствительных переменных предпочтительнее использовать
+# переменные окружения вида TF_VAR_<name>:
+#   export TF_VAR_twc_token="ваш-токен"
+#   export TF_VAR_db_password="пароль"
+# =============================================================================
+
+# Токен API Timeweb Cloud (панель: https://timeweb.cloud/my/api-keys)
+twc_token = "YOUR_TWC_API_TOKEN"
+
+# Зона доступности
+location = "ru-1"
+
+# Имя проекта (будет префиксом всех ресурсов)
+project_name = "greeting-service"
+
+# Версия Kubernetes — проверьте актуальную в панели Timeweb Cloud
+k8s_version = "v1.28.9"
+
+# Worker-узлы кластера
+k8s_worker_count = 2
+k8s_worker_cpu   = 2
+k8s_worker_ram   = 4096
+k8s_worker_disk  = 51200
+
+# Master-узел
+k8s_master_cpu  = 2
+k8s_master_ram  = 4096
+k8s_master_disk = 51200
+
+# База данных
+db_name     = "greeting-db"
+db_password = "CHANGE_ME_STRONG_PASSWORD"
+
+# CIDR приватной сети
+vpc_subnet = "10.10.0.0/24"
