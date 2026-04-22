@@ -181,13 +181,23 @@ public class AnomalyService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<OrderLineEntity> phantomReadMain(Long orderNo) {
         long firstCount = orderLineRepository.countByOrderNoNative(orderNo);
+
+        log.info("+++++");
+        log.info("Количество позиций в заказе (по номеру заказа) - 1-я выборка в этой же транзакции : " + firstCount);
+        log.info("+++++");
+
         long firstQtySum = orderLineRepository.sumQtyByOrderNoNative(orderNo);
+        log.info("+++++");
+        log.info("Общее количество штук товара, по каждой позиции заказа (по номеру заказа) - 1-я выборка в этой же транзакции : " + firstQtySum);
+        log.info("+++++");
         List<OrderLineEntity> firstRows = orderLineRepository.findAllByOrderNoNative(orderNo);
+
+        log.info("+++++");
+        log.info("Общее количество заказов - 1-я выборка в этой же транзакции : " + firstRows.size());
+        log.info("+++++");
 
         // breakpoint здесь
 
-        long secondCount = orderLineRepository.countByOrderNoNative(orderNo);
-        long secondQtySum = orderLineRepository.sumQtyByOrderNoNative(orderNo);
         List<OrderLineEntity> secondRows = orderLineRepository.findAllByOrderNoNative(orderNo);
 
         return secondRows;

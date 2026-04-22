@@ -26,7 +26,8 @@ public interface OrderLineRepository extends JpaRepository<OrderLineEntity, Long
     long countByOrderNoNative(@Param("orderNo") Long orderNo);
 
     /**
-     * Возвращает общее количество штук (qty) по всем строкам заказа с заданным номером.
+     * Возвращает общее количество штук товара (сумму поля qty)
+     * по всем строкам одного заказа с заданным номером.
      *
      * Пример SQL-запроса:
      * <pre>
@@ -35,13 +36,20 @@ public interface OrderLineRepository extends JpaRepository<OrderLineEntity, Long
      * WHERE order_no = :orderNo;
      * </pre>
      *
-     * COALESCE(expr1, expr2) — возвращает первый аргумент, который НЕ равен NULL.
-     * <li>В данном случае:</li>
-     *   <- SUM(qty) вернёт NULL, если для указанного order_no нет ни одной строки;
-     * - COALESCE(SUM(qty), 0) заменяет этот NULL на 0.
+     * <p>Здесь:
+     * <li>- SUM(qty) складывает значения qty во всех строках с этим order_no;</li>
+     * <li>- если строк нет, SUM(qty) вернёт NULL;</li>
+     * <li>- COALESCE(SUM(qty), 0) заменяет этот NULL на 0.</li>
+     *</p>
+     * То есть метод всегда возвращает число:
+     * <li>0 — если у заказа нет ни одной строки,</li>
+     * <li>>0 — общее количество штук по всем позициям заказа.</li>
      *
-     * Поэтому метод всегда возвращает число (0, если строк нет),
-     * и в Java-коде не нужно отдельно обрабатывать NULL из SUM().
+     * Пример для order_no = 1001:
+     * <li>Keyboard (qty = 1), Mouse (qty = 2) → результат = 3.</li>
+     *
+     * @param orderNo номер заказа
+     * @return суммарное количество штук товара по всем строкам заказа
      */
     @Query(value = """
             select coalesce(sum(qty), 0)

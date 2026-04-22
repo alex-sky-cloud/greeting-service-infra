@@ -1,7 +1,9 @@
 package com.example.greeting.readcommited.controller;
 
 import com.example.greeting.entity.OrderLineEntity;
+import com.example.greeting.readcommited.repository.OrderLineRepository;
 import com.example.greeting.readcommited.service.AnomalyService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -13,12 +15,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/anomalies")
+@Slf4j
 public class AnomalyController {
 
     private final AnomalyService anomalyService;
+    private final OrderLineRepository orderLineRepository;
 
-    public AnomalyController(AnomalyService anomalyService) {
+    public AnomalyController(AnomalyService anomalyService, OrderLineRepository orderLineRepository) {
         this.anomalyService = anomalyService;
+        this.orderLineRepository = orderLineRepository;
     }
 
     /**
@@ -38,7 +43,12 @@ public class AnomalyController {
      */
     @PostMapping("/non-repeatable-read/main")
     public BigDecimal nonRepeatableReadMain(@RequestParam Long accountId) {
-        return anomalyService.nonRepeatableReadMain(accountId);
+
+        BigDecimal secondBalance = anomalyService.nonRepeatableReadMain(accountId);
+        log.info("+++++");
+        log.info("Баланс клиента - 2-я выборка в этой же транзакции : " + secondBalance.toString());
+        log.info("+++++");
+        return secondBalance;
     }
 
     /**
@@ -110,8 +120,25 @@ public class AnomalyController {
      * @return список строк заказа после второго чтения
      */
     @PostMapping("/phantom-read/main")
-    public List<OrderLineEntity> phantomReadMain(@RequestParam Long orderNo) {
-        return anomalyService.phantomReadMain(orderNo);
+    public List<OrderLineEntity> phantomReadMain(@RequestParam ("orderNo") Long orderNo) {
+        List<OrderLineEntity> orderLineEntities = anomalyService.phantomReadMain(orderNo);
+
+        log.info("+++++");
+        log.info("Общее количество заказов - 2-я выборка в этой же транзакции : " + orderLineEntities.size());
+        log.info("+++++");
+
+
+        long firstCount = orderLineRepository.countByOrderNoNative(orderNo);
+
+        log.info("+++++");
+        log.info("Количество позиций в заказе (по номеру заказа) - 1-я выборка в этой же транзакции : " + firstCount);
+        log.info("+++++");
+
+        long firstQtySum = orderLineRepository.sumQtyByOrderNoNative(orderNo);
+        log.info("+++++");
+        log.info("Общее количество штук товара, по каждой позиции заказа (по номеру заказа) - 1-я выборка в этой же транзакции : " + firstQtySum);
+        log.info("+++++");
+        return orderLineEntities;
     }
 
     /**
