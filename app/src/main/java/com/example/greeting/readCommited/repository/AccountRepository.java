@@ -1,4 +1,4 @@
-package com.example.greeting.readcommited.repository;
+package com.example.greeting.readCommited.repository;
 
 import java.math.BigDecimal;
 
@@ -26,7 +26,9 @@ public interface AccountRepository extends JpaRepository<AccountEntity, Long> {
             """, nativeQuery = true)
     BigDecimal findBalanceByIdNative(@Param("id") Long id);
 
-    /**Обновить `баланс` некоторого `account` по `идентификатору`*/
+    /**
+     * Обновить `баланс` некоторого `account` по `идентификатору`
+     */
     @Modifying
     @Query(value = """
             update iso_demo.accounts
@@ -34,9 +36,11 @@ public interface AccountRepository extends JpaRepository<AccountEntity, Long> {
                 updated_at = now()
             where id = :id
             """, nativeQuery = true)
-    int updateBalanceByIdNative(@Param("id") Long id, @Param("balance") BigDecimal balance);
+    void updateBalanceByIdNative(@Param("id") Long id, @Param("balance") BigDecimal balance);
 
-    /**Добавить `баланс` некоторого `account` по `идентификатору`*/
+    /**
+     * Добавить `баланс` некоторого `account` по `идентификатору`
+     */
     @Modifying
     @Query(value = """
             update iso_demo.accounts
@@ -44,5 +48,5 @@ public interface AccountRepository extends JpaRepository<AccountEntity, Long> {
                 updated_at = now()
             where id = :id
             """, nativeQuery = true)
-    int addDeltaToBalanceNative(@Param("id") Long id, @Param("delta") BigDecimal delta);
+    void addDeltaToBalanceNative(@Param("id") Long id, @Param("delta") BigDecimal delta);
 }

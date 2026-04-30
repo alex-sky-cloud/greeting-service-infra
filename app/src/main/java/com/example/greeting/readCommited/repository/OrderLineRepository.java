@@ -1,4 +1,4 @@
-package com.example.greeting.readcommited.repository;
+package com.example.greeting.readCommited.repository;
 
 import java.util.List;
 

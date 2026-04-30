@@ -1,12 +1,13 @@
-package com.example.greeting.readcommited.service;
+package com.example.greeting.readCommited.service;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+import com.example.greeting.entity.OnCallDoctorEntity;
 import com.example.greeting.entity.OrderLineEntity;
-import com.example.greeting.readcommited.repository.AccountRepository;
-import com.example.greeting.readcommited.repository.OnCallDoctorRepository;
-import com.example.greeting.readcommited.repository.OrderLineRepository;
+import com.example.greeting.readCommited.repository.AccountRepository;
+import com.example.greeting.readCommited.repository.OnCallDoctorRepository;
+import com.example.greeting.readCommited.repository.OrderLineRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -119,12 +120,38 @@ public class AnomalyService {
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public BigDecimal lostUpdateMain(Long accountId, BigDecimal delta) {
+
         BigDecimal before = accountRepository.findBalanceByIdNative(accountId);
+
+        log.info("+++++");
+        log.info("Баланс клиента - 2-я транзакция (before - пока первая транзакция не сделала update) : " + before.toString());
+        log.info("+++++");
+
         BigDecimal calculated = before.add(delta);
+        log.info("+++++");
+        log.info("Баланс клиента - 2-я транзакция (before - пока первая транзакция не сделала update) ");
+        log.info("Баланс клиента - 2-я транзакция (before - вычислили значения нового update) : " + calculated.toString());
+        log.info("+++++");
 
         // breakpoint здесь
 
         accountRepository.updateBalanceByIdNative(accountId, calculated);
+
+        return accountRepository.findBalanceByIdNative(accountId);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public BigDecimal correctLostUpdateMainS(Long accountId, BigDecimal delta) {
+
+        BigDecimal before = accountRepository.findBalanceByIdNative(accountId);
+
+        log.info("+++++");
+        log.info("Баланс клиента - 2-я транзакция (before - пока первая транзакция не сделала update) : " + before.toString());
+        log.info("+++++");
+
+        // breakpoint здесь
+
+        accountRepository.addDeltaToBalanceNative(accountId, delta);
 
         return accountRepository.findBalanceByIdNative(accountId);
     }
@@ -253,5 +280,57 @@ public class AnomalyService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void phantomReadConcurrentDelete(Long id) {
         orderLineRepository.deleteByIdNative(id);
+    }
+
+    /**
+     * Выполняет сценарий write skew в одной транзакции
+     * с уровнем изоляции {@link Isolation#READ_COMMITTED}.
+     *
+     * <p>Сценарий использования:</p>
+     * <pre>
+     * 1. Из консоли psql запускается Транзакция 1:
+     *    BEGIN;
+     *    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+     *    SELECT count(*) FROM iso_demo.on_call_doctors WHERE on_call = true;
+     *    UPDATE iso_demo.on_call_doctors
+     *    SET on_call = false, updated_at = now()
+     *    WHERE id = 1;
+     *    COMMIT;
+     *
+     * 2. Параллельно из приложения запускается этот метод
+     *    writeSkewMain(2). Внутри читается текущее число
+     *    дежурных и, если оно больше 1, снимается с дежурства
+     *    врач с указанным id.
+     *
+     * 3. Если обе транзакции успеют принять решение на основе
+     *    старого состояния (двое on_call = true), в итоге
+     *    оба врача будут on_call = false — инвариант нарушен.
+     * </pre>
+     *
+     * @param doctorId идентификатор врача, которого снимают с дежурства
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void writeSkewMain(Long doctorId) {
+        long onCallCount = onCallDoctorRepository.countOnCallDoctorsNative();
+
+        // breakpoint здесь — считали текущее число дежурных
+        log.info("+++++");
+        log.info("Текущее количество дежурных врачей : {}", onCallCount);
+        log.info("+++++");
+
+        if (onCallCount > 1) {
+            onCallDoctorRepository.updateOnCallNative(doctorId, false);
+        }
+    }
+
+    /**
+     * Возвращает текущий график дежурств для удобной проверки
+     * результата сценария write skew.
+     *
+     * @return список всех записей on_call_doctors
+     */
+    @Transactional(readOnly = true)
+    public List<OnCallDoctorEntity> getOnCallSchedule() {
+        return onCallDoctorRepository.findAllNative();
     }
 }

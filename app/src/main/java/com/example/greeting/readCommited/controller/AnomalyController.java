@@ -1,8 +1,9 @@
-package com.example.greeting.readcommited.controller;
+package com.example.greeting.readCommited.controller;
 
+import com.example.greeting.entity.OnCallDoctorEntity;
 import com.example.greeting.entity.OrderLineEntity;
-import com.example.greeting.readcommited.repository.OrderLineRepository;
-import com.example.greeting.readcommited.service.AnomalyService;
+import com.example.greeting.readCommited.repository.OrderLineRepository;
+import com.example.greeting.readCommited.service.AnomalyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -86,7 +87,42 @@ public class AnomalyController {
     @PostMapping("/lost-update/main")
     public BigDecimal lostUpdateMain(@RequestParam Long accountId,
                                      @RequestParam BigDecimal delta) {
-        return anomalyService.lostUpdateMain(accountId, delta);
+
+
+        BigDecimal lostUpdateMain = anomalyService.lostUpdateMain(accountId, delta);
+
+        log.info("+++++");
+        log.info("Баланс клиента - 2 транзакция выполнила update : " + lostUpdateMain.toString());
+        log.info("+++++");
+
+        return lostUpdateMain;
+    }
+
+    /**
+     * Можно использовать атомарный SQL-апдейт вместо схемы
+     * «прочитать баланс в приложение → посчитать → записать».
+     *
+     * <p>Пример: </p>
+     * <pre>
+     * {@code
+     * update iso_demo.accounts
+     *    set balance = balance + :delta,
+     *        updated_at = now()
+     *  where id = :id
+     * }</pre>
+     */
+    @PostMapping("/lost-update/main/correct")
+    public BigDecimal correctLostUpdateMain(@RequestParam Long accountId,
+                                     @RequestParam BigDecimal delta) {
+
+
+        BigDecimal lostUpdateMain = anomalyService.correctLostUpdateMainS(accountId, delta);
+
+        log.info("+++++");
+        log.info("Баланс клиента - 2 транзакция выполнила update : " + lostUpdateMain.toString());
+        log.info("+++++");
+
+        return lostUpdateMain;
     }
 
     /**
@@ -101,6 +137,7 @@ public class AnomalyController {
     @PostMapping("/lost-update/concurrent")
     public void lostUpdateConcurrent(@RequestParam Long accountId,
                                      @RequestParam BigDecimal calculated) {
+
         anomalyService.lostUpdateConcurrent(accountId, calculated);
     }
 
@@ -165,5 +202,48 @@ public class AnomalyController {
     @PostMapping("/phantom-read/concurrent/delete")
     public void phantomReadConcurrentDelete(@RequestParam Long id) {
         anomalyService.phantomReadConcurrentDelete(id);
+    }
+
+    /**
+     * Запускает из приложения Транзакцию 2 для демонстрации write skew.
+     *
+     * <p>Сценарий использования:</p>
+     * <pre>
+     * 1. В psql (Транзакция 1) выполнить:
+     *    BEGIN;
+     *    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+     *    SELECT count(*) FROM iso_demo.on_call_doctors WHERE on_call = true;
+     *    UPDATE iso_demo.on_call_doctors
+     *    SET on_call = false, updated_at = now()
+     *    WHERE id = 1;
+     *    COMMIT;
+     *
+     * 2. Параллельно из приложения вызвать этот endpoint:
+     *    POST /api/anomalies/write-skew/main?doctorId=2
+     *
+     * 3. В writeSkewMain(2) поставить breakpoint сразу после
+     *    чтения количества дежурных. Пока поток остановлен,
+     *    выполнить шаги Транзакции 1 в psql.
+     *
+     * 4. После продолжения выполнения writeSkewMain(2) врач
+     *    с id = 2 также снимается с дежурства.
+     * </pre>
+     *
+     * @param doctorId идентификатор врача, которого снимаем с дежурства
+     */
+    @PostMapping("/write-skew/main")
+    public void writeSkewMain(@RequestParam ("doctorId") Long doctorId) {
+        anomalyService.writeSkewMain(doctorId);
+    }
+
+    /**
+     * Возвращает текущий график дежурств после выполнения сценария
+     * write skew, чтобы можно было убедиться в результате.
+     *
+     * @return список врачей с их on_call-флагами
+     */
+    @PostMapping("/write-skew/schedule")
+    public List<OnCallDoctorEntity> onCallSchedule() {
+        return anomalyService.getOnCallSchedule();
     }
 }
