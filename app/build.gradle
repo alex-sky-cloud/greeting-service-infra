@@ -27,6 +27,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'org.postgresql:postgresql'
 
+    // ОБЯЗАТЕЛЬНО: AOP, иначе прокси для @Retryable не создадутся
+    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
+
     compileOnly 'org.projectlombok:lombok'          // только для компиляции
     annotationProcessor 'org.projectlombok:lombok'  // аннотационный процессор
 
