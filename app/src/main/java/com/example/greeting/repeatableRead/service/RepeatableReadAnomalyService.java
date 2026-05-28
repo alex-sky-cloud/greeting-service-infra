@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Сервис для демонстрации аномалии phantom read
  * на уровне изоляции REPEATABLE READ.
+
  */
 @Service
 @RequiredArgsConstructor
