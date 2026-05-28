@@ -1,0 +1,208 @@
+# =============================================================================
+# .gitlab-ci.yml
+#
+# CI/CD pipeline для greeting-service (Gradle).
+# Документация: https://docs.gitlab.com/ee/ci/yaml/
+#
+# Переменные окружения (Project → Settings → CI/CD → Variables):
+#
+#   REGISTRY_HOST       — hostname Docker Registry (пример: 1.2.3.4:5000)
+#   REGISTRY_USER       — логин для Docker Registry
+#   REGISTRY_PASSWORD   — пароль для Docker Registry (Masked)
+#   KUBE_CONFIG_BASE64  — kubeconfig в base64: cat ~/.kube/config | base64 -w0
+#   IMAGE_NAME          — имя образа (пример: greeting-service)
+#   HELM_RELEASE_NAME   — имя Helm release (пример: greeting-service)
+# =============================================================================
+
+# ── Глобальный образ (используется в шагах без явного image:) ─────────────────
+default:
+  image: eclipse-temurin:21-jdk-alpine
+  tags:
+    - self-hosted   # все шаги выполняются на зарегистрированном self-hosted Runner
+
+# ── Кэш Gradle — переиспользуется между шагами одного pipeline ───────────────
+variables:
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .gradle/
+
+# ── Определение стадий ────────────────────────────────────────────────────────
+stages:
+  - build
+  - docker
+  - deploy
+
+# =============================================================================
+# Шаг 1 — сборка и тесты
+# Триггер: любая ветка (feature/*, develop, main), merge request
+# =============================================================================
+build-and-test:
+  stage: build
+  script:
+    - cd app
+    - chmod +x ./gradlew
+    # Запускаем тесты и сборку JAR.
+    - ./gradlew clean test bootJar --no-daemon
+    # Копируем JAR в корень для передачи как артефакт.
+    - cp build/libs/app.jar ../greeting-service.jar
+  artifacts:
+    name: "greeting-service-jar-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - greeting-service.jar
+    expire_in: 1 hour
+  rules:
+    # feature/* — только сборка и тесты
+    - if: '$CI_COMMIT_BRANCH =~ /^feature\//'
+    # develop — полный pipeline
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    # main — полный pipeline
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    # merge request — только сборка и тесты
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# =============================================================================
+# Шаг 2 — сборка Docker image и push в Registry
+# Триггер: develop, main
+# =============================================================================
+build-and-push-docker:
+  stage: docker
+  # Docker-in-Docker: запускаем Docker CLI внутри контейнера.
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+  needs:
+    - build-and-test
+  script:
+    # IMAGE_TAG = short git commit hash. Уникально идентифицирует каждую сборку.
+    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+    - export FULL_IMAGE="${REGISTRY_HOST}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+    # Логинимся в приватный Docker Registry.
+    - echo "${REGISTRY_PASSWORD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USER}" --password-stdin
+
+    # Собираем Docker image.
+    - cd app
+    - docker build -t "${FULL_IMAGE}" .
+
+    # Помечаем образ тегом latest.
+    - docker tag "${FULL_IMAGE}" "${REGISTRY_HOST}/${IMAGE_NAME}:latest"
+
+    # Публикуем в Registry.
+    - docker push "${FULL_IMAGE}"
+    - docker push "${REGISTRY_HOST}/${IMAGE_NAME}:latest"
+
+    # Сохраняем IMAGE_TAG для шагов деплоя.
+    - echo "${IMAGE_TAG}" > ../image_tag.txt
+  artifacts:
+    name: "image-tag-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - image_tag.txt
+    expire_in: 1 hour
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# =============================================================================
+# Шаг 3а — деплой в dev
+# Триггер: develop (автоматически)
+# =============================================================================
+deploy-dev:
+  stage: deploy
+  image: alpine/helm:3.15.0
+  needs:
+    - build-and-push-docker
+  before_script:
+    # Устанавливаем kubectl в образ alpine/helm (kubectl там не предустановлен).
+    - apk add --no-cache curl bash
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    # Восстанавливаем kubeconfig из переменной окружения.
+    - mkdir -p ~/.kube
+    - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+    - chmod 600 ~/.kube/config
+  script:
+    - export IMAGE_TAG=$(cat image_tag.txt)
+    # Деплоим через Helm. --atomic откатывает при ошибке.
+    - |
+      helm upgrade --install "${HELM_RELEASE_NAME}" infra/helm/greeting-service \
+        --namespace dev \
+        --create-namespace \
+        -f infra/helm/greeting-service/values.yaml \
+        -f infra/helm/greeting-service/values-dev.yaml \
+        --set image.repository="${REGISTRY_HOST}/${IMAGE_NAME}" \
+        --set image.tag="${IMAGE_TAG}" \
+        --atomic \
+        --timeout 5m
+    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}-greeting-service" -n dev --timeout=300s
+  environment:
+    name: dev
+    url: http://greeting-dev.example.com
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# =============================================================================
+# Шаг 3б — деплой в prod
+# Триггер: main + ручное подтверждение (when: manual)
+# =============================================================================
+deploy-prod:
+  stage: deploy
+  image: alpine/helm:3.15.0
+  needs:
+    - build-and-push-docker
+  before_script:
+    - apk add --no-cache curl bash
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - mkdir -p ~/.kube
+    - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+    - chmod 600 ~/.kube/config
+  script:
+    - export IMAGE_TAG=$(cat image_tag.txt)
+    - |
+      helm upgrade --install "${HELM_RELEASE_NAME}" infra/helm/greeting-service \
+        --namespace prod \
+        --create-namespace \
+        -f infra/helm/greeting-service/values.yaml \
+        -f infra/helm/greeting-service/values-prod.yaml \
+        --set image.repository="${REGISTRY_HOST}/${IMAGE_NAME}" \
+        --set image.tag="${IMAGE_TAG}" \
+        --atomic \
+        --timeout 10m
+    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}-greeting-service" -n prod --timeout=600s
+  environment:
+    name: prod
+    url: http://greeting.example.com
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual   # Аналог trigger: manual в Bitbucket
+
+# =============================================================================
+# Ручной pipeline — откат production (аналог custom: rollback-prod)
+# Запуск: GitLab UI → CI/CD → Pipelines → Run pipeline → выбрать ветку main
+#         передать переменную ROLLBACK=true  (или запускать этот job напрямую)
+# =============================================================================
+rollback-prod:
+  stage: deploy
+  image: alpine/helm:3.15.0
+  before_script:
+    - apk add --no-cache curl bash
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - mkdir -p ~/.kube
+    - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+    - chmod 600 ~/.kube/config
+  script:
+    - helm rollback "${HELM_RELEASE_NAME}" -n prod
+    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}-greeting-service" -n prod --timeout=300s
+  environment:
+    name: prod
+  rules:
+    # Запускается только вручную из UI.
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual

@@ -922,6 +922,7 @@ management:
 
 ```bash
 # 1. Клонировать репозиторий после создания в Bitbucket:
+
 git clone http://<BITBUCKET_IP>:7990/scm/greeting/greeting-service.git
 cd greeting-service
 
@@ -943,6 +944,7 @@ curl "http://localhost:8080/actuator/health"
 ```
 
 ```bash
+
 # Локальный запуск через Docker (проверить перед push в Registry):
 cd app
 docker build -t greeting-service:local .
