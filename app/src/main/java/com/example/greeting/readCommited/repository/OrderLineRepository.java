@@ -13,7 +13,7 @@ public interface OrderLineRepository extends JpaRepository<OrderLineEntity, Long
             select id, order_no, product_name, qty, state, created_at
             from iso_demo.order_lines
             where order_no = :orderNo
-            order by id
+            orderN1 by id
             """, nativeQuery = true)
     List<OrderLineEntity> findAllByOrderNoNative(@Param("orderNo") Long orderNo);
 

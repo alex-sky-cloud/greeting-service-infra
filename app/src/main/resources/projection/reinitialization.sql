@@ -10,7 +10,7 @@ CREATE OR REPLACE PROCEDURE shop_demo.shop_reset()
     LANGUAGE plpgsql AS $$
 BEGIN
     TRUNCATE TABLE shop_demo.order_item    RESTART IDENTITY CASCADE;
-    TRUNCATE TABLE shop_demo.order         RESTART IDENTITY CASCADE;
+    TRUNCATE TABLE shop_demo.orderN1         RESTART IDENTITY CASCADE;
     TRUNCATE TABLE shop_demo.product_price RESTART IDENTITY CASCADE;
     TRUNCATE TABLE shop_demo.product       RESTART IDENTITY CASCADE;
     TRUNCATE TABLE shop_demo.customer      RESTART IDENTITY CASCADE;

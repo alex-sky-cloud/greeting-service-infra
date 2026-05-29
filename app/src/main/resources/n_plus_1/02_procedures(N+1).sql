@@ -11,7 +11,7 @@ as
 $$
 begin
     truncate iso_demo.order_items restart identity cascade;
-    truncate iso_demo.orders      restart identity cascade;
+    truncate iso_demo.order      restart identity cascade;
     truncate iso_demo.products    restart identity cascade;
 end;
 $$;
@@ -66,7 +66,7 @@ begin
             v_user_id := j;
             for i in 1..p_orders_per_user
                 loop
-                    insert into iso_demo.orders (user_id, status, created_at)
+                    insert into iso_demo.order (user_id, status, created_at)
                     values (
                                v_user_id,
                                case (random() * 2)::int

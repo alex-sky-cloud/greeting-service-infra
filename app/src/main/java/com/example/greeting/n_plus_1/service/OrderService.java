@@ -3,10 +3,11 @@ package com.example.greeting.n_plus_1.service;
 import com.example.greeting.n_plus_1.dto.OrderDto;
 import com.example.greeting.n_plus_1.dto.ItemDto;
 
-import com.example.greeting.n_plus_1.entity.Order;
-import com.example.greeting.n_plus_1.entity.OrderItem;
-import com.example.greeting.n_plus_1.entity.Product;
-import com.example.greeting.n_plus_1.repository.OrderRepository;
+
+import com.example.greeting.n_plus_1.entity.OrderItemN1;
+import com.example.greeting.n_plus_1.entity.OrderN1;
+import com.example.greeting.n_plus_1.entity.ProductN1;
+import com.example.greeting.n_plus_1.repository.OrderRepositoryN1;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +29,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OrderService {
 
-    private final OrderRepository orderRepository;
+    private final OrderRepositoryN1 orderRepositoryN1;
 
     /**
      * Возвращает заказы пользователя, <b>воспроизводя двухуровневый N+1</b>.
@@ -57,13 +58,13 @@ public class OrderService {
      */
     @Transactional(readOnly = true)
     public List<OrderDto> getOrdersWithN1Problem(Long userId) {
-        List<Order> orders = orderRepository.findByUserId(userId); // запрос 1
+        List<OrderN1> orderN1s = orderRepositoryN1.findByUserId(userId); // запрос 1
 
-        return orders.stream()
-                .map(order -> new OrderDto(
-                                order.getId(),
-                                order.getStatus(),
-                                getItems(order) // запрос 2..N+1
+        return orderN1s.stream()
+                .map(orderN1 -> new OrderDto(
+                                orderN1.getId(),
+                                orderN1.getStatus(),
+                                getItems(orderN1) // запрос 2..N+1
                                         .stream()
                                         .map(item -> new ItemDto(
                                                         getItemProduct(item).getName(), // запрос N+2..N+1+N*M
@@ -77,13 +78,13 @@ public class OrderService {
                 .toList();
     }
 
-    private static Product getItemProduct(OrderItem item) {
+    private static ProductN1 getItemProduct(OrderItemN1 item) {
         return item.getProduct();
     }
 
-    private static List<OrderItem> getItems(Order order) {
+    private static List<OrderItemN1> getItems(OrderN1 orderN1) {
 
-        List<OrderItem> items = order.getItems();
+        List<OrderItemN1> items = orderN1.getItems();
 
         return items;
     }
@@ -110,14 +111,14 @@ public class OrderService {
     @Transactional(readOnly = true)
     public List<OrderDto> getOrdersOptimized(Long userId) {
 
-        List<Order> orders = orderRepository.findByUserIdWithItemsAndProducts(userId); // 1 запрос
+        List<OrderN1> orderN1s = orderRepositoryN1.findByUserIdWithItemsAndProducts(userId); // 1 запрос
 
-        return orders.stream()
-                .map(order ->
+        return orderN1s.stream()
+                .map(orderN1 ->
                         new OrderDto(
-                                order.getId(),
-                                order.getStatus(),
-                                getItems(order)
+                                orderN1.getId(),
+                                orderN1.getStatus(),
+                                getItems(orderN1)
                                         .stream()            // прокси уже загружен, запросов нет
                                         .map(item -> new ItemDto(
                                                         getItemProduct(item).getName(), // прокси уже загружен
@@ -134,14 +135,14 @@ public class OrderService {
     @Transactional(readOnly = true)
     public List<OrderDto> getOrdersOptimizedWithEntityGraph(Long userId) {
 
-        List<Order> orders = orderRepository.findByUserIdWithEntityGraph(userId); // 1 запрос
+        List<OrderN1> orderN1s = orderRepositoryN1.findByUserIdWithEntityGraph(userId); // 1 запрос
 
-        return orders.stream()
-                .map(order ->
+        return orderN1s.stream()
+                .map(orderN1 ->
                         new OrderDto(
-                                order.getId(),
-                                order.getStatus(),
-                                getItems(order)
+                                orderN1.getId(),
+                                orderN1.getStatus(),
+                                getItems(orderN1)
                                         .stream()            // прокси уже загружен, запросов нет
                                         .map(item -> new ItemDto(
                                                         getItemProduct(item).getName(), // прокси уже загружен

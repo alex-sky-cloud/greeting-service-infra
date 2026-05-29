@@ -1,6 +1,6 @@
 package com.example.greeting.projection.repository;
 
-import com.example.greeting.n_plus_1.entity.OrderItem;
+import com.example.greeting.n_plus_1.entity.OrderItemN1;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -11,5 +11,5 @@ import org.springframework.stereotype.Repository;
  * и скалярных проекций (сумма позиций, общее количество).</p>
  */
 @Repository
-public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
+public interface OrderItemRepository extends JpaRepository<OrderItemN1, Long> {
 }

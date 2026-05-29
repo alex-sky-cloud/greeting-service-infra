@@ -24,5 +24,5 @@ call iso_demo.truncate_all();
 -- Проверить объём
 select
     (select count(*) from iso_demo.products)    as products,
-    (select count(*) from iso_demo.orders)       as orders,
+    (select count(*) from iso_demo.order)       as order,
     (select count(*) from iso_demo.order_items)  as order_items;

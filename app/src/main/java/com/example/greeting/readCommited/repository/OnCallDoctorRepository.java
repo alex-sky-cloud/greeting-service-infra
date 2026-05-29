@@ -12,7 +12,7 @@ public interface OnCallDoctorRepository extends JpaRepository<OnCallDoctorEntity
     @Query(value = """
             select id, doctor_name, on_call, updated_at
             from iso_demo.on_call_doctors
-            order by id
+            orderN1 by id
             """, nativeQuery = true)
     List<OnCallDoctorEntity> findAllNative();
 

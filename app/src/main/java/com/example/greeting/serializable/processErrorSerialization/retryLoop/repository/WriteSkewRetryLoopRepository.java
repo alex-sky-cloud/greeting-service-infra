@@ -23,7 +23,7 @@ public interface WriteSkewRetryLoopRepository extends JpaRepository<OnCallDoctor
         select id, doctor_name, on_call, updated_at
         from iso_demo.on_call_doctors
         where on_call = true
-        order by id
+        orderN1 by id
         """, nativeQuery = true)
     List<OnCallDoctorEntity> findAllOnCallNative();
 

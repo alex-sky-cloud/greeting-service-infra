@@ -1,6 +1,6 @@
 package com.example.greeting.projection.entity;
 
-import com.example.greeting.n_plus_1.entity.OrderItem;
+import com.example.greeting.n_plus_1.entity.OrderItemN1;
 import jakarta.persistence.*;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;

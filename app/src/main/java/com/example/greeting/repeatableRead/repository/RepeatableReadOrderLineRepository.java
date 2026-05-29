@@ -32,7 +32,7 @@ public interface RepeatableReadOrderLineRepository extends JpaRepository<OrderLi
         select *
         from iso_demo.order_lines
         where order_no = :orderNo
-        order by id
+        orderN1 by id
         """, nativeQuery = true)
     List<OrderLineEntity> findAllByOrderNoNative(@Param("orderNo") Long orderNo);
 }

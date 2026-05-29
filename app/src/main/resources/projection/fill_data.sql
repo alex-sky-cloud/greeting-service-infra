@@ -65,7 +65,7 @@ BEGIN
             ORDER BY id
             LIMIT 1 OFFSET ((i - 1) % 10);
 
-            INSERT INTO shop_demo.order (customer_id, status, created_at, updated_at)
+            INSERT INTO shop_demo.orderN1 (customer_id, status, created_at, updated_at)
             VALUES (
                        v_customer_id,
                        v_statuses[((i-1) % 5) + 1],
