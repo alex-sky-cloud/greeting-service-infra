@@ -28,7 +28,7 @@ data "twc_configurator" "server_configurator" {
 # Публичный ключ читается с локального ПК оператора.
 resource "twc_ssh_key" "operator" {
   name = "${var.project_name}-operator-key"
-  body = file("~/.ssh/id_rsa.pub")
+  body = file("~/.ssh/id_ed25519.pub")
 }
 
 # ─── Сервер для Bitbucket + Docker Registry ───────────────────────────────────
