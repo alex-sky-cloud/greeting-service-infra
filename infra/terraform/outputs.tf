@@ -27,7 +27,7 @@ output "summary" {
     Kubernetes cluster ID : ${twc_k8s_cluster.main.id}
     Kubernetes status     : ${twc_k8s_cluster.main.status}
 
-    Devtools server IP    : ${twc_server.devtools.main_ip}
+    Devtools server IP    : ${twc_server.devtools.main_ipv4}
     (Bitbucket + Registry)
 
     S3 hostname           : ${twc_s3_bucket.artifacts.hostname}

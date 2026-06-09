@@ -15,7 +15,7 @@ data "twc_s3_preset" "artifacts_preset" {
   disk = 10 * 1024
 
   price_filter {
-    from = 0
+    from = 1
     to   = 500
   }
 }

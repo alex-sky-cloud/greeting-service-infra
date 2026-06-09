@@ -28,7 +28,7 @@ data "twc_configurator" "server_configurator" {
 # Публичный ключ читается с локального ПК оператора.
 resource "twc_ssh_key" "operator" {
   name = "${var.project_name}-operator-key"
-  body = file("~/.ssh/id_ed25519.pub")
+  body = file("/mnt/c/Users/sky/.ssh/id_ed25519.pub")
 }
 
 # ─── Сервер для Bitbucket + Docker Registry ───────────────────────────────────
@@ -58,11 +58,11 @@ resource "twc_server" "devtools" {
 }
 
 output "devtools_public_ip" {
-  value       = twc_server.devtools.main_ip
+  value       = twc_server.devtools.main_ipv4
   description = "Публичный IP сервера Bitbucket / Docker Registry."
 }
 
 output "devtools_private_ip" {
-  value       = twc_server.devtools.local_networks[0].ip
+  value       = twc_server.devtools.local_network[0].ip
   description = "Приватный IP сервера внутри VPC."
 }

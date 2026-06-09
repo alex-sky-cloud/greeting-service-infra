@@ -20,14 +20,14 @@ data "twc_database_preset" "pg_preset" {
   disk = 8 * 1024
 
   price_filter {
-    from = 0
-    to   = 2000
+    from = 1
+    to   = 800
   }
 }
 
 resource "twc_database_cluster" "postgres" {
   name      = var.db_name
-  type      = "postgres"
+  type      = "postgres17"
   preset_id = data.twc_database_preset.pg_preset.id
 
   # Размещаем БД в той же приватной сети, что и кластер K8S.
@@ -51,8 +51,21 @@ resource "twc_database_instance" "app_db" {
 # НИКОГДА не используйте суперпользователя postgres в приложении.
 resource "twc_database_user" "app_user" {
   cluster_id = twc_database_cluster.postgres.id
-  name       = "greeting_user"
+  login      = "greeting_user"
   password   = var.db_password
+
+  instance {
+    instance_id         = twc_database_instance.app_db.id
+    privileges = [
+          "CREATE",
+          "INSERT",
+          "UPDATE",
+          "DELETE",
+          "SELECT",
+          "REFERENCES",
+          "TRUNCATE"
+        ]
+  }
 }
 
 # Outputs — нужны для формирования строки подключения.

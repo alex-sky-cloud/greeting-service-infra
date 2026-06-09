@@ -1,3 +1,4 @@
+/*
 terraform {
   backend "s3" {
     bucket         = "my-terraform-state-bucket"
@@ -6,4 +7,4 @@ terraform {
     dynamodb_table = "terraform-state-lock"
     encrypt        = true
   }
-}
+} */
