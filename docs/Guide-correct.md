@@ -1473,10 +1473,10 @@ terraform plan
 terraform apply
 # Процесс занимает 10–20 минут (K8S кластер создаётся дольше всего).
 
-# Шаг 6. Сохранение kubeconfig. Обязательно сразу после apply.
-terraform output -raw kubeconfig > ~/.kube/timeweb-greeting.yaml
-chmod 600 ~/.kube/timeweb-greeting.yaml
-# terraform output -raw — выводит sensitive output без маскировки звёздочками.
+# Шаг 6. Сохранение kubeconfig (Git Bash, корень репозитория):
+cd ..
+bash scripts/get-kubeconfig.sh
+# Файл: C:\Users\sky\.kube\timeweb-greeting.yaml
 ```
 
 #### Разбор параметров основных команд Terraform
@@ -1499,39 +1499,194 @@ chmod 600 ~/.kube/timeweb-greeting.yaml
 
 > **RU:** Terraform — это инструмент «инфраструктура как код», который позволяет описывать облачные и локальные ресурсы в читаемых конфигурационных файлах, которые можно версионировать, переиспользовать и совместно использовать.
 
-### Как проверить результат
+### 9.3.3. Развёртывание Docker Registry
+
+**1.** После `terraform apply` и успешного cloud-init на devtools-сервере (Docker уже установлен скриптом `infra/terraform/scripts/devtools-init.sh`) на нём можно развернуть Docker Registry. Используется скрипт **`scripts/setup-registry.sh`**.
+
+**2.** Скрипт создаёт каталоги `/opt/registry/data`, `/opt/registry/config` и `/opt/registry/auth`, устанавливает утилиту `htpasswd`, подготавливает конфигурацию Registry и запускает сервис **`registry:2`** через Docker Compose на порту **5000**.
+
+> Перед запуском замените в `scripts/setup-registry.sh` логин и пароль `registryuser` / `registrypassword` на свои значения.
+
+**3.** Скрипт запускают **с локального ПК** (Git Bash на Windows), но выполняется **на devtools-сервере** через SSH.
+
+- **Terraform** (`terraform output`, `destroy`, `plan`, `apply`) — только **WSL Ubuntu**.
+- **SSH, Registry, curl** — **Git Bash** (или macOS/Linux shell), не WSL.
+
+**Git Bash, корень репозитория:**
 
 ```bash
-
-# Статус кластера (должен быть 'active'):
-terraform output k8s_cluster_status
-
-# Список всех созданных ресурсов в state:
-terraform state list
-
-# Проверка подключения к Kubernetes:
-export KUBECONFIG=~/.kube/timeweb-greeting.yaml
-kubectl get nodes
-# Ожидаемый вывод: 2 worker-узла в статусе Ready
+cd '/d/!_Проекты инфраструктуры/greeting-service-infra'
 ```
 
-### Типичные ошибки
+IP devtools — из вывода `terraform apply` (summary) или из WSL:
 
-- Ошибка: `Error: 401 Unauthorized`
-    - Причина: некорректный API токен.
-    - Исправление: проверьте токен в панели https://timeweb.cloud/my/api-keys. Убедитесь, что скопирован полностью.
+```bash
+# только в WSL Ubuntu:
+terraform -chdir=infra/terraform output -raw devtools_public_ip
+```
 
-- Ошибка: `Provider produced inconsistent result after apply`
-    - Причина: кластер ещё инициализируется — Terraform не дождался статуса `active`.
-    - Исправление: подождите 5–10 минут, выполните `terraform refresh`, затем `terraform apply` снова.
+Запуск Registry (подставьте актуальный IP вместо примера):
 
-- Ошибка: `no such file or directory: ~/.ssh/id_rsa.pub`
-    - Причина: SSH-ключ не сгенерирован, а `registry_server.tf` пытается его прочитать.
-    - Исправление: `ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa` — сгенерировать ключ.
+```bash
+DEVTOOLS_IP=72.56.249.137
+ssh -i /c/Users/sky/.ssh/id_ed25519 \
+  root@${DEVTOOLS_IP} \
+  'bash -s' < scripts/setup-registry.sh
+```
 
-- Ошибка: `data.twc_k8s_preset not found` или `data.twc_configurator not found`
-    - Причина: запрошенная комбинация CPU/RAM не соответствует доступным пресетам.
-    - Исправление: в панели Timeweb Cloud проверьте доступные конфигурации K8S и обновите переменные в `terraform.tfvars`.
+**Почему `root@`:** на VPS Timeweb вход под **`root`**, не `ubuntu`. Ключ — **`C:\Users\sky\.ssh\id_ed25519`** (пара к `.pub` в `registry_server.tf`).
+
+**4.** После выполнения скрипта Registry слушает порт **5000**. Проверка **на сервере** через SSH (Git Bash):
+
+```bash
+ssh -i /c/Users/sky/.ssh/id_ed25519 \
+  root@${DEVTOOLS_IP} \
+  'curl -u docker:docker http://localhost:5000/v2/'
+```
+
+**Успех:** ответ `{}` и HTTP **200** (логин/пароль — те, что заданы в `setup-registry.sh`).
+
+Дополнительно — с **локального ПК** (Git Bash):
+
+```bash
+curl -u docker:docker http://${DEVTOOLS_IP}:5000/v2/
+```
+
+Дополнительно — контейнер на сервере:
+
+```bash
+ssh -i /c/Users/sky/.ssh/id_ed25519 \
+  root@${DEVTOOLS_IP} \
+  'docker ps --filter name=registry'
+```
+
+### 9.4. Как проверить результат
+
+**Роли терминалов:**
+
+| Действие | Где |
+|---|---|
+| `terraform output`, `destroy`, `plan`, `apply` | **WSL Ubuntu** |
+| `kubectl`, `ssh`, `curl` к Registry | **Git Bash** (Windows) или **cmd** |
+| kubeconfig, SSH-ключ | **`C:\Users\sky\.kube\`**, **`C:\Users\sky\.ssh\`** |
+
+**1.** На локальном ПК убедитесь, что `terraform output` возвращает значения, kubeconfig сохранён в **`C:\Users\sky\.kube\timeweb-greeting.yaml`**. В панели [Timeweb Cloud](https://timeweb.cloud) проверьте: Kubernetes-кластер, PostgreSQL, devtools-сервер.
+
+**Terraform (WSL Ubuntu):**
+
+```bash
+cd '/mnt/d/!_Проекты инфраструктуры/greeting-service-infra/infra/terraform'
+terraform output
+```
+
+**Kubeconfig (Git Bash, корень репозитория):**
+
+```bash
+cd '/d/!_Проекты инфраструктуры/greeting-service-infra'
+bash scripts/get-kubeconfig.sh
+ls -l /c/Users/sky/.kube/timeweb-greeting.yaml
+```
+
+**2.** Kubernetes — **Windows cmd** (не WSL):
+
+```cmd
+kubectl --kubeconfig C:\Users\sky\.kube\timeweb-greeting.yaml get nodes
+```
+
+**Успех:** 2 worker-узла в статусе **Ready**.
+
+**3.** devtools и Docker Registry — **Git Bash**:
+
+```bash
+DEVTOOLS_IP=72.56.249.137   # актуальный IP из terraform output
+
+ssh -i /c/Users/sky/.ssh/id_ed25519 \
+  root@${DEVTOOLS_IP} \
+  'docker ps && docker --version'
+
+ssh -i /c/Users/sky/.ssh/id_ed25519 \
+  root@${DEVTOOLS_IP} \
+  'curl -u docker:docker http://localhost:5000/v2/'
+
+curl -u docker:docker http://${DEVTOOLS_IP}:5000/v2/
+```
+
+**Успех:** Docker запущен; все три `curl` возвращают `{}`.
+
+### 9.5. Типичные ошибки
+
+**1. `Error: 401 Unauthorized`**
+
+- **Причина:** `TF_VAR_twc_token` не задан, задан в другом терминале или неверный.
+- **Исправление (WSL Ubuntu):** в том же терминале, где запускаете Terraform:
+
+```bash
+export TF_VAR_twc_token="ваш-токен-timeweb-cloud"
+export TF_VAR_db_password="ваш-пароль"
+cd '/mnt/d/!_Проекты инфраструктуры/greeting-service-infra/infra/terraform'
+terraform plan
+```
+
+Токен: https://timeweb.cloud/my/api-keys
+
+**2. `no such file or directory` для SSH-ключа в `registry_server.tf`**
+
+- **Причина:** нет файла **`C:\Users\sky\.ssh\id_ed25519.pub`**, который читает `registry_server.tf`.
+- **Исправление (Git Bash):**
+
+```bash
+ssh-keygen -t ed25519 -C "devops-timeweb" -f /c/Users/sky/.ssh/id_ed25519
+```
+
+Затем повторите `terraform apply` из WSL.
+
+**3. `Provider produced inconsistent result after apply`**
+
+- **Причина:** кластер или зависимый ресурс ещё не в стабильном состоянии.
+- **Исправление (WSL Ubuntu):** подождите 5–10 мин, затем:
+
+```bash
+cd '/mnt/d/!_Проекты инфраструктуры/greeting-service-infra/infra/terraform'
+terraform refresh
+terraform apply
+```
+
+**4. `data.twc_k8s_preset not found` или `data.twc_configurator not found`**
+
+- **Причина:** CPU/RAM/disk/location в `terraform.tfvars` не совпадают с пресетами Timeweb.
+- **Исправление:** скорректируйте `terraform.tfvars`, затем `terraform plan` и `terraform apply`.
+
+**5. `kubectl` не видит кластер после `terraform apply`**
+
+- **Причина:** kubeconfig не сохранён в **`C:\Users\sky\.kube\`**, или `kubectl` запущен не с тем файлом.
+- **Исправление (Git Bash):**
+
+```bash
+cd '/d/!_Проекты инфраструктуры/greeting-service-infra'
+bash scripts/get-kubeconfig.sh
+```
+
+Проверка (**Windows cmd**):
+
+```cmd
+kubectl --kubeconfig C:\Users\sky\.kube\timeweb-greeting.yaml get nodes
+```
+
+**6. SSH просит пароль или `Connection timed out`**
+
+- **Причина:** неверный пользователь (`ubuntu` вместо **`root`**), не тот ключ, устаревший IP, сервер ещё `installing`.
+- **Исправление (Git Bash):**
+
+```bash
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@72.56.249.137 'echo OK'
+```
+
+IP — из `terraform output devtools_public_ip` (WSL). Config: `C:\Users\sky\.ssh\config`, `User root`.
+
+**7. `Connection refused` на `:5000` после `setup-registry.sh`**
+
+- **Причина:** на Ubuntu-пакете `docker.io` нет `docker compose` (плагин); контейнер Registry не стартовал.
+- **Исправление:** используйте актуальный `scripts/setup-registry.sh` (`docker-compose up -d`) и запустите скрипт повторно.
 
 ---
 
@@ -1544,44 +1699,38 @@ kubectl get nodes
 
 ### Что делается на локальном ПК
 
-**macOS / Ubuntu:**
+**Получить IP devtools (WSL Ubuntu):**
 
 ```bash
-
-# Получить публичный IP devtools-сервера из Terraform outputs:
-DEVTOOLS_IP=$(terraform -chdir=infra/terraform output -raw devtools_public_ip)
-echo "Devtools IP: ${DEVTOOLS_IP}"
-
-# Проверить SSH-доступ к серверу:
-ssh ubuntu@${DEVTOOLS_IP} "echo connected"
-# Если отвечает "connected" — всё работает.
+cd '/mnt/d/!_Проекты инфраструктуры/greeting-service-infra/infra/terraform'
+terraform output -raw devtools_public_ip
 ```
 
-**Windows (PowerShell):**
+**Проверить SSH (Git Bash на Windows, корень репозитория):**
 
-```powershell
-
-# Получить IP devtools-сервера:
-$DEVTOOLS_IP = terraform -chdir=infra/terraform output -raw devtools_public_ip
-Write-Host "Devtools IP: $DEVTOOLS_IP"
-
-# Проверить SSH-доступ:
-ssh ubuntu@$DEVTOOLS_IP "echo connected"
-# Требуется OpenSSH (встроен в Windows 10/11) или PuTTY
+```bash
+cd '/d/!_Проекты инфраструктуры/greeting-service-infra'
+DEVTOOLS_IP=72.56.249.137   # актуальный IP из terraform output
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP} "echo connected"
+# Если отвечает "connected" — всё работает.
 ```
 
 ### Что делается на devtools-сервере — установка Docker Registry
 
+См. **[9.3.3. Развёртывание Docker Registry](#933-развёртывание-docker-registry)**.
+
+Кратко — из **Git Bash**, корень репозитория:
+
 ```bash
-
-# Передаём скрипт с локального ПК и запускаем на сервере:
-ssh ubuntu@${DEVTOOLS_IP} 'bash -s' < scripts/setup-registry.sh
-
-# Скрипт установит:
-# - Docker (уже есть из cloud-init)
-# - distribution/registry:2 с htpasswd-аутентификацией
-# - Registry поднимается как Docker-контейнер на порту 5000
+ssh -i /c/Users/sky/.ssh/id_ed25519 \
+  root@${DEVTOOLS_IP} \
+  'bash -s' < scripts/setup-registry.sh
 ```
+
+Скрипт установит:
+
+- `distribution/registry:2` с htpasswd-аутентификацией (Docker Engine уже есть из cloud-init)
+- Registry как Docker-контейнер на порту **5000**
 
 ### Что делается на devtools-сервере — установка Bitbucket Server (GitLab CE)
 
@@ -1594,8 +1743,8 @@ https://confluence.atlassian.com/bitbucketserver/install-bitbucket-server-on-lin
 
 ```bash
 
-# Подключиться к серверу:
-ssh ubuntu@${DEVTOOLS_IP}
+# Подключиться к серверу (Git Bash):
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP}
 
 # На сервере — установка Bitbucket Server:
 # cloud-init уже установил Java 17, Docker, nginx
@@ -1649,7 +1798,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 
-# Docker Registry отвечает (с локального ПК):
+# Docker Registry отвечает (Git Bash, с локального ПК):
 curl -u registryuser:registrypassword http://${DEVTOOLS_IP}:5000/v2/
 # Ожидаемый ответ: {}
 
@@ -1726,7 +1875,7 @@ http://<DEVTOOLS_IP>:7990
 ```bash
 
 # Подключиться к devtools-серверу:
-ssh ubuntu@${DEVTOOLS_IP}
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP}
 
 # Запустить Bitbucket Pipelines Runner как Docker-контейнер.
 # Подставьте реальные значения из шага 1.
@@ -2727,7 +2876,7 @@ FROM --platform=linux/amd64 eclipse-temurin:21-jre-alpine AS runtime
 ```bash
 
 # Подключиться к devtools-серверу:
-ssh ubuntu@${DEVTOOLS_IP}
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP}
 
 # На сервере — установка GitLab CE:
 # 1. Установить зависимости:
@@ -2749,7 +2898,7 @@ sudo EXTERNAL_URL="http://${DEVTOOLS_IP}" apt-get install -y gitlab-ce
 ```powershell
 
 # Подключиться к серверу:
-ssh ubuntu@<DEVTOOLS_IP>
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@<DEVTOOLS_IP>
 # Далее выполнять команды Ubuntu выше — на сервере.
 ```
 
