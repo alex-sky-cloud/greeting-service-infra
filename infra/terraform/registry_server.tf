@@ -42,9 +42,9 @@ resource "twc_server" "devtools" {
 
   configuration {
     configurator_id = data.twc_configurator.server_configurator.id
-    cpu             = 4
-    ram             = 1024 * 8   # 8 ГБ — Bitbucket рекомендует минимум 6 ГБ
-    disk            = 1024 * 100 # 100 ГБ — репозитории занимают место
+    cpu             = 2
+    ram             = 4096
+    disk            = 51200
   }
 
   # Сервер в той же приватной сети, что и K8S кластер.
@@ -55,14 +55,38 @@ resource "twc_server" "devtools" {
   # cloud-init скрипт — начальная установка зависимостей.
   # Конкретная установка Bitbucket и Registry — через Ansible или вручную.
   cloud_init = file("${path.module}/scripts/devtools-init.sh")
+
+  project_id        = 701321
+  availability_zone = "msk-1" # ru-3 — та же зона, что у БД и VPC
+}
+
+# Публичный IPv4 для devtools.
+# В ru-3 Timeweb часто выдаёт на сервер только IPv6 → main_ipv4 остаётся null.
+# Floating IP даёт стабильный IPv4 для SSH, Bitbucket и Docker Registry.
+resource "twc_floating_ip" "devtools" {
+  availability_zone = "msk-1"
+  comment           = "Public IPv4 for ${var.project_name}-devtools"
+
+  resource {
+    type = "server"
+    id   = twc_server.devtools.id
+  }
 }
 
 output "devtools_public_ip" {
-  value       = twc_server.devtools.main_ipv4
-  description = "Публичный IP сервера Bitbucket / Docker Registry."
+  value = coalesce(
+    twc_server.devtools.main_ipv4,
+    twc_floating_ip.devtools.ip,
+    "ещё не создан",
+  )
+  description = "Публичный IPv4 сервера Bitbucket / Docker Registry."
 }
 
 output "devtools_private_ip" {
-  value       = twc_server.devtools.local_network[0].ip
+  value = coalesce(
+    try(twc_server.devtools.local_network[0].ip, null),
+    try([for net in twc_server.devtools.networks : net.ips[0].ip if net.type == "local"][0], null),
+    "ещё не создан",
+  )
   description = "Приватный IP сервера внутри VPC."
 }

@@ -17,13 +17,13 @@
 # twc_token = "YOUR_TWC_API_TOKEN"  - будет взято из переменной окружения TF_VAR_twc_token
 
 # Зона доступности
-location = "ru-1"
+location = "ru-3"
 
 # Имя проекта (будет префиксом всех ресурсов)
 project_name = "greeting-service"
 
 # Версия Kubernetes — проверьте актуальную в панели Timeweb Cloud
-k8s_version = "v1.28.9"
+k8s_version = "v1.32.13+k0s.0"
 
 # Worker-узлы кластера
 k8s_worker_count = 2
@@ -32,9 +32,9 @@ k8s_worker_ram   = 4096
 k8s_worker_disk  = 51200
 
 # Master-узел
-k8s_master_cpu  = 2
-k8s_master_ram  = 4096
-k8s_master_disk = 51200
+k8s_master_cpu  = 4
+k8s_master_ram  = 8192
+k8s_master_disk = 61440
 
 # База данных
 db_name     = "greeting-db"

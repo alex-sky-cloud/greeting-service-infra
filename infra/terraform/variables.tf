@@ -26,7 +26,7 @@ variable "project_name" {
 variable "k8s_version" {
   description = "Версия Kubernetes. Проверяйте актуальные версии в панели Timeweb Cloud."
   type        = string
-  default     = "v1.28.9"
+  default     = "v1.32.13+k0s.0"
 }
 
 variable "k8s_master_cpu" {

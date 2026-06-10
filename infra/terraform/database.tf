@@ -1,47 +1,36 @@
 # =============================================================================
 # database.tf — управляемая база данных PostgreSQL в Timeweb Cloud.
 #
-# Используем managed PostgreSQL (twc_database_cluster) — это удобнее,
-# чем разворачивать PostgreSQL вручную на VPS, потому что:
+# Используем managed PostgreSQL (twc_database_cluster):
 # 1. Timeweb Cloud автоматически делает бэкапы.
 # 2. Нет необходимости администрировать PostgreSQL вручную.
 # 3. Автоматические обновления безопасности.
 #
-# Документация: https://registry.terraform.io/providers/timeweb-cloud/timeweb-cloud/latest/docs/resources/database_cluster
+# Сгенерированный манифест от Timeweb показал:
+# - type = "postgres18"
+# - preset_id = 1139
+# - availability_zone = "msk-1"
+# - location = "ru-3" для VPC
+# Поэтому приводим конфигурацию к этим значениям.
 # =============================================================================
 
-# Пресет с минимальной конфигурацией PostgreSQL для dev/stage.
-# В prod нужно выбрать пресет с большим диском и replica.
-data "twc_database_preset" "pg_preset" {
-  location = var.location
-  type     = "postgres"
-
-  # 8 ГБ диска — минимум для старта.
-  disk = 8 * 1024
-
-  price_filter {
-    from = 1
-    to   = 800
-  }
-}
-
+# preset_id 1139 — из сгенерированного манифеста Timeweb Cloud.
+# availability_zone spb-1 — зона для локации ru-1 (Санкт-Петербург).
 resource "twc_database_cluster" "postgres" {
-  name      = var.db_name
-  type      = "postgres17"
-  preset_id = data.twc_database_preset.pg_preset.id
+  name = var.db_name
+  type = "postgres18"
 
-  # Размещаем БД в той же приватной сети, что и кластер K8S.
-  # Это обеспечивает связь без публичного IP.
+  preset_id         = 1139
+  replications      = 1
+  availability_zone = "msk-1"
+
   network {
     id = twc_vpc.main.id
   }
-
-  # is_external_ip = false — БД доступна только из VPC, не из интернета.
-  # Раскомментируйте и установите true ТОЛЬКО для временной отладки.
-  # is_external_ip = false
 }
 
 # Создаём отдельную базу данных внутри кластера.
+# Если вам это нужно.
 resource "twc_database_instance" "app_db" {
   cluster_id = twc_database_cluster.postgres.id
   name       = "greeting_db"
@@ -55,16 +44,23 @@ resource "twc_database_user" "app_user" {
   password   = var.db_password
 
   instance {
-    instance_id         = twc_database_instance.app_db.id
+    instance_id = twc_database_instance.app_db.id
+
+    # Нужные привилегии для работы приложения с таблицами.
+    # Список подобран под PostgreSQL:
+    # - базовые операции с данными (SELECT/INSERT/UPDATE/DELETE)
+    # - создание/удаление таблиц (CREATE)
+    # - REFERENCES — для внешних ключей
+    # - TRUNCATE — для очистки таблиц
     privileges = [
-          "CREATE",
-          "INSERT",
-          "UPDATE",
-          "DELETE",
-          "SELECT",
-          "REFERENCES",
-          "TRUNCATE"
-        ]
+      "CREATE",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "SELECT",
+      "REFERENCES",
+      "TRUNCATE",
+    ]
   }
 }
 
