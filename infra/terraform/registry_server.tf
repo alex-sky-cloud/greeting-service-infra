@@ -10,6 +10,7 @@
 # Docker Registry (distribution/registry:2) — лёгкий open-source registry,
 # достаточно одного VPS с SSD диском.
 #
+# cloud-init + интернет: floating_ip_id на twc_server (не twc_floating_ip.resource).
 # Документация twc_server:
 # https://registry.terraform.io/providers/timeweb-cloud/timeweb-cloud/latest/docs/resources/twc_server
 # =============================================================================
@@ -31,14 +32,20 @@ resource "twc_ssh_key" "operator" {
   body = file("/mnt/c/Users/sky/.ssh/id_ed25519.pub")
 }
 
+# Публичный IPv4 создаём до сервера и передаём в twc_server.floating_ip_id —
+# иначе cloud-init не получит интернет (apt, Docker).
+resource "twc_floating_ip" "devtools" {
+  availability_zone = "msk-1"
+  comment           = "Public IPv4 for ${var.project_name}-devtools"
+}
+
 # ─── Сервер для Bitbucket + Docker Registry ───────────────────────────────────
-# Bitbucket Server минимальные требования: 4 CPU, 4 ГБ RAM.
-# Docker Registry добавляет небольшую нагрузку — поднимаем на той же машине.
 resource "twc_server" "devtools" {
   name = "${var.project_name}-devtools"
   os_id = data.twc_os.ubuntu.id
 
-  ssh_keys_ids = [twc_ssh_key.operator.id]
+  ssh_keys_ids   = [twc_ssh_key.operator.id]
+  floating_ip_id = twc_floating_ip.devtools.id
 
   configuration {
     configurator_id = data.twc_configurator.server_configurator.id
@@ -47,36 +54,23 @@ resource "twc_server" "devtools" {
     disk            = 51200
   }
 
-  # Сервер в той же приватной сети, что и K8S кластер.
   local_network {
-    id = twc_vpc.main.id
+    id   = twc_vpc.main.id
+    mode = "dnat_and_snat" # входящий SSH/HTTP с публичного floating IP
   }
 
-  # cloud-init скрипт — начальная установка зависимостей.
-  # Конкретная установка Bitbucket и Registry — через Ansible или вручную.
-  cloud_init = file("${path.module}/scripts/devtools-init.sh")
+  cloud_init = templatefile("${path.module}/scripts/devtools-cloud-init.yaml.tftpl", {
+    init_script = file("${path.module}/scripts/devtools-init.sh")
+  })
 
   project_id        = 701321
   availability_zone = "msk-1" # ru-3 — та же зона, что у БД и VPC
 }
 
-# Публичный IPv4 для devtools.
-# В ru-3 Timeweb часто выдаёт на сервер только IPv6 → main_ipv4 остаётся null.
-# Floating IP даёт стабильный IPv4 для SSH, Bitbucket и Docker Registry.
-resource "twc_floating_ip" "devtools" {
-  availability_zone = "msk-1"
-  comment           = "Public IPv4 for ${var.project_name}-devtools"
-
-  resource {
-    type = "server"
-    id   = twc_server.devtools.id
-  }
-}
-
 output "devtools_public_ip" {
   value = coalesce(
-    twc_server.devtools.main_ipv4,
     twc_floating_ip.devtools.ip,
+    twc_server.devtools.main_ipv4,
     "ещё не создан",
   )
   description = "Публичный IPv4 сервера Bitbucket / Docker Registry."
