@@ -2871,35 +2871,35 @@ FROM --platform=linux/amd64 eclipse-temurin:21-jre-alpine AS runtime
 
 #### Команды / действия
 
-**macOS / Ubuntu — подключение и установка:**
+**Windows — Git Bash (корень репозитория). `DEVTOOLS_IP` — из `terraform output -raw devtools_public_ip` (Раздел 9):**
 
 ```bash
 
-# Подключиться к devtools-серверу:
-ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP}
+cd '/d/!_Проекты инфраструктуры/greeting-service-infra'
+DEVTOOLS_IP=72.56.249.137   # подставьте актуальный IP
 
-# На сервере — установка GitLab CE:
-# 1. Установить зависимости:
-sudo apt-get update
-sudo apt-get install -y curl openssh-server ca-certificates tzdata perl
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP} bash -s <<EOF
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+if dpkg -s gitlab-ce >/dev/null 2>&1; then
+  apt-get purge -y gitlab-ce
+  rm -rf /opt/gitlab /etc/gitlab /var/opt/gitlab
+fi
+systemctl is-active --quiet nginx && { systemctl stop nginx; systemctl disable nginx; }
+if ! swapon --show | grep -q /swapfile; then
+  fallocate -l 4G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+apt-get update
+apt-get install -y curl openssh-server ca-certificates tzdata perl
+curl -fsSL https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash
+EXTERNAL_URL="http://${DEVTOOLS_IP}" apt-get install -y gitlab-ce
+EOF
 
-# 2. Добавить официальный apt-репозиторий GitLab:
-curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | sudo bash
-
-# 3. Установить GitLab CE.
-# EXTERNAL_URL — адрес, по которому GitLab будет доступен:
-sudo EXTERNAL_URL="http://${DEVTOOLS_IP}" apt-get install -y gitlab-ce
-
-# Установка занимает 5–10 минут. После завершения GitLab запущен на порту 80.
-```
-
-**Windows — через PowerShell (SSH подключение):**
-
-```powershell
-
-# Подключиться к серверу:
-ssh -i /c/Users/sky/.ssh/id_ed25519 root@<DEVTOOLS_IP>
-# Далее выполнять команды Ubuntu выше — на сервере.
+# Установка занимает 5–10 минут. После завершения GitLab слушает порт 80.
 ```
 
 #### Разбор параметров команды установки GitLab
@@ -2914,27 +2914,9 @@ ssh -i /c/Users/sky/.ssh/id_ed25519 root@<DEVTOOLS_IP>
 
 ```bash
 
-# Статус GitLab сервисов:
-sudo gitlab-ctl status
-# Все сервисы должны быть: run
-
-# Получить временный пароль root (действует 24 часа):
-sudo cat /etc/gitlab/initial_root_password
-# В браузере: http://<DEVTOOLS_IP> — должна открыться страница входа.
-```
-
-#### Типичные ошибки / Как исправить
-
-- Ошибка: `502 Waiting for GitLab to boot`.
-    - Причина: недостаточно RAM.
-    - Исправление: добавьте swap:
-
-```bash
-
-sudo fallocate -l 4G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP} 'gitlab-ctl status'
+ssh -i /c/Users/sky/.ssh/id_ed25519 root@${DEVTOOLS_IP} 'cat /etc/gitlab/initial_root_password'
+# В браузере: http://${DEVTOOLS_IP} — страница входа GitLab.
 ```
 
 ---
