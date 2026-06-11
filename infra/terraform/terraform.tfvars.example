@@ -42,3 +42,8 @@ db_password = "CHANGE_ME_STRONG_PASSWORD"
 
 # CIDR приватной сети
 vpc_subnet = "10.10.0.0/24"
+
+# --- DNS (опционально, после деплоя в K8s, см. dns.tf и Раздел 12.12) ---
+# enable_dns   = true
+# dns_domain   = "example.com"
+# ingress_ip   = "185.250.123.45"   # EXTERNAL-IP ingress-nginx-controller (не IP devtools)

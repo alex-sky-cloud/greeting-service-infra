@@ -102,3 +102,34 @@ variable "s3_secret_key" {
   sensitive   = true
   default     = ""
 }
+
+# -----------------------------------------------------------------------------
+# DNS (опционально, см. dns.tf)
+# Применяется отдельным terraform apply ПОСЛЕ деплоя в K8s и получения INGRESS_IP.
+# -----------------------------------------------------------------------------
+
+variable "enable_dns" {
+  description = "Создавать A-записи в DNS Timeweb Cloud. true — только если домен делегирован в Timeweb."
+  type        = bool
+  default     = false
+}
+
+variable "dns_domain" {
+  description = "Корневой домен в DNS Timeweb Cloud (без поддомена), например example.com."
+  type        = string
+  default     = "example.com"
+}
+
+variable "ingress_ip" {
+  description = "Публичный IPv4 Ingress Controller (EXTERNAL-IP сервиса ingress-nginx-controller). Получить: kubectl get svc -n ingress-nginx (Раздел 12.10)."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      !var.enable_dns
+      || can(regex("^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$", var.ingress_ip))
+    )
+    error_message = "При enable_dns=true задайте ingress_ip — IPv4 из kubectl (п. 12.10). Это не DEVTOOLS_IP."
+  }
+}
