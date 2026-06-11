@@ -12,7 +12,7 @@ image:
   tag: "dev-latest"
 
 ingress:
-  host: greeting-dev.example.com
+  host: greeting-dev.cloud-terra.online
 
 env:
   APP_ENV: "dev"

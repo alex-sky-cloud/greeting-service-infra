@@ -121,7 +121,7 @@ variable "dns_domain" {
 }
 
 variable "ingress_ip" {
-  description = "Публичный IPv4 Ingress Controller (EXTERNAL-IP сервиса ingress-nginx-controller). Получить: kubectl get svc -n ingress-nginx (Раздел 12.10)."
+  description = "Публичный IPv4 Ingress (EXTERNAL-IP worker-узла K8s в Timeweb). Получить: kubectl get nodes -o wide (Раздел 12.10)."
   type        = string
   default     = ""
 

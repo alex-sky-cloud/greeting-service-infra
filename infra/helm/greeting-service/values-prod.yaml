@@ -5,7 +5,7 @@
 replicaCount: 3
 
 ingress:
-  host: greeting.example.com
+  host: greeting.cloud-terra.online
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     # Добавьте аннотацию cert-manager если используете TLS:

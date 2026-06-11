@@ -6,12 +6,11 @@
 # После Helm-деплоя Ingress принимает HTTP-запросы по hostname
 # (greeting-dev.example.com, greeting.example.com — см. values-dev.yaml / values-prod.yaml).
 # Чтобы имя домена из браузера «доходило» до Ingress, в DNS нужны A-записи:
-#   greeting-dev.<ваш-домен>  →  INGRESS_IP
-#   greeting.<ваш-домен>      →  INGRESS_IP
+#   greeting-dev.cloud-terra.online  →  INGRESS_IP
+#   greeting.cloud-terra.online      →  INGRESS_IP
 #
-# INGRESS_IP — публичный IPv4 Service ingress-nginx-controller (LoadBalancer).
-# Это НЕ IP devtools-сервера (DEVTOOLS_IP). Ingress IP появляется только после
-# развёртывания приложения в K8s и назначения LoadBalancer (Раздел 12.10).
+# INGRESS_IP — EXTERNAL-IP worker-узла K8s (Timeweb: ingress-nginx на hostNetwork).
+# Это НЕ IP devtools-сервера (DEVTOOLS_IP). Получить: kubectl get nodes -o wide (Раздел 12.10).
 #
 # КОГДА ИСПОЛЬЗОВАТЬ ЭТОТ ФАЙЛ
 # -----------------------------
@@ -24,11 +23,10 @@
 # КАК ПОЛУЧИТЬ INGRESS_IP (Git Bash, после п. 12.8–12.10)
 # ---------------------------------------------------------
 #   export KUBECONFIG=/c/Users/sky/.kube/timeweb-greeting.yaml
-#   kubectl get svc -n ingress-nginx
-#   # EXTERNAL-IP у ingress-nginx-controller — это INGRESS_IP
+#   kubectl get nodes -o wide
+#   # EXTERNAL-IP worker-узла — это INGRESS_IP
 #
-#   INGRESS_IP=$(kubectl get svc -n ingress-nginx \
-#     -o jsonpath='{.items[?(@.spec.type=="LoadBalancer")].status.loadBalancer.ingress[0].ip}')
+#   INGRESS_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
 #   echo "$INGRESS_IP"
 #
 # КАК ПРИМЕНИТЬ (WSL, после первого деплоя в K8s)
