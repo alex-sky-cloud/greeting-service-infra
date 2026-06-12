@@ -6,15 +6,16 @@ FROM gradle:8.8-jdk21 AS build
 
 WORKDIR /workspace
 
-# Копируем файлы сборки отдельно — Docker кэширует слой с зависимостями,
+# Копируем wrapper и файлы сборки — Docker кэширует слой с зависимостями,
 # пока build.gradle и settings.gradle не изменились.
-COPY build.gradle settings.gradle ./
-RUN gradle dependencies --no-daemon -q
+COPY gradlew settings.gradle build.gradle ./
+COPY gradle ./gradle
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon -q
 
 # Копируем исходный код и выполняем сборку.
 # -x test — тесты запускаются отдельным шагом в pipeline.
 COPY src ./src
-RUN gradle bootJar -x test --no-daemon
+RUN ./gradlew bootJar -x test --no-daemon
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Runtime — минимальный образ только с JRE.
