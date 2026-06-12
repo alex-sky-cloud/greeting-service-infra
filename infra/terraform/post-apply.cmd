@@ -1,2 +1,2 @@
 @echo off
-wsl -d Ubuntu bash -lc "cd /mnt/d/\!_*/greeting-service-infra/infra/terraform && bash post-apply.sh"
+wsl -d Ubuntu bash -lc "cd /mnt/d/Project_infra/greeting-service-infra/infra/terraform && bash post-apply.sh"

@@ -2,16 +2,19 @@ server:
   port: 8080
 
 app:
-  env: ${APP_ENV:local}
-  version: ${APP_VERSION:unknown}
+  env: local
+  version: unknown
 
 spring:
+  config:
+    activate:
+      on-profile: local
   application:
     name: greeting-service
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://localhost:5432/app
+    username: app
+    password: app
     driver-class-name: org.postgresql.Driver
   flyway:
     enabled: true

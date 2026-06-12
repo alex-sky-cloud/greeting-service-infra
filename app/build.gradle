@@ -25,7 +25,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
     runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
     // ОБЯЗАТЕЛЬНО: AOP, иначе прокси для @Retryable не создадутся
     implementation 'org.springframework.boot:spring-boot-starter-aspectj'

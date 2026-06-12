@@ -1,0 +1,227 @@
+# =============================================================================
+# plan-template-helm.txt
+# Пример: helm template для окружения dev (dry-run, без установки в кластер).
+#
+# Запуск из корня репозитория (Git Bash):
+#   cd /d/Project_infra/greeting-service-infra
+#   export DEVTOOLS_IP=72.56.249.137          # terraform output devtools_public_ip
+#   export IMAGE_TAG=manual-v1                # тег образа в Registry
+#   helm template greeting-service infra/helm/greeting-service \
+#     -f infra/helm/greeting-service/values.yaml \
+#     -f infra/helm/greeting-service/values-dev.yaml \
+#     --set image.repository="${DEVTOOLS_IP}:5000/greeting-service" \
+#     --set image.tag="${IMAGE_TAG}"
+#
+# Ниже — фактический вывод команды (манифесты на stdout).
+# =============================================================================
+
+# --- Команда -----------------------------------------------------------------
+# helm template     — только рендер YAML, в кластер ничего не ставится
+# greeting-service  — имя Helm-релиза (попадает в labels/metadata)
+# infra/helm/...    — путь к чарту
+# -f values.yaml    — базовые значения (replicas, ingress, probes, secrets)
+# -f values-dev.yaml — переопределения dev (1 pod, host dev, APP_ENV=dev)
+# --set image.*     — подставить реальный Registry и тег из CI/ручной сборки
+$ helm template greeting-service infra/helm/greeting-service \
+  -f infra/helm/greeting-service/values.yaml \
+  -f infra/helm/greeting-service/values-dev.yaml \
+  --set image.repository="${DEVTOOLS_IP}:5000/greeting-service" \
+  --set image.tag="${IMAGE_TAG}"
+
+# --- ServiceAccount ----------------------------------------------------------
+# Учётная запись пода. Chart создаёт её сам (serviceAccount.create: true).
+# Нужна, если позже повесите RBAC (RoleBinding) — для dev достаточно default SA.
+---
+# Source: greeting-service/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: greeting-service
+  labels:
+    helm.sh/chart: greeting-service-0.1.0
+    app.kubernetes.io/name: greeting-service
+    app.kubernetes.io/instance: greeting-service
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+
+# --- Service -----------------------------------------------------------------
+# Внутренний доступ к приложению внутри кластера.
+# ClusterIP — без внешнего IP; снаружи идут через Ingress.
+# port 80 → targetPort 8080 (Spring Boot в контейнере).
+---
+# Source: greeting-service/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: greeting-service
+  labels:
+    helm.sh/chart: greeting-service-0.1.0
+    app.kubernetes.io/name: greeting-service
+    app.kubernetes.io/instance: greeting-service
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: greeting-service
+    app.kubernetes.io/instance: greeting-service
+
+# --- Deployment --------------------------------------------------------------
+# Основной workload: pod(ы) с greeting-service.
+# replicas: 1 — из values-dev.yaml (в prod values-prod.yaml даст 3+).
+# imagePullSecrets — Secret registry-credentials (docker login к :5000).
+# image — образ из приватного Registry на devtools.
+---
+# Source: greeting-service/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greeting-service
+  labels:
+    helm.sh/chart: greeting-service-0.1.0
+    app.kubernetes.io/name: greeting-service
+    app.kubernetes.io/instance: greeting-service
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1                    # values-dev.yaml: replicaCount: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: greeting-service
+      app.kubernetes.io/instance: greeting-service
+  strategy:
+    # RollingUpdate — обновляем поды постепенно, без даунтайма.
+    # maxSurge: 1 — можно запустить на 1 под больше нормы во время обновления.
+    # maxUnavailable: 0 — нельзя иметь недоступных подов в процессе.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: greeting-service
+        app.kubernetes.io/instance: greeting-service
+    spec:
+      imagePullSecrets:
+        - name: registry-credentials   # Secret в namespace dev (шаг 12.3 guide)
+      serviceAccountName: greeting-service
+
+      # securityContext на уровне пода: запрещаем запуск от root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: greeting-service
+          # repository + tag из --set (Registry devtools + тег сборки)
+          image: "72.56.249.137:5000/greeting-service:manual-v1"
+          imagePullPolicy: Always      # всегда тянуть образ (важно при :latest / пересборке)
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # Переменные окружения из values.yaml (обычные).
+          env:
+            - name: APP_ENV
+              value: "dev"             # values-dev.yaml
+            - name: APP_VERSION
+              value: "dev"
+
+          # Чувствительные переменные из Kubernetes Secret.
+          # Secret greeting-service-secret создаётся отдельно (DB_HOST, DB_PASSWORD…).
+          envFrom:
+            - secretRef:
+                name: greeting-service-secret
+
+          # Liveness — перезапуск pod, если приложение «зависло».
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+          # Readiness — pod получает трафик только когда готов принимать запросы.
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 5
+
+          resources:
+            limits:
+              cpu: 250m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi            # values-dev.yaml — меньше, чем prod
+
+          # securityContext на уровне контейнера.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # Временная директория, необходимая Spring Boot для работы
+          # при readOnlyRootFilesystem: true.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+# --- Ingress -----------------------------------------------------------------
+# Внешний HTTP-доступ: host → Service greeting-service:80.
+# ingressClassName: nginx — контроллер Timeweb/K8s.
+# host из values-dev.yaml; DNS A-запись должна указывать на EXTERNAL-IP worker node.
+---
+# Source: greeting-service/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: greeting-service
+  labels:
+    helm.sh/chart: greeting-service-0.1.0
+    app.kubernetes.io/name: greeting-service
+    app.kubernetes.io/instance: greeting-service
+    app.kubernetes.io/version: "0.0.1"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "greeting-dev.cloud-terra.online"   # values-dev.yaml
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: greeting-service
+                port:
+                  number: 80
+
+# --- Что дальше --------------------------------------------------------------
+# Просмотр (этот файл):  helm template ...
+# Реальный деплoy в dev:  helm upgrade --install greeting-service infra/helm/greeting-service \
+#                           -f .../values.yaml -f .../values-dev.yaml \
+#                           --set image.repository=... --set image.tag=... \
+#                           --namespace dev --create-namespace
+# Prod:                   заменить values-dev.yaml на values-prod.yaml, namespace prod.
