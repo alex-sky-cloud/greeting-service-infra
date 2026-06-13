@@ -6,8 +6,6 @@ app:
   version: ${APP_VERSION:unknown}
 
 spring:
-  profiles:
-    active: local
   application:
     name: greeting-service
   datasource:
