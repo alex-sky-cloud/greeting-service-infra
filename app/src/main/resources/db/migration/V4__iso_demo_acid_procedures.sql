@@ -1,5 +1,3 @@
-create schema if not exists iso_demo;
-
 set search_path to iso_demo, public;
 
 create or replace procedure reset_demo_data()

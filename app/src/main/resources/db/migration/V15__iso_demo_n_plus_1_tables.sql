@@ -1,5 +1,3 @@
-create schema if not exists iso_demo;
-
 create table if not exists iso_demo.products
 (
     id         bigint generated always as identity primary key,

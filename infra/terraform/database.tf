@@ -38,6 +38,32 @@ resource "twc_database_instance" "app_db" {
 
 # Создаём пользователя для приложения.
 # НИКОГДА не используйте суперпользователя postgres в приложении.
+#
+# ── Права пользователя и миграции Flyway ───────────────────────────────────
+#
+# При старте приложение (Spring Boot + Flyway) накатывает DDL в greeting_db:
+# CREATE SCHEMA (V0), таблицы, индексы, процедуры в схемах iso_demo / shop_demo.
+# Без прав CREATE / DROP / ALTER / INDEX миграции падают ещё до запуска HTTP.
+#
+# В провайдере Timeweb (twc_database_user) права задаются в одном из двух мест —
+# одновременно использовать оба нельзя (terraform plan: "only one of instance,
+# privileges can be specified"):
+#
+#   1) cluster-level privileges = [...]
+#      Права на ВЕСЬ кластер PostgreSQL: все базы (instances) внутри кластера.
+#      Подходит, если одному login нужен одинаковый набор прав везде.
+#
+#   2) instance { instance_id = ...; privileges = [...] }
+#      Права только на ОДНУ базу (twc_database_instance), здесь — greeting_db.
+#      Принцип наименьших привилегий: greeting_user не трогает другие БД кластера.
+#
+# Мы используем вариант (2): пользователь приложения работает только с greeting_db.
+# Расширение списка (DROP, ALTER, INDEX) относительно исходного CREATE/SELECT/… —
+# чтобы Flyway мог менять уже созданные объекты, а не только INSERT/SELECT.
+#
+# Примечание: CREATE SCHEMA и flyway_schema_history на managed PG — через
+# application.yml (default-schema: iso_demo, init-sql) и миграцию V0,
+# а не через отдельную схему с именем login пользователя.
 resource "twc_database_user" "app_user" {
   cluster_id = twc_database_cluster.postgres.id
   login      = "greeting_user"
@@ -46,20 +72,19 @@ resource "twc_database_user" "app_user" {
   instance {
     instance_id = twc_database_instance.app_db.id
 
-    # Нужные привилегии для работы приложения с таблицами.
-    # Список подобран под PostgreSQL:
-    # - базовые операции с данными (SELECT/INSERT/UPDATE/DELETE)
-    # - создание/удаление таблиц (CREATE)
-    # - REFERENCES — для внешних ключей
-    # - TRUNCATE — для очистки таблиц
+    # Привилегии PostgreSQL на базу greeting_db (см. блок комментариев выше).
+    # SELECT/INSERT/UPDATE/DELETE — данные; REFERENCES — FK; TRUNCATE — seed-процедуры.
     privileges = [
       "CREATE",
+      "DROP",
+      "ALTER",
       "INSERT",
       "UPDATE",
       "DELETE",
       "SELECT",
       "REFERENCES",
       "TRUNCATE",
+      "INDEX",
     ]
   }
 }

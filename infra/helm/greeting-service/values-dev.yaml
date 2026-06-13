@@ -9,6 +9,8 @@
 replicaCount: 1
 
 image:
+  # Docker Registry на devtools (terraform output devtools_public_ip).
+  repository: 72.56.249.137:5000/greeting-service
   tag: "dev-latest"
 
 ingress:
@@ -25,3 +27,14 @@ resources:
   limits:
     memory: "256Mi"
     cpu: "250m"
+
+# Первый запуск: Flyway накатывает 18 миграций (~1–2 мин на managed PG).
+livenessProbe:
+  initialDelaySeconds: 120
+  periodSeconds: 15
+  failureThreshold: 5
+
+readinessProbe:
+  initialDelaySeconds: 90
+  periodSeconds: 10
+  failureThreshold: 6

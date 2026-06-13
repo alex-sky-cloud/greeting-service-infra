@@ -16,6 +16,13 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # На managed PostgreSQL нет прав на schema public.
+    # flyway_schema_history храним в iso_demo (учебная схема из ваших SQL).
+    # init-sql создаёт iso_demo до первой записи в history; V0 создаёт iso_demo и shop_demo.
+    default-schema: iso_demo
+    schemas: iso_demo, shop_demo
+    create-schemas: false
+    init-sql: CREATE SCHEMA IF NOT EXISTS iso_demo AUTHORIZATION CURRENT_USER
     baseline-on-migrate: true
   jpa:
     hibernate:

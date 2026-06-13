@@ -3,8 +3,6 @@
 -- Все объекты изолированы в схеме shop_demo
 -- =============================================================
 
-CREATE SCHEMA IF NOT EXISTS shop_demo;
-
 SET search_path TO shop_demo, public;
 
 CREATE TABLE shop_demo.customer (
