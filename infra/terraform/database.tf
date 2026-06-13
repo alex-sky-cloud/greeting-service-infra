@@ -41,28 +41,22 @@ resource "twc_database_instance" "app_db" {
 #
 # ── Права пользователя и миграции Flyway ───────────────────────────────────
 #
-# При старте приложение (Spring Boot + Flyway) накатывает DDL в greeting_db:
-# CREATE SCHEMA (V0), таблицы, индексы, процедуры в схемах iso_demo / shop_demo.
-# Без прав CREATE / DROP / ALTER / INDEX миграции падают ещё до запуска HTTP.
+# При старте Spring Boot + Flyway накатывает DDL в greeting_db: CREATE SCHEMA,
+# таблицы, индексы, процедуры в iso_demo / shop_demo.
 #
-# В провайдере Timeweb (twc_database_user) права задаются в одном из двух мест —
-# одновременно использовать оба нельзя (terraform plan: "only one of instance,
-# privileges can be specified"):
+# Timeweb Cloud (панель и API twc_database_user) принимает только:
+#   SELECT, INSERT, UPDATE, DELETE, CREATE, TRUNCATE, REFERENCES, TRIGGER,
+#   TEMPORARY, CREATEDB, CREATEROLE
+# См. https://timeweb.cloud/docs/dbaas/postgresql/users-and-privileges
+# DROP / ALTER / INDEX в API недопустимы (400: Invalid admin privilege).
+# В PostgreSQL DROP/ALTER своих объектов даёт владение (owner), не отдельная
+# «привилегия DROP» в Timeweb.
 #
-#   1) cluster-level privileges = [...]
-#      Права на ВЕСЬ кластер PostgreSQL: все базы (instances) внутри кластера.
-#      Подходит, если одному login нужен одинаковый набор прав везде.
+# Привилегия Timeweb CREATE = «создание таблиц, представлений, функций»; для
+# Flyway create-schemas нужен CREATE на базу (has_database_privilege(...,'CREATE')).
+# Проверка после apply: scripts/dev-db-connection/09-check-db-user-privileges-wsl.sh
 #
-#   2) instance { instance_id = ...; privileges = [...] }
-#      Права только на ОДНУ базу (twc_database_instance), здесь — greeting_db.
-#      Принцип наименьших привилегий: greeting_user не трогает другие БД кластера.
-#
-# Мы используем вариант (2): пользователь приложения работает только с greeting_db.
-# Расширение списка (DROP, ALTER, INDEX) относительно исходного CREATE/SELECT/… —
-# чтобы Flyway мог менять уже созданные объекты, а не только INSERT/SELECT.
-#
-# Примечание: для Flyway create-schemas нужен CREATE на базу greeting_db.
-# Проверка: scripts/dev-db-connection/09-check-db-user-privileges-wsl.sh
+# instance { privileges } — права только на greeting_db (не на весь кластер).
 resource "twc_database_user" "app_user" {
   cluster_id = twc_database_cluster.postgres.id
   login      = "greeting_user"
@@ -71,19 +65,15 @@ resource "twc_database_user" "app_user" {
   instance {
     instance_id = twc_database_instance.app_db.id
 
-    # Привилегии PostgreSQL на базу greeting_db (см. блок комментариев выше).
-    # SELECT/INSERT/UPDATE/DELETE — данные; REFERENCES — FK; TRUNCATE — seed-процедуры.
+    # Только значения из документации Timeweb (users-and-privileges).
     privileges = [
       "CREATE",
-      "DROP",
-      "ALTER",
       "INSERT",
       "UPDATE",
       "DELETE",
       "SELECT",
       "REFERENCES",
       "TRUNCATE",
-      "INDEX",
     ]
   }
 }

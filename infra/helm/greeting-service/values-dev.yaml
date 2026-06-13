@@ -22,11 +22,11 @@ env:
 
 resources:
   requests:
-    memory: "128Mi"
-    cpu: "50m"
-  limits:
     memory: "256Mi"
-    cpu: "250m"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
 
 # Первый запуск: Flyway накатывает 18 миграций (~1–2 мин на managed PG).
 livenessProbe:
