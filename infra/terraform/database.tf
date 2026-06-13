@@ -61,9 +61,8 @@ resource "twc_database_instance" "app_db" {
 # Расширение списка (DROP, ALTER, INDEX) относительно исходного CREATE/SELECT/… —
 # чтобы Flyway мог менять уже созданные объекты, а не только INSERT/SELECT.
 #
-# Примечание: CREATE SCHEMA и flyway_schema_history на managed PG — через
-# application.yml (default-schema: iso_demo, init-sql) и миграцию V0,
-# а не через отдельную схему с именем login пользователя.
+# Примечание: для Flyway create-schemas нужен CREATE на базу greeting_db.
+# Проверка: scripts/dev-db-connection/09-check-db-user-privileges-wsl.sh
 resource "twc_database_user" "app_user" {
   cluster_id = twc_database_cluster.postgres.id
   login      = "greeting_user"

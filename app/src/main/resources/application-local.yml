@@ -19,10 +19,9 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    default-schema: iso_demo
     schemas: iso_demo, shop_demo
-    create-schemas: false
-    init-sql: CREATE SCHEMA IF NOT EXISTS iso_demo AUTHORIZATION CURRENT_USER
+    default-schema: iso_demo
+    create-schemas: true
     baseline-on-migrate: true
   jpa:
     hibernate:
