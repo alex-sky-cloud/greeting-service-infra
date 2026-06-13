@@ -6,6 +6,8 @@ app:
   version: ${APP_VERSION:unknown}
 
 spring:
+  profiles:
+    active: local
   application:
     name: greeting-service
   datasource:
@@ -16,6 +18,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    baseline-on-migrate: true
   jpa:
     hibernate:
       ddl-auto: validate
