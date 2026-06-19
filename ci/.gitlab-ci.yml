@@ -23,7 +23,9 @@
 #   REGISTRY_USER       — docker
 #   REGISTRY_PASSWORD   — docker (Masked)
 #   IMAGE_NAME          — greeting-service
+#   REACTIVE_DEMO_IMAGE_NAME — reactive-demo (опционально, по умолчанию reactive-demo)
 #   HELM_RELEASE_NAME   — greeting-service
+#   REACTIVE_DEMO_HELM_RELEASE — reactive-demo
 #   KUBE_CONFIG_BASE64  — base64 kubeconfig (timeweb-greeting.yaml)
 # =============================================================================
 
@@ -33,6 +35,8 @@ default:
 
 variables:
   GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  REACTIVE_DEMO_IMAGE_NAME: "reactive-demo"
+  REACTIVE_DEMO_HELM_RELEASE: "reactive-demo"
 
 cache:
   key: "$CI_COMMIT_REF_SLUG"
@@ -63,6 +67,24 @@ build-and-test:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
+build-and-test-reactive-demo:
+  stage: build
+  script:
+    - cd reactive-demo
+    - chmod +x ./gradlew
+    - ./gradlew clean test bootJar --no-daemon
+    - cp build/libs/reactive-demo.jar ../reactive-demo.jar
+  artifacts:
+    name: "reactive-demo-jar-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - reactive-demo.jar
+    expire_in: 1 hour
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^feature\//'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
 # ── Docker build/push — docker на хосте devtools (shell executor) ───────────
 build-and-push-docker:
   stage: docker
@@ -82,6 +104,29 @@ build-and-push-docker:
     name: "image-tag-$CI_COMMIT_SHORT_SHA"
     paths:
       - image_tag.txt
+    expire_in: 1 hour
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+build-and-push-docker-reactive-demo:
+  stage: docker
+  needs:
+    - build-and-test-reactive-demo
+  script:
+    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+    - export FULL_IMAGE="${REGISTRY_HOST}/${REACTIVE_DEMO_IMAGE_NAME}:${IMAGE_TAG}"
+    - echo "${REGISTRY_PASSWORD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USER}" --password-stdin
+    - cd reactive-demo
+    - docker build -t "${FULL_IMAGE}" .
+    - docker tag "${FULL_IMAGE}" "${REGISTRY_HOST}/${REACTIVE_DEMO_IMAGE_NAME}:latest"
+    - docker push "${FULL_IMAGE}"
+    - docker push "${REGISTRY_HOST}/${REACTIVE_DEMO_IMAGE_NAME}:latest"
+    - echo "${IMAGE_TAG}" > ../reactive_demo_image_tag.txt
+  artifacts:
+    name: "reactive-demo-image-tag-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - reactive_demo_image_tag.txt
     expire_in: 1 hour
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -115,6 +160,33 @@ deploy-dev:
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
+deploy-dev-reactive-demo:
+  stage: deploy
+  needs:
+    - build-and-push-docker-reactive-demo
+  before_script:
+    - mkdir -p ~/.kube
+    - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+    - chmod 600 ~/.kube/config
+  script:
+    - export IMAGE_TAG=$(cat reactive_demo_image_tag.txt)
+    - |
+      helm upgrade --install "${REACTIVE_DEMO_HELM_RELEASE}" infra/helm/reactive-demo \
+        --namespace dev \
+        --create-namespace \
+        -f infra/helm/reactive-demo/values.yaml \
+        -f infra/helm/reactive-demo/values-dev.yaml \
+        --set image.repository="${REGISTRY_HOST}/${REACTIVE_DEMO_IMAGE_NAME}" \
+        --set image.tag="${IMAGE_TAG}" \
+        --atomic \
+        --timeout 5m
+    - kubectl rollout status deployment/"${REACTIVE_DEMO_HELM_RELEASE}-reactive-demo" -n dev --timeout=300s
+  environment:
+    name: dev/reactive-demo
+    url: http://reactive-demo-dev.cloud-terra.online
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
 # ── Деплой в prod (ручной запуск) ───────────────────────────────────────────
 deploy-prod:
   stage: deploy
@@ -140,6 +212,34 @@ deploy-prod:
   environment:
     name: prod
     url: http://greeting.example.com
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+
+deploy-prod-reactive-demo:
+  stage: deploy
+  needs:
+    - build-and-push-docker-reactive-demo
+  before_script:
+    - mkdir -p ~/.kube
+    - echo "${KUBE_CONFIG_BASE64}" | base64 -d > ~/.kube/config
+    - chmod 600 ~/.kube/config
+  script:
+    - export IMAGE_TAG=$(cat reactive_demo_image_tag.txt)
+    - |
+      helm upgrade --install "${REACTIVE_DEMO_HELM_RELEASE}" infra/helm/reactive-demo \
+        --namespace prod \
+        --create-namespace \
+        -f infra/helm/reactive-demo/values.yaml \
+        -f infra/helm/reactive-demo/values-prod.yaml \
+        --set image.repository="${REGISTRY_HOST}/${REACTIVE_DEMO_IMAGE_NAME}" \
+        --set image.tag="${IMAGE_TAG}" \
+        --atomic \
+        --timeout 10m
+    - kubectl rollout status deployment/"${REACTIVE_DEMO_HELM_RELEASE}-reactive-demo" -n prod --timeout=600s
+  environment:
+    name: prod/reactive-demo
+    url: http://reactive-demo.cloud-terra.online
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual

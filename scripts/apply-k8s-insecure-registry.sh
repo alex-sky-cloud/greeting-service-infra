@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-# Apply insecure-registry on a K8s worker from local Git Bash.
-# Usage: bash scripts/apply-k8s-insecure-registry.sh worker-10.10.0.7
+# ============================================================================
+# apply-k8s-insecure-registry.sh
+#
+# НАЗНАЧЕНИЕ: с локального ПК применить insecure-registry на указанной K8s worker-ноде.
+# ЗАЧЕМ:     worker сможет pull образов с devtools:5000 без HTTPS.
+# ГДЕ:       локальный kubectl debug → chroot на worker; PostgreSQL не затрагивается.
+# ВНИМАНИЕ:  перезапускает k0sworker на выбранной ноде (кратковременный downtime pod'ов на ней).
+#
+# Запуск: bash scripts/apply-k8s-insecure-registry.sh worker-10.10.0.7
+# ============================================================================
 set -euo pipefail
-
 NODE="${1:?Usage: bash scripts/apply-k8s-insecure-registry.sh <node-name>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export KUBECONFIG="${KUBECONFIG:-/c/Users/sky/.kube/timeweb-greeting.yaml}"

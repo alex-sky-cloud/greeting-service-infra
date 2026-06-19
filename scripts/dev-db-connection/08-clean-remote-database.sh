@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Очистка удалённой БД greeting_db (managed PostgreSQL в VPC Timeweb).
-# Выполняет app/src/main/resources/db/clean-database-remote.sql через SSH-туннель.
-set -euo pipefail
+# ============================================================================
+# 08-clean-remote-database.sh
+# НАЗНАЧЕНИЕ: DROP SCHEMA iso_demo, shop_demo в удалённой greeting_db (модуль app).
+# ОПАСНО:     УДАЛЯЕТ учебные данные и flyway_schema_history. Требует ввод yes.
+# НЕ ТРОГАЕТ: reactive_demo, другие базы, настройки сервера/K8s.
+# ЗАПУСК:    bash scripts/dev-db-connection/08-clean-remote-database.sh
+# ============================================================================set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"

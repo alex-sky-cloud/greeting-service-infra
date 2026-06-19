@@ -1,19 +1,17 @@
 #!/bin/bash
-# =============================================================================
+# ============================================================================
 # get-kubeconfig.sh
-# Получает kubeconfig из Terraform outputs и сохраняет локально.
 #
-# Использование (из корня репозитория):
-#   WSL:      bash scripts/get-kubeconfig.sh
-#   Git Bash: bash scripts/get-kubeconfig.sh
+# НАЗНАЧЕНИЕ: сохранить kubeconfig кластера из terraform output в ~/.kube/.
+# ЗАЧЕМ:     kubectl/helm/CI на локальном ПК нужен доступ к K8s Timeweb.
+# ГДЕ:       локальный ПК (WSL, Git Bash, Linux). Сервер не меняет — только читает terraform.
+# БЕЗОПАСНО: перезаписывает локальный файл kubeconfig, не трогает кластер и БД.
 #
-# Путь к файлу определяется автоматически:
-#   WSL      → /mnt/c/Users/<WindowsUser>/.kube/timeweb-greeting.yaml
-#   Git Bash → C:/Users/<User>/.kube/timeweb-greeting.yaml
-#   Linux    → ~/.kube/timeweb-greeting.yaml
+# Запуск из корня репозитория:
+#   bash scripts/get-kubeconfig.sh
 #
 # Переопределить путь: export KUBECONFIG=/path/to/file.yaml
-# =============================================================================
+# ============================================================================
 
 set -euo pipefail
 

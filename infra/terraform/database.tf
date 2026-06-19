@@ -36,6 +36,12 @@ resource "twc_database_instance" "app_db" {
   name       = "greeting_db"
 }
 
+# База для учебного reactive-demo (тот же кластер PostgreSQL).
+resource "twc_database_instance" "reactive_demo_db" {
+  cluster_id = twc_database_cluster.postgres.id
+  name       = "reactive_demo"
+}
+
 # Создаём пользователя для приложения.
 # НИКОГДА не используйте суперпользователя postgres в приложении.
 #
@@ -66,6 +72,20 @@ resource "twc_database_user" "app_user" {
     instance_id = twc_database_instance.app_db.id
 
     # Только значения из документации Timeweb (users-and-privileges).
+    privileges = [
+      "CREATE",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "SELECT",
+      "REFERENCES",
+      "TRUNCATE",
+    ]
+  }
+
+  instance {
+    instance_id = twc_database_instance.reactive_demo_db.id
+
     privileges = [
       "CREATE",
       "INSERT",

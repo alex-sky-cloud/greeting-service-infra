@@ -11,6 +11,8 @@ locals {
   # Строка подключения к PostgreSQL для использования в K8S Secret.
   # Используем внутренний IP из VPC — снаружи БД не доступна.
   db_jdbc_url = "jdbc:postgresql://${twc_database_cluster.postgres.networks[0].ips[0].ip}:${twc_database_cluster.postgres.port}/greeting_db"
+  reactive_demo_jdbc_url = "jdbc:postgresql://${twc_database_cluster.postgres.networks[0].ips[0].ip}:${twc_database_cluster.postgres.port}/reactive_demo"
+  reactive_demo_r2dbc_url = "r2dbc:postgresql://${twc_database_cluster.postgres.networks[0].ips[0].ip}:${twc_database_cluster.postgres.port}/reactive_demo"
 
   # coalesce: try() в heredoc не обрабатывает null — apply падал на output "summary".
   # main_ipv4 часто null в ru-3 — берём floating IP (см. registry_server.tf).
@@ -26,6 +28,16 @@ locals {
 output "db_jdbc_url" {
   value       = local.db_jdbc_url
   description = "JDBC URL для подключения Spring Boot к PostgreSQL."
+}
+
+output "reactive_demo_jdbc_url" {
+  value       = local.reactive_demo_jdbc_url
+  description = "JDBC URL для reactive-demo (Flyway)."
+}
+
+output "reactive_demo_r2dbc_url" {
+  value       = local.reactive_demo_r2dbc_url
+  description = "R2DBC URL для reactive-demo (runtime)."
 }
 
 output "summary" {

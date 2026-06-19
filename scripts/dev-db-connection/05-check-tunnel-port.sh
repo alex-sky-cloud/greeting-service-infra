@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Проверяет, что локальный порт туннеля (localhost:LOCAL_TUNNEL_PORT) принимает TCP-соединения.
-set -euo pipefail
+# ============================================================================
+# 05-check-tunnel-port.sh
+# НАЗНАЧЕНИЕ: проверить, что localhost:15432 принимает TCP (туннель жив).
+# Только проверка, БД не трогает.
+# ЗАПУСК:    bash scripts/dev-db-connection/05-check-tunnel-port.sh
+# ============================================================================set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
 

@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# Worker-side: write containerd registry config and restart k0sworker.
+# ============================================================================
+# k8s-worker-insecure-registry.sh
+#
+# НАЗНАЧЕНИЕ: настроить containerd на K8s worker для pull с HTTP registry (:5000).
+# ЗАЧЕМ:     приватный registry на devtools без TLS — worker должен доверять insecure.
+# ГДЕ:       выполняется НА worker-ноде (через kubectl debug или SSH).
+# ВНИМАНИЕ:  перезапускает k0sworker; образы в registry не удаляет, БД не трогает.
+#
+# Обычно не запускают вручную — вызывается из apply-k8s-insecure-registry.sh
+# ============================================================================
 set -eu
-
 DEVTOOLS_IP="${DEVTOOLS_IP:-72.56.249.137}"
 REG_HOST="${DEVTOOLS_IP}:5000"
 CERTS_BASE="/etc/k0s/containerd.d/certs.d"

@@ -1,8 +1,12 @@
-#!/bin/bash
-# =============================================================================
+#!/usr/bin/env bash
+# ============================================================================
 # create-secrets.sh
-# Создаёт Kubernetes Secrets во всех namespace.
-# Запускать после получения kubeconfig и создания кластера.
+#
+# НАЗНАЧЕНИЕ: создать/обновить Kubernetes Secrets (registry, greeting-service, reactive-demo).
+# ЗАЧЕМ:     деплой app и reactive-demo в K8s читают DB_URL/R2DBC_URL из Secret.
+# ГДЕ:       локальный ПК с kubectl → кластер Timeweb (dev/stage/prod namespace).
+# БЕЗОПАСНО: PostgreSQL не трогает. Обновляет только объекты Secret в K8s (kubectl apply).
+#             Существующие данные в БД не удаляются.
 #
 # Использование:
 #   export KUBECONFIG=~/.kube/timeweb-greeting.yaml
@@ -13,7 +17,11 @@
 #   DB_USERNAME=greeting_user \
 #   DB_PASSWORD=your_password \
 #   bash scripts/create-secrets.sh
-# =============================================================================
+#
+# Для reactive-demo (опционально):
+#   REACTIVE_DEMO_DB_URL="jdbc:postgresql://10.10.0.5:5432/reactive_demo" \
+#   REACTIVE_DEMO_R2DBC_URL="r2dbc:postgresql://10.10.0.5:5432/reactive_demo"
+# ============================================================================
 
 set -euo pipefail
 
@@ -24,15 +32,16 @@ set -euo pipefail
 : "${DB_USERNAME:?Переменная DB_USERNAME не задана}"
 : "${DB_PASSWORD:?Переменная DB_PASSWORD не задана}"
 
+REACTIVE_DEMO_DB_URL="${REACTIVE_DEMO_DB_URL:-${DB_URL/greeting_db/reactive_demo}}"
+REACTIVE_DEMO_R2DBC_URL="${REACTIVE_DEMO_R2DBC_URL:-${REACTIVE_DEMO_DB_URL/jdbc:/r2dbc:}}"
+
 NAMESPACES=("dev" "stage" "prod")
 
 for NS in "${NAMESPACES[@]}"; do
   echo "==> Обрабатываем namespace: ${NS}"
 
-  # Создаём namespace если не существует
   kubectl create namespace "${NS}" --dry-run=client -o yaml | kubectl apply -f -
 
-  # Secret для pull из Docker Registry
   kubectl create secret docker-registry registry-credentials \
     --namespace="${NS}" \
     --docker-server="${REGISTRY_HOST}" \
@@ -40,10 +49,17 @@ for NS in "${NAMESPACES[@]}"; do
     --docker-password="${REGISTRY_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-  # Secret с переменными окружения приложения
   kubectl create secret generic greeting-service-secret \
     --namespace="${NS}" \
     --from-literal=DB_URL="${DB_URL}" \
+    --from-literal=DB_USERNAME="${DB_USERNAME}" \
+    --from-literal=DB_PASSWORD="${DB_PASSWORD}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl create secret generic reactive-demo-secret \
+    --namespace="${NS}" \
+    --from-literal=DB_URL="${REACTIVE_DEMO_DB_URL}" \
+    --from-literal=R2DBC_URL="${REACTIVE_DEMO_R2DBC_URL}" \
     --from-literal=DB_USERNAME="${DB_USERNAME}" \
     --from-literal=DB_PASSWORD="${DB_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -

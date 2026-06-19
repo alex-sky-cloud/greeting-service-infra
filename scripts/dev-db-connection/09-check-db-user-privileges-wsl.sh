@@ -1,10 +1,33 @@
 #!/usr/bin/env bash
+# ============================================================================
+# 09-check-db-user-privileges-wsl.sh
+#
+# НАЗНАЧЕНИЕ: проверить права greeting_user (вариант через SSH на devtools + psql в VPC).
+# ЗАЧЕМ:     альтернатива туннелю из WSL, когда localhost:15432 недоступен.
+# БЕЗОПАСНО: только SELECT-запросы, данные не меняет.
+#             На devtools может установить postgresql-client (apt), БД не изменяет.
+#
+# Предпочтительно: bash scripts/dev-db-connection/09-check-db-user-privileges.sh
+#
+# Переменные (опционально):
+#   SSH_KEY, DEVTOOLS_IP, DB_PRIVATE_IP, TF_VAR_db_password
+# ============================================================================
 set -euo pipefail
-source /mnt/c/Users/sky/.bashrc 2>/dev/null || true
-SSH_KEY="/mnt/c/Users/sky/.ssh/id_ed25519"
-DEV="72.56.249.137"
-DB="10.10.0.5"
-[[ -n "${TF_VAR_db_password:-}" ]] || { echo "TF_VAR_db_password not set"; exit 1; }
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
+load_shell_secrets
+load_ips_from_terraform 2>/dev/null || true
+
+SSH_KEY="${SSH_KEY:-${HOME}/.ssh/id_ed25519}"
+DEV="${DEVTOOLS_IP:-${DEVTOOLS_PUBLIC_IP:-}}"
+DB="${DB_PRIVATE_IP:-${DB_HOST:-}}"
+
+[[ -n "${DEV}" ]] || { echo "[ERROR] DEVTOOLS_IP не задан (terraform output или env)"; exit 1; }
+[[ -n "${DB}" ]] || { echo "[ERROR] DB_PRIVATE_IP не задан"; exit 1; }
+[[ -n "${TF_VAR_db_password:-}" ]] || { echo "[ERROR] TF_VAR_db_password не задан — source ~/.bashrc"; exit 1; }
 
 run_psql() {
   local sql="$1"
@@ -12,7 +35,8 @@ run_psql() {
     "export PGPASSWORD='${TF_VAR_db_password}'; psql -h ${DB} -p 5432 -U greeting_user -d greeting_db -c \"${sql}\"" 2>&1
 }
 
-ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no "root@${DEV}" "command -v psql >/dev/null || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -qq -y postgresql-client)"
+ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no "root@${DEV}" \
+  "command -v psql >/dev/null || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -qq -y postgresql-client)"
 
 echo "=== 1. Role ==="
 run_psql "SELECT rolname, rolcanlogin, rolcreatedb, rolsuper FROM pg_roles WHERE rolname = 'greeting_user';"

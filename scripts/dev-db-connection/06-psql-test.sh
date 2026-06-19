@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Выполняет тестовый SQL-запрос через psql и локальный SSH-туннель.
-set -euo pipefail
+# ============================================================================
+# 06-psql-test.sh
+# НАЗНАЧЕНИЕ: тестовый SELECT через psql и SSH-туннель.
+# БЕЗОПАСНО: только чтение (SELECT, \dn), данные не меняет.
+# ЗАПУСК:    bash scripts/dev-db-connection/06-psql-test.sh
+# ============================================================================set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
 load_shell_secrets

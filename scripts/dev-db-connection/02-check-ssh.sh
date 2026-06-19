@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Проверяет SSH-доступ к devtools (jump-хост) по публичному IP.
-set -euo pipefail
+# ============================================================================
+# 02-check-ssh.sh
+# НАЗНАЧЕНИЕ: проверить SSH-доступ к devtools (jump-хост).
+# ГДЕ:       локальный ПК → SSH на devtools. Только чтение.
+# ЗАПУСК:    bash scripts/dev-db-connection/02-check-ssh.sh
+# ============================================================================set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
 load_ips_from_terraform

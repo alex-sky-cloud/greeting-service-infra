@@ -21,6 +21,29 @@ services:
       retries: 20
       start_period: 10s
 
+  # Создаёт БД reactive_demo на том же PostgreSQL (идемпотентно при каждом compose up).
+  # Init-скрипты в initdb/ срабатывают только на пустом volume — этот сервис нужен для уже существующих данных.
+  reactive-demo-db-init:
+    image: postgres:16.4
+    container_name: reactive-demo-db-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 <<-'EOSQL'
+          SELECT 'CREATE DATABASE reactive_demo OWNER app'
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'reactive_demo')\gexec
+        EOSQL
+        echo "reactive_demo: OK"
+    restart: "no"
+
   pgadmin:
     image: dpage/pgadmin4:8.9
     container_name: local-pgadmin

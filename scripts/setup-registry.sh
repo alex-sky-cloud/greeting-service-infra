@@ -1,12 +1,18 @@
 #!/bin/bash
-# =============================================================================
+# ============================================================================
 # setup-registry.sh
-# Устанавливает Docker Registry (distribution/registry:2) на devtools-сервере.
-# Запускать на devtools-сервере после terraform apply.
 #
-# Использование (Git Bash, корень репозитория):
-#   ssh -i /c/Users/sky/.ssh/id_ed25519 root@<DEVTOOLS_IP> 'bash -s' < scripts/setup-registry.sh
-# =============================================================================
+# НАЗНАЧЕНИЕ: установить Docker Registry (distribution/registry:2) на devtools-сервере.
+# ЗАЧЕМ:     хранить образы app/reactive-demo для pull в K8s.
+# ГДЕ:       выполняется НА devtools (SSH pipe), после terraform apply.
+# ВНИМАНИЕ:  создаёт/обновляет /opt/registry; существующие образы в volume сохраняются
+#             (delete enabled, но скрипт не делает purge). PostgreSQL не трогает.
+#
+# Запуск с локального ПК (Git Bash, корень репозитория):
+#   ssh -i ~/.ssh/id_ed25519 root@<DEVTOOLS_IP> 'bash -s' < scripts/setup-registry.sh
+#
+# Учётные данные: REGISTRY_USER / REGISTRY_PASSWORD (env перед pipe)
+# ============================================================================
 
 set -euo pipefail
 

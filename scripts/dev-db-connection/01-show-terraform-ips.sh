@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Показывает актуальные IP-адреса из terraform output и поясняет их назначение.
-set -euo pipefail
+# ============================================================================
+# 01-show-terraform-ips.sh
+# НАЗНАЧЕНИЕ: показать IP из terraform output (DB, devtools, VPC).
+# ГДЕ:       локальный ПК (Git Bash). Только чтение, сервер не меняет.
+# ЗАПУСК:    bash scripts/dev-db-connection/01-show-terraform-ips.sh
+# ============================================================================set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
 load_ips_from_terraform

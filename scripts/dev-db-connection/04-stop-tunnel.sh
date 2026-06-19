@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Останавливает фоновый SSH-туннель на LOCAL_TUNNEL_PORT.
-set -euo pipefail
+# ============================================================================
+# 04-stop-tunnel.sh
+# НАЗНАЧЕНИЕ: остановить фоновый SSH-туннель на LOCAL_TUNNEL_PORT.
+# БЕЗОПАСНО: закрывает только локальный SSH-процесс, сервер не затрагивает.
+# ЗАПУСК:    bash scripts/dev-db-connection/04-stop-tunnel.sh
+# ============================================================================set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
 load_ips_from_terraform

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Поднимает SSH-туннель в фоне: localhost:LOCAL_TUNNEL_PORT -> DB_HOST:DB_PORT через devtools.
-set -euo pipefail
+# ============================================================================
+# 03-start-tunnel.sh
+# НАЗНАЧЕНИЕ: SSH-туннель localhost:15432 → managed PostgreSQL в VPC.
+# ЗАЧЕМ:     DBeaver, psql, bootRun с ноутбука на удалённую БД.
+# ГДЕ:       локальный ПК; на сервере только SSH, БД не изменяется.
+# ЗАПУСК:    bash scripts/dev-db-connection/03-start-tunnel.sh
+# ============================================================================set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
 load_ips_from_terraform
