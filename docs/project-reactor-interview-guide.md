@@ -82,6 +82,12 @@ return userRepository.findById(id)
 </dependency>
 ```
 
+**Источник:** [Reactor 3 Reference Guide — Introduction](https://projectreactor.io/docs/core/release/reference/#intro-reactor)
+
+> **EN:** «Reactor is a fully non-blocking reactive programming foundation for the JVM … implements the Reactive Streams specification.»
+
+> **RU:** «Reactor — неблокирующая основа для реактивного программирования на JVM … реализует спецификацию Reactive Streams.»
+
 ---
 
 ## 1. Что такое Project Reactor
@@ -148,29 +154,51 @@ class OrderSubject {
 }
 ```
 
+**Источник (Observer):** [Spring Framework — Application Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events)
+
+> **EN:** «Essentially, this is the standard Observer design pattern.»
+
+> **RU:** «По сути, это классический паттерн Observer: Subject уведомляет подписчиков при изменении.»
+
 ---
 
 ### Паттерн Listener (Слушатель)
 
-**Кто есть кто на рисунке справа (пример Spring):**
+**Откуда пример:** это не Reactor, а **Spring Boot** — типичный способ сказать «сделай что-то **после** полного старта приложения» (прогреть кэш, проверить БД, отправить метрику).
+
+**Кто есть кто на рисунке справа:**
 
 | Роль | В Spring | Что делает |
 |------|----------|------------|
-| **Источник** | **Spring Context** (контекст приложения) | В нужный момент **публикует событие** — например, «приложение полностью запустилось». |
-| **Событие** | `ApplicationReadyEvent` | Конкретный **тип** сигнала: «всё готово, можно работать». |
-| **Listener** | **ваш класс** с `@EventListener` | Метод, который Spring **вызовет**, когда событие произошло. Spring **не знает** вашу бизнес-логику — только имя метода и тип события. |
+| **Источник (publisher)** | **`ApplicationContext`** + `ApplicationEventPublisher` | В нужный момент **публикует** объект-событие в контекст. |
+| **Событие** | `ApplicationReadyEvent` | Объект-сообщение: «приложение **готово обслуживать запросы**». |
+| **Слушатель (listener)** | **Spring bean** — ваш `@Component` | Компонент в контексте, который **зарегистрирован** как обработчик события. |
+| **Метод-обработчик** | метод с `@EventListener` | Конкретный метод bean'а, который Spring **вызовет** при событии. |
 
-**Схема:** Spring поднял приложение → опубликовал `ApplicationReadyEvent` → вызвал ваш `onAppReady(...)`.
+> В официальной документации Spring **слушатель** — это **bean** (`implements ApplicationListener<E>`) или **метод управляемого bean'а**, помеченный `@EventListener`. Не «метод сам по себе», а **компонент + зарегистрированный на нём обработчик**.
 
-**Пример (частый кейс в Spring Boot):** прогреть кэш, проверить внешний сервис, залогировать старт.
+---
+
+#### Что такое `ApplicationReadyEvent` и откуда он берётся
+
+Это класс из **Spring Boot** (`org.springframework.boot.context.event.ApplicationReadyEvent`). Он **не из Reactor** — обычное **событие жизненного цикла** Spring-приложения.
+
+**Упрощённая цепочка старта Spring Boot:**
+
+![Sequence: старт Spring Boot → ApplicationReadyEvent](./Images-docs/reactor-seq-spring-boot-startup.png)
+
+**Смысл события (официально):** публикуется **как можно позже** при старте — когда приложение **готово обслуживать запросы** (контекст обновлён, runners выполнены).
+
+**Схема обработки (на рисунке):** `main` → `SpringApplication.run()` → контекст поднят → `ApplicationStartedEvent` → runners → **`ApplicationReadyEvent`** → `AppStartupListener.onAppReady(...)`.
+
+**Пример (частый кейс):** прогреть кэш, проверить внешний сервис, залогировать старт.
 
 ```java
 
-@Component
+@Component   // ← это listener-bean (компонент-слушатель в контексте)
 public class AppStartupListener {
 
-  // Listener: «когда приложение готово — сделай это»
-  @EventListener(ApplicationReadyEvent.class)
+  @EventListener(ApplicationReadyEvent.class)   // ← регистрация обработчика на методе
   public void onAppReady(ApplicationReadyEvent event) {
     log.info("Spring поднялся — можно прогреть кэш или проверить БД");
     // ваш код; Spring не знает деталей — только вызывает метод при событии
@@ -180,12 +208,40 @@ public class AppStartupListener {
 
 **Разбор по шагам:**
 
-1. **Событие** — `ApplicationReadyEvent` («приложение готово»).
-2. **Кто шлёт** — Spring Context, не ваш код.
-3. **Кто слушает** — метод `onAppReady` с аннотацией `@EventListener`.
-4. **Связь** — вы **не вызываете** `onAppReady()` сами; Spring вызывает его, когда событие случилось.
+1. **`ApplicationReadyEvent`** — объект-событие Spring Boot: «старт завершён, можно работать».
+2. **Кто публикует** — `SpringApplication` через механизм событий Spring (`ApplicationEventPublisher`), не ваш код.
+3. **Кто слушает** — bean `AppStartupListener`, зарегистрированный в контексте (`@Component`).
+4. **Что вызывается** — метод `onAppReady`, помеченный `@EventListener` (обработчик этого типа события).
+5. **Связь** — вы **не вызываете** `onAppReady()` сами; контекст вызывает его при публикации события.
 
-> То же устройство у `ApplicationListener<OrderCreatedEvent>` в доменном коде: сервис публикует событие → слушатели реагируют. Идея Listener одна: **реагирую на событие типа X**.
+**Альтернатива (тот же смысл, старый стиль):**
+
+```java
+
+@Component
+public class AppStartupListener implements ApplicationListener<ApplicationReadyEvent> {
+  @Override
+  public void onApplicationEvent(ApplicationReadyEvent event) {
+    log.info("Приложение готово");
+  }
+}
+```
+
+Здесь слушатель — **весь класс**, реализующий `ApplicationListener<ApplicationReadyEvent>`.
+
+> В доменном коде то же устройство: `ApplicationListener<OrderCreatedEvent>` или `@EventListener` на методе сервиса. Сервис публикует событие → слушатели реагируют. Идея одна: **реагирую на событие типа X**.
+
+**Источник (Spring Events):** [Spring Framework — Application Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events)
+
+> **EN:** «You can register an event listener on any method of a managed bean by using the `@EventListener` annotation.» / «If a bean that implements the `ApplicationListener` interface is deployed into the context, every time an `ApplicationEvent` gets published … that bean is notified.»
+
+> **RU:** «Слушатель можно зарегистрировать на **любом методе** управляемого bean'а через `@EventListener`.» / «Если в контекст развёрнут bean с `ApplicationListener`, он получает уведомление при каждой публикации `ApplicationEvent`.»
+
+**Источник (`ApplicationReadyEvent`):** [Spring Boot — Application events](https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners) · [Javadoc](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/context/event/ApplicationReadyEvent.html)
+
+> **EN:** «An `ApplicationReadyEvent` is sent after any application and command-line runners have been called.» / «Event published as late as conceivably possible to indicate that the application is ready to service requests.»
+
+> **RU:** «`ApplicationReadyEvent` отправляется **после** выполнения всех `ApplicationRunner` и `CommandLineRunner`.» / «Событие публикуется максимально поздно при старте — приложение готово обслуживать запросы.»
 
 ---
 
@@ -194,11 +250,11 @@ public class AppStartupListener {
 | | **Observer** | **Listener** |
 |---|--------------|--------------|
 | **Источник** | **Subject** — объект с **состоянием** (модель, сервис) | **Spring Context** (или другой издатель) шлёт **событие** |
-| **Получатель** | **Observer** — «слежу за **этим объектом**» | **Listener** — «реагирую на **событие** (`ApplicationReadyEvent`, …)» |
+| **Получатель** | **Observer** — bean/класс, «слежу за **этим объектом**» | **Listener** — **bean** в контексте (`ApplicationListener` или `@Component` с `@EventListener`) |
 | **Триггер** | Изменилось **поле / состояние** (`setStatus`) | Произошло **событие** (приложение готово, заказ создан) |
-| **Источник знает получателя?** | **Да** — Subject хранит список Observer | **Нет** — Spring знает только `@EventListener`, не вашу логику внутри |
-| **Где в Java / Spring** | Модели, RxJava, **Reactor** | `@EventListener`, `ApplicationListener` в **Spring** |
-| **Фраза одной строкой** | «Слежу за **объектом** и его **данными**» | «Жду **событие типа X** — Spring вызовет мой метод» |
+| **Источник знает получателя?** | **Да** — Subject хранит список Observer | **Нет** — издатель шлёт событие; **не знает** вашу бизнес-логику внутри обработчика |
+| **Где в Java / Spring** | Модели, RxJava, **Reactor** | `ApplicationListener`, `@EventListener` в **Spring** |
+| **Фраза одной строкой** | «Слежу за **объектом** и его **данными**» | «Жду **событие типа X** — контекст вызовет мой обработчик» |
 
 ---
 
@@ -214,11 +270,17 @@ Reactor **ближе к Observer**, а не к Spring `@EventListener`:
 
 **Вопрос:** *What is reactive programming? How does it relate to Observer vs Listener?*
 
-**Источник:** [kindatechnical — Top 30 (Q1–Q2)](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
+**Источник (реактивное программирование):** [kindatechnical — Top 30 (Q1–Q2)](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
 
 > **EN:** «Reactive programming is concerned with data streams and the propagation of change.»
 
 > **RU:** «Реактивное программирование — потоки данных и распространение изменений.»
+
+**Источник (Observer в Spring / Reactor):** [Spring Framework — Application Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events) · [Reactor — Introduction](https://projectreactor.io/docs/core/release/reference/#intro-reactor)
+
+> **EN:** «Essentially, this is the standard Observer design pattern.» / «Reactor … implements the Reactive Streams specification.»
+
+> **RU:** «По сути, это классический паттерн Observer.» / «Reactor реализует спецификацию Reactive Streams (Publisher → Subscriber).»
 
 ---
 
@@ -1621,7 +1683,11 @@ Flux.just(1, 2)
 
 ## 23. Сводка: 30 вопросов → разделы
 
-Источник: [Top 30 Reactive Programming Interview Questions](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html) (Feb 2026).
+**Источник:** [Top 30 Reactive Programming Interview Questions](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html) (Feb 2026).
+
+> **EN:** «Top 30 reactive programming interview questions covering Mono, Flux, backpressure, WebFlux, and operators.»
+
+> **RU:** «30 типовых вопросов по реактивному программированию: Mono, Flux, backpressure, WebFlux, операторы.»
 
 | # | Вопрос | Раздел |
 |---|-----------------|--------|
@@ -1675,6 +1741,12 @@ public Mono<UserSummaryResponse> getUserSummary(@PathVariable Long id) {
 }
 ```
 Живые примеры map/flatMap: модуль **`reactive-demo`**, порт **8081**, раздел 6 этого документа.
+
+**Источник:** [reactive-demo/README.md](../reactive-demo/README.md) · [Reactor Reference — which operator](https://projectreactor.io/docs/core/release/reference/#which-operator)
+
+> **EN:** «map applies a synchronous transformation; flatMap applies an asynchronous transformation that returns a Publisher.»
+
+> **RU:** «`map` — синхронное преобразование; `flatMap` — асинхронное, возвращающее Publisher.»
 
 ---
 
