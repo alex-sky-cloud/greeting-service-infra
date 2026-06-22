@@ -1,9 +1,18 @@
 # Project Reactor: руководство и вопросы для собеседования
 
-> Краткое руководство по **Project Reactor** для Java-разработчиков, в том числе новичков.  
-> Формат блока: **аналогия из жизни → рисунок → ответ → вопрос → источник → цитата**.
+> Краткое руководство по **Project Reactor** для Java-разработчиков.  
+> **Формат:** типичные **вопросы на собеседовании** и **простые пояснения**.
+> В каждом блоке: **аналогия → рисунок → ответ → вопрос → источник → цитата**.
 
-**Как усваивать материал:** в каждом разделе — **аналогия из жизни** и **PNG-рисунок** (не код диаграммы). Перегенерация: `python docs/Images-docs/gen_reactor_diagrams.py`.
+**Правило оформления каждого раздела:**
+
+1. **Аналогия** → **PNG-рисунок**
+2. **Ответ** — коротко, без обрывков терминов
+3. **Сигнатура оператора** — отдельный блок `java` из [reactor-core](https://github.com/reactor/reactor-core) (`Mono.java` / `Flux.java`) + одна строка «что внутри»
+4. **Простой пример** — отдельный блок `java` (можно `Flux.just`, без Spring)
+5. **Вопрос** → источник → цитата EN/RU
+
+**Перегенерация PNG:** `python docs/Images-docs/gen_reactor_diagrams.py`.
 
 ---
 
@@ -27,6 +36,11 @@
 16. [Disposable и отмена подписки](#16-disposable-и-отмена-подписки)
 17. [Блокирующий код внутри реактивной цепочки](#17-блокирующий-код-внутри-реактивной-цепочки)
 18. [Краткая шпаргалка по операторам](#18-краткая-шпаргалка-по-операторам)
+19. [share() и cache() — cold → hot](#19-share-и-cache--cold--hot)
+20. [flatMap, concatMap и switchMap](#20-flatmap-concatmap-и-switchmap)
+21. [Отладка реактивной цепочки](#21-отладка-реактивной-цепочки)
+22. [Context — MDC и traceId между потоками](#22-context--mdc-и-traceid-между-потоками)
+23. [Сводка: 30 вопросов → разделы](#23-сводка-30-вопросов--разделы)
 
 ---
 
@@ -39,10 +53,10 @@
 ![Цепочка от PostgreSQL до JSON](./Images-docs/reactor-concept-intro.png)
 
 
-| Тип | Сколько элементов | Пример |
-|-----|-------------------|--------|
-| `Mono<T>` | 0 или 1 | `findById`, один HTTP-ответ |
-| `Flux<T>` | 0…N | `findAll`, SSE, список id |
+| Тип | Контейнер | Пример |
+|-----|-----------|--------|
+| `Mono<T>` | **один** элемент (или пусто) | `findById`, один HTTP-ответ |
+| `Flux<T>` | **ноль и больше** элементов | `findAll`, список, SSE |
 
 **Стандартное форматирование цепочки** — каждый оператор с новой строки («лесенка»):
 
@@ -97,83 +111,322 @@ return userRepository.findById(id)
 
 ## 2. Что такое реактивное программирование
 
-> **Аналогия из жизни:** Обычный код — вы **стоите у окна почты** и ждёте одно письмо, ничего другого не делая. Реактивный код — **подписка на уведомления**: пришло сообщение → обработали → ждёте следующее; пока ждёте, телефон может принять другие push.
+> **Аналогия:** Обычный код — **стоите у окна** и ждёте одно письмо. Реактивный — **подписались на уведомления**: пришло → обработали → ждёте следующее.
 
-![§2 Сигналы onNext / onError / onComplete](./Images-docs/reactor-concept-02.png)
-
+![§2 Observer и Listener — схема](./Images-docs/reactor-concept-02.png)
 
 **Ответ:**
 
-1. Вы работаете с **потоком событий**, а не с одним готовым результатом.
-2. Три сигнала: `onNext` (данные), `onError` (ошибка), `onComplete` (конец).
-3. Поток не обязан простаивать в ожидании БД или сети — при неблокирующем I/O один поток обслуживает много задач.
-4. Полезно: много одновременных соединений, стриминг (SSE, WebSocket).
-5. Не panacea: простой CRUD на JDBC часто проще через обычный Spring MVC.
+Вы не «вызвали метод и ждёте ответ», а **описали, что делать, когда придут данные**. В Reactor это сигналы: **`onNext`** (данные), **`onError`** (ошибка), **`onComplete`** (конец).
 
-**Вопрос:** *What is reactive programming?*
+---
 
-**Источник:** [CLIMB — Spring Reactive Interview Questions](https://climbtheladder.com/spring-reactive-interview-questions/)
+### Паттерн Observer (Наблюдатель)
+
+**Кто есть кто на рисунке слева:**
+
+| Роль | Простое имя | Что делает |
+|------|-------------|------------|
+| **Subject** | **наблюдаемый объект** | Хранит данные (например, статус заказа). Когда данные **меняются** — сам **обходит список** подписчиков и говорит: «обновись». |
+| **Observer** | **наблюдатель** | Класс, который **подписался** на Subject и получает вызов `update()` при изменении. |
+
+**Схема:** `Subject (модель)` → **знает список** → `Observer 1`, `Observer 2` → при `setStatus(...)` вызывает `update()` у каждого.
+
+```java
+
+// Упрощённая идея (не production-код)
+class OrderSubject {
+    private final List<Observer> observers = new ArrayList<>();
+    private String status;
+
+    void addObserver(Observer o) { observers.add(o); }  // Subject ЗНАЕТ наблюдателей
+
+    void setStatus(String newStatus) {
+        this.status = newStatus;
+        observers.forEach(Observer::update);           // сам уведомляет всех
+    }
+}
+```
+
+---
+
+### Паттерн Listener (Слушатель)
+
+**Кто есть кто на рисунке справа (пример Spring):**
+
+| Роль | В Spring | Что делает |
+|------|----------|------------|
+| **Источник** | **Spring Context** (контекст приложения) | В нужный момент **публикует событие** — например, «приложение полностью запустилось». |
+| **Событие** | `ApplicationReadyEvent` | Конкретный **тип** сигнала: «всё готово, можно работать». |
+| **Listener** | **ваш класс** с `@EventListener` | Метод, который Spring **вызовет**, когда событие произошло. Spring **не знает** вашу бизнес-логику — только имя метода и тип события. |
+
+**Схема:** Spring поднял приложение → опубликовал `ApplicationReadyEvent` → вызвал ваш `onAppReady(...)`.
+
+**Пример (частый кейс в Spring Boot):** прогреть кэш, проверить внешний сервис, залогировать старт.
+
+```java
+
+@Component
+public class AppStartupListener {
+
+  // Listener: «когда приложение готово — сделай это»
+  @EventListener(ApplicationReadyEvent.class)
+  public void onAppReady(ApplicationReadyEvent event) {
+    log.info("Spring поднялся — можно прогреть кэш или проверить БД");
+    // ваш код; Spring не знает деталей — только вызывает метод при событии
+  }
+}
+```
+
+**Разбор по шагам:**
+
+1. **Событие** — `ApplicationReadyEvent` («приложение готово»).
+2. **Кто шлёт** — Spring Context, не ваш код.
+3. **Кто слушает** — метод `onAppReady` с аннотацией `@EventListener`.
+4. **Связь** — вы **не вызываете** `onAppReady()` сами; Spring вызывает его, когда событие случилось.
+
+> То же устройство у `ApplicationListener<OrderCreatedEvent>` в доменном коде: сервис публикует событие → слушатели реагируют. Идея Listener одна: **реагирую на событие типа X**.
+
+---
+
+### Observer и Listener — в чём разница
+
+| | **Observer** | **Listener** |
+|---|--------------|--------------|
+| **Источник** | **Subject** — объект с **состоянием** (модель, сервис) | **Spring Context** (или другой издатель) шлёт **событие** |
+| **Получатель** | **Observer** — «слежу за **этим объектом**» | **Listener** — «реагирую на **событие** (`ApplicationReadyEvent`, …)» |
+| **Триггер** | Изменилось **поле / состояние** (`setStatus`) | Произошло **событие** (приложение готово, заказ создан) |
+| **Источник знает получателя?** | **Да** — Subject хранит список Observer | **Нет** — Spring знает только `@EventListener`, не вашу логику внутри |
+| **Где в Java / Spring** | Модели, RxJava, **Reactor** | `@EventListener`, `ApplicationListener` в **Spring** |
+| **Фраза одной строкой** | «Слежу за **объектом** и его **данными**» | «Жду **событие типа X** — Spring вызовет мой метод» |
+
+---
+
+### А где здесь Reactor?
+
+Reactor **ближе к Observer**, а не к Spring `@EventListener`:
+
+- **`Flux` / `Mono`** — источник данных (как Subject, который шлёт `onNext`).
+- **`subscribe(...)`** — вы подписались и ждёте данные (как Observer).
+- Плюс **backpressure** — подписчик говорит «дай N штук» (§4). У обычного Observer такого нет.
+
+> Reactor — **не** `@EventListener` на `ApplicationReadyEvent`. Это **поток данных** из БД, HTTP, Kafka.
+
+**Вопрос:** *What is reactive programming? How does it relate to Observer vs Listener?*
+
+**Источник:** [kindatechnical — Top 30 (Q1–Q2)](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
 
 > **EN:** «Reactive programming is concerned with data streams and the propagation of change.»
 
-> **RU:** «Реактивное программирование связано с потоками данных и распространением изменений.»
+> **RU:** «Реактивное программирование — потоки данных и распространение изменений.»
 
 ---
 
 ## 3. Mono и Flux — в чём разница
 
-> **Аналогия из жизни:** **`Mono`** — **одна посылка** в день (может не прийти). **`Flux`** — **курьер с тележкой**: ноль, одна или много посылок подряд.
+> **Аналогия:** **`Mono`** и **`Flux`** — это **контейнеры** для данных. Контейнер **сам по себе пустой**, пока вы не **подпишетесь** (`subscribe`) или Spring не «откроет» его в WebFlux.
 
-![§3 Mono vs Flux](./Images-docs/reactor-concept-03.png)
-
+![§3 Mono и Flux — контейнеры](./Images-docs/reactor-concept-03.png)
 
 **Ответ:**
 
-1. **`Mono<T>`** — 0 или 1 элемент. Примеры: `findById`, `save`, один ответ WebClient.
-2. **`Flux<T>`** — 0…N элементов. Примеры: `findAll`, SSE, список id.
-3. **Как выбрать:** «сколько элементов вернёт операция?» Один → `Mono`. Несколько → `Flux`.
-4. Тип в сигнатуре метода сразу показывает намерение.
-5. Между типами есть преобразования: `flux.next()` → `Mono`, `mono.flux()` → `Flux`.
+| | **Mono** | **Flux** |
+|---|----------|----------|
+| **Что это** | Контейнер на **один** элемент | Контейнер на **ноль и больше** элементов |
+| **Внутри может быть** | один `User`, одна строка, ничего (пустой контейнер) | список `User`, много строк подряд, пусто |
+| **Когда брать** | «вернётся **одна** вещь» | «вернётся **много** (или неизвестно сколько)» |
+
+**Простыми словами:**
+
+- **`Mono<User>`** — коробка, в которой лежит **максимум один** `User` (или коробка пустая).
+- **`Flux<User>`** — коробка, в которой лежит **0, 1, 2, 3…** пользователей подряд.
+
+**Как выбрать за 5 секунд:** спросите себя — «сколько результатов жду?» **Один** → `Mono`. **Несколько или поток** → `Flux`.
 
 **Пример:**
 
 ```java
 
+// одна запись из БД → Mono (контейнер на 1)
 Mono<User> one = userRepository.findById(1L);
+
+// все записи → Flux (контейнер на много)
 Flux<User> many = userRepository.findAll();
 ```
+
+**Важно:** контейнер **ленивый** — данные появятся только когда цепочку **запустят** (см. §5). В WebFlux это делает Spring, не вы.
+
 **Вопрос:** *What is the difference between Mono and Flux in Project Reactor?*
 
 **Источник:** [Reactor Core Features](https://projectreactor.io/docs/core/release/reference/coreFeatures.html)
 
 > **EN:** «A Flux represents 0..N items, while a Mono represents a single-value-or-empty (0..1) result.»
 
-> **RU:** «Flux — 0…N элементов, Mono — один элемент или пусто (0…1).»
+> **RU:** «Flux — от нуля до многих элементов. Mono — один элемент или пусто.»
 
 ---
 
 ## 4. Backpressure (обратное давление)
 
-> **Аналогия из жизни:** Официант **не вываливает** на стол сразу все 50 блюд. Вы говорите: «принесите **три** — съели — принесите ещё три». Так клиент (подписчик) не захлёбывается, а кухня (источник) знает, сколько готовить.
+> **Аналогия:** Официант приносит **порциями по три** блюда — вы съели → просите ещё три. Не вываливает все 50 тарелок сразу.
 
 ![§4 Backpressure](./Images-docs/reactor-concept-04.png)
 
-
 **Ответ:**
 
-1. Источник может отдавать данные быстрее, чем подписчик их обрабатывает.
-2. **Backpressure** — подписчик сам запрашивает порции: «дай 10 → обработал → дай ещё».
-3. Запрос `Long.MAX_VALUE` = «отдай всё сразу» — backpressure выключен (так работает простой `subscribe()`).
-4. На больших потоках используйте `limitRate(n)` или `onBackpressureBuffer` / `drop` / `latest`.
-5. В WebFlux при стриминге backpressure идёт до Netty автоматически.
+1. Источник может отдавать данные **быстрее**, чем вы обрабатываете.
+2. Подписчик через **`Subscription.request(n)`** говорит: «готов принять **n** штук».
+3. Простой **`subscribe()`** внутри запрашивает «сколько угодно» (`Long.MAX_VALUE`). Для **`Mono`** — OK. Для миллионов строк **`Flux`** — риск памяти → нужны операторы ниже.
 
-**Вопрос:** *What is backpressure and why is it important?*
+---
+
+### `limitRate` — просить порциями
+
+**Исходник** (`Flux.java`):
+
+```java
+
+/**
+ * Ensure that backpressure signals from downstream subscribers are capped
+ * at the provided prefetchRate.
+ */
+public final Flux<T> limitRate(int prefetchRate) {
+    return onAssembly(this.publishOn(Schedulers.immediate(), prefetchRate));
+}
+```
+
+**Пояснение:** downstream не сможет запросить больше `prefetchRate` элементов за раз — источник отдаёт **порциями**.
+
+**Пример:**
+
+```java
+
+Flux.range(1, 1_000_000)
+    .limitRate(10)                    // не больше 10 за запрос
+    .doOnNext(n -> System.out.println(n))
+    .blockLast();
+// в логе видно: запросы идут порциями, а не «все миллион сразу»
+```
+
+---
+
+### `onBackpressureBuffer` — склад для лишнего
+
+**Исходник** (`Flux.java`):
+
+```java
+
+/**
+ * Request an unbounded demand and push to the returned Flux, or park elements
+ * when not enough demand is requested downstream.
+ */
+public final Flux<T> onBackpressureBuffer() {
+    return onAssembly(new FluxOnBackpressureBuffer<>(this,
+        Queues.SMALL_BUFFER_SIZE, true, null));
+}
+
+public final Flux<T> onBackpressureBuffer(int maxSize) {
+    return onAssembly(new FluxOnBackpressureBuffer<>(this, maxSize, false, null));
+}
+```
+
+**Пояснение:** если потребитель отстаёт — элементы **складываются в буфер** (ограниченный `maxSize` или нет).
+
+**Пример:**
+
+```java
+
+Flux.interval(Duration.ofMillis(1))     // источник быстрый
+    .onBackpressureBuffer(100)           // склад максимум 100 значений
+    .delayElements(Duration.ofSeconds(1)) // обработка медленная
+    .take(5)
+    .blockLast();
+```
+
+---
+
+### `onBackpressureDrop` — лишнее выбросить
+
+**Исходник** (`Flux.java`):
+
+```java
+
+/** Drop observed elements if not enough demand is requested downstream. */
+public final Flux<T> onBackpressureDrop() {
+    return onAssembly(new FluxOnBackpressureDrop<>(this));
+}
+```
+
+**Пояснение:** нет места / нет demand → элемент **отбрасывается** (актуально, когда важнее **последнее** значение, а не все подряд).
+
+**Пример:**
+
+```java
+
+Flux.range(1, 100)
+    .onBackpressureDrop()
+    .map(n -> { Thread.sleep(100); return n; })  // медленный потребитель
+    .take(3)
+    .collectList()
+    .block();
+// часть чисел потеряна — это ожидаемо
+```
+
+---
+
+### `onBackpressureLatest` — только последнее
+
+**Исходник** (`Flux.java`):
+
+```java
+
+/** Keep only the most recent observed item if not enough demand downstream. */
+public final Flux<T> onBackpressureLatest() {
+    return onAssembly(new FluxOnBackpressureLatest<>(this));
+}
+```
+
+**Пояснение:** пока вы заняты, источник **перезаписывает** значение — вы получите **самое свежее**.
+
+**Пример:**
+
+```java
+
+Flux.interval(Duration.ofMillis(10))
+    .onBackpressureLatest()
+    .map(n -> { Thread.sleep(500); return n; })
+    .take(2)
+    .collectList()
+    .block();
+// номера «перескакивают» — в списке не 0,1,2,3… а большие числа
+```
+
+---
+
+### `subscribe()` и unbounded request
+
+**Исходник** (`Mono.java`):
+
+```java
+
+/**
+ * Subscribe a Consumer to this Mono …
+ * It will request an unbounded demand (Long.MAX_VALUE).
+ */
+public final Disposable subscribe(Consumer<? super T> consumer) {
+    return subscribe(consumer, null, null);
+}
+```
+
+**Пояснение:** «unbounded» = подписчик сразу говорит источнику «отдай всё, что можешь». Для **одного** элемента (`Mono.just("a")`) это безопасно.
+
+**Вопрос:** *What is backpressure? When do you use limitRate vs onBackpressureBuffer vs drop?*
 
 **Источник:** [Reactor — Backpressure](https://projectreactor.io/docs/core/release/reference/#backpressure)
 
 > **EN:** «Consumer pressure is propagated back to the source by sending a request to the upstream operator.»
 
-> **RU:** «Потребитель сообщает источнику, сколько элементов нужно, через request к upstream.»
+> **RU:** «Потребитель через request сообщает источнику, сколько элементов готов принять.»
 
 ---
 
@@ -186,22 +439,67 @@ Flux<User> many = userRepository.findAll();
 
 **Ответ:**
 
-1. **`subscribe()`** — запускает цепочку **асинхронно**.
-2. **`block()`** — **останавливает** текущий поток до результата. Только в тестах, `main`, на границе с imperative-кодом. **Не** в WebFlux-сервисе.
-3. **WebFlux:** в контроллере **return Mono/Flux** — `subscribe()` не вызываете, подписывается Spring.
-4. Простой `subscribe()` сразу запрашивает `Long.MAX_VALUE` элементов — на огромных потоках опасно для памяти.
-5. Для одного элемента (`Mono`) или короткого `Flux.just(...)` это обычно не проблема.
+1. **`subscribe()`** — запуск в фоне; поток **не блокируется**.
+2. **`block()`** — текущий поток **ждёт** результат. Только тест / `main`. **Не** в WebFlux.
+3. **WebFlux:** `return Mono/Flux` — подписывается Spring.
 
-**Пример (только тест / main):**
+---
+
+### `subscribe()` — исходник
 
 ```java
 
-String email = userRepository.findById(1L)
-    .map(User::email)
-```
-    .block();   // OK в тесте, НЕ в WebFlux-сервисе
+// Mono.java — запрос без лимита (Long.MAX_VALUE)
+public final Disposable subscribe(Consumer<? super T> consumer) {
+    return subscribe(consumer, null, null);
+}
 
-**WebFlux (правильно):**
+public final void subscribe(Subscriber<? super T> actual) {
+    // … цепочка операторов, в конце LambdaMonoSubscriber
+}
+```
+
+**Пояснение:** `subscribe()` **запускает** цепочку и сразу возвращает `Disposable` — управление возвращается в ваш код.
+
+**Пример:**
+
+```java
+
+Disposable d = Mono.just("hello")
+    .doOnNext(System.out::println)
+    .subscribe();
+// println может выполниться чуть позже; d.dispose() — отмена
+```
+
+---
+
+### `block()` — исходник
+
+```java
+
+// Mono.java
+public @Nullable T block() {
+    BlockingMonoSubscriber<T> subscriber = new BlockingMonoSubscriber<>(context);
+    subscribe((Subscriber<T>) subscriber);
+    return subscriber.blockingGet();   // поток ЗДЕСЬ ждёт
+}
+```
+
+**Пояснение:** внутри `block()` всё равно вызывается `subscribe()`, но **текущий поток блокируется** до `onNext` / `onComplete` / `onError`.
+
+**Пример (только тест):**
+
+```java
+
+String value = Mono.just("hello")
+    .map(String::toUpperCase)
+    .block();          // OK в тесте
+// value == "HELLO"
+```
+
+---
+
+### WebFlux — без subscribe/block
 
 ```java
 
@@ -211,6 +509,7 @@ public Mono<String> getEmail(@PathVariable Long id) {
         .map(User::email);
 }
 ```
+
 **Вопрос:** *What is the difference between block() and subscribe()?*
 
 **Источник:** [Reactor — Backpressure / subscribing](https://projectreactor.io/docs/core/release/reference/#backpressure)
@@ -230,38 +529,145 @@ public Mono<String> getEmail(@PathVariable Long id) {
 ![§6 map vs flatMap — сигнатуры](./Images-docs/reactor-concept-06.png)
 
 
-**Ответ — начните с сигнатур методов**
+**Ответ:** смотрите **сигнатуру** — что возвращает лямбда: **обычный объект** → `map`, **`Mono`/`Flux`** → `flatMap`.
 
-В Project Reactor у операторов **разная сигнатура**. Смотрите, **что возвращает ваша лямбда**:
+---
 
-### `map` — лямбда возвращает **обычный объект**
+### `Mono.map` — исходник
 
 ```java
 
-// Flux.map / Mono.map — упрощённо:
-.map(значение -> другоеЗначение)
+// Mono.java
+/**
+ * Transform the item emitted by this Mono by applying a synchronous function to it.
+ */
+public final <R> Mono<R> map(Function<? super T, ? extends R> mapper) {
+    return onAssembly(new MonoMap<>(this, mapper));
+}
+```
 
-// значение и другоеЗначение — String, User, DTO, Integer …
-// НЕ Mono и НЕ Flux
+**Пояснение:** `mapper` получает **готовый `T`** (User) и возвращает **`R`** (String). Внутри — класс `MonoMap`, синхронный вызов `mapper.apply(t)`.
 
-userRepository.findById(id)
+**Пример:**
+
+```java
+
+Mono.just(new User(1L, "ann@example.com"))
     .map(User::email)              // User → String
     .map(String::toUpperCase);     // String → String
-// результат: Mono<String>
+// Mono<String> "ANN@EXAMPLE.COM"
 ```
 
-### `flatMap` — лямбда возвращает **Mono или Flux**
+---
+
+### `Flux.map` — исходник
 
 ```java
 
-// Flux.flatMap / Mono.flatMap — упрощённо:
-.flatMap(значение -> Mono<...> или Flux<...>)
-
-Flux.fromIterable(ids)
-    .flatMap(userRepository::findById)   // id → Mono<User>
-    .map(UserResponse::from);            // User → DTO (здесь уже map)
-// результат: Flux<UserResponse>
+// Flux.java
+/**
+ * Transform the items emitted by this Flux by applying a synchronous function to each item.
+ */
+public final <R> Flux<R> map(Function<? super T, ? extends R> mapper) {
+    return onAssembly(new FluxMap<>(this, mapper));
+}
 ```
+
+**Пояснение:** то же, что `Mono.map`, но для **каждого** элемента потока.
+
+**Пример:**
+
+```java
+
+Flux.just("a", "b", "c")
+    .map(String::toUpperCase)
+    .collectList()
+    .block();   // [A, B, C]
+```
+
+---
+
+### `Mono.flatMap` — исходник
+
+```java
+
+// Mono.java
+/**
+ * Transform the item emitted by this Mono asynchronously, returning the value
+ * emitted by another Mono (possibly changing the value type).
+ */
+public final <R> Mono<R> flatMap(
+        Function<? super T, ? extends Mono<? extends R>> transformer) {
+    return onAssembly(new MonoFlatMap<>(this, transformer));
+}
+```
+
+**Пояснение:** лямбда возвращает **`Mono<R>`** — Reactor **подписывается** на inner-Mono и «разворачивает» результат (`MonoFlatMap`).
+
+**Пример:**
+
+```java
+
+Mono.just(1L)
+    .flatMap(id -> userRepository.findById(id))  // Long → Mono<User>
+    .map(User::email);
+// Mono<String>
+```
+
+---
+
+### `Flux.flatMap` — исходник
+
+```java
+
+// Flux.java
+/**
+ * Transform elements into Publishers, then flatten through merging (interleaved).
+ */
+public final <R> Flux<R> flatMap(
+        Function<? super T, ? extends Publisher<? extends R>> mapper) {
+    return flatMap(mapper, Queues.SMALL_BUFFER_SIZE, Queues.XS_BUFFER_SIZE);
+}
+
+public final <R> Flux<R> flatMap(
+        Function<? super T, ? extends Publisher<? extends R>> mapper,
+        int concurrency, int prefetch) {
+    return flatMap(mapper, false, concurrency, prefetch);
+}
+```
+
+**Пояснение:** `Publisher` = `Mono` или `Flux`. Inner-потоки **могут идти параллельно** и **переплетаться** (`FluxFlatMap`).
+
+**Пример:**
+
+```java
+
+Flux.just(1L, 2L)
+    .flatMap(id -> userRepository.findById(id))   // id → Mono<User>
+    .map(UserResponse::from);
+// Flux<UserResponse>
+```
+
+---
+
+### `Flux.concatMap` — исходник (порядок)
+
+```java
+
+// Flux.java
+/**
+ * Flatten inner publishers sequentially, preserving order (concatenation).
+ */
+public final <R> Flux<R> concatMap(
+        Function<? super T, ? extends Publisher<? extends R>> mapper) {
+    return onAssembly(new FluxConcatMapNoPrefetch<>(this, mapper,
+        FluxConcatMap.ErrorMode.IMMEDIATE));
+}
+```
+
+**Пояснение:** inner-потоки **строго по очереди** — id=1 полностью, потом id=2. Подробнее §20.
+
+---
 
 ### Одно правило
 
@@ -407,8 +813,28 @@ curl "http://localhost:8081/api/demo/reactor/users-concat?ids=1,2,3"
 |----------|----------|
 | Преобразовать поле, строку, DTO | `map` |
 | Метод возвращает `Mono` или `Flux` | `flatMap` |
-| `Flux` внутри `Mono` | `flatMapMany` |
+| `Flux` внутри `Mono` | `flatMapMany` (см. ниже) |
 | Нужен порядок как у id | `concatMap` |
+
+### `flatMapMany` — исходник
+
+```java
+
+// Mono.java — Mono → Flux (развернуть inner-Flux)
+public final <R> Flux<R> flatMapMany(
+        Function<? super T, ? extends Publisher<? extends R>> mapper) {
+    return Flux.onAssembly(new MonoFlatMapMany<>(this, mapper));
+}
+```
+
+**Пример:**
+
+```java
+
+Mono.just(userId)
+    .flatMapMany(id -> orderRepository.findByUserId(id));
+// Flux<Order>
+```
 
 **Вопрос:** *What is the difference between map and flatMap in Project Reactor?*
 
@@ -427,26 +853,61 @@ curl "http://localhost:8081/api/demo/reactor/users-concat?ids=1,2,3"
 ![§7 subscribeOn / publishOn](./Images-docs/reactor-concept-07.png)
 
 
-**Ответ:**
+**Ответ:** оба переносят код на другой **Scheduler**, но в **разное место** цепочки.
 
-Оба переносят работу на другой **пул потоков** (`Scheduler`), но в **разные места** цепочки.
+---
 
-1. **`subscribeOn`** — где **подписываются** к источнику. Ставят у источника. Позиция в цепочке почти не важна.
-2. **`publishOn`** — где выполняется всё **ниже** по цепочке. Позиция **важна**.
+### `subscribeOn` — исходник
+
+```java
+
+// Mono.java — подписка к источнику на указанном Scheduler
+public final Mono<T> subscribeOn(Scheduler scheduler) {
+    return onAssembly(new MonoSubscribeOn<>(this, scheduler));
+}
+```
+
+**Пояснение:** **где выполняется подписка** к upstream (часто — блокирующий источник на `boundedElastic`).
+
+**Пример:**
+
+```java
+
+Mono.fromCallable(() -> slowJdbcQuery())
+    .subscribeOn(Schedulers.boundedElastic())
+    .map(this::toDto);
+```
+
+---
+
+### `publishOn` — исходник
+
+```java
+
+// Mono.java — всё НИЖЕ по цепочке на указанном Scheduler
+public final Mono<T> publishOn(Scheduler scheduler) {
+    return onAssembly(new MonoPublishOn<>(this, scheduler));
+}
+
+// Flux.java — с prefetch
+public final Flux<T> publishOn(Scheduler scheduler, int prefetch) {
+    return onAssembly(new FluxPublishOn<>(this, scheduler, true, prefetch));
+}
+```
+
+**Пояснение:** **переключает поток** для операторов **после** `publishOn` (позиция важна).
+
+**Пример:**
 
 ```java
 
 Flux.just(1)
-```
-    .map(x -> x + 1)                         // поток A
-    .publishOn(Schedulers.parallel())      // дальше — поток B
-    .map(x -> x * 2)                         // поток B
-    .subscribeOn(Schedulers.boundedElastic())
+    .map(x -> x + 1)                              // поток A
+    .publishOn(Schedulers.parallel())             // дальше — поток B
+    .map(x -> x * 2)                              // поток B
+    .subscribeOn(Schedulers.boundedElastic())     // источник — elastic
     .subscribe();
-
-3. **`subscribeOn`** — блокирующий источник (legacy JDBC) на `boundedElastic`.
-4. **`publishOn`** — тяжёлая обработка после получения данных.
-5. В WebFlux контроллере обычно не нужны — если нет блокирующего кода.
+```
 
 **Вопрос:** *What is the difference between subscribeOn and publishOn?*
 
@@ -468,6 +929,7 @@ Flux.just(1)
 **Ответ:**
 
 `Scheduler` — пул потоков для выполнения вашего кода.
+
 | Scheduler | Для чего | Нельзя |
 |-----------|----------|--------|
 | `immediate()` | Текущий поток | — |
@@ -499,13 +961,16 @@ Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
 
 **Ответ:**
 
-1. **Cold** — каждый `subscribe()` **запускает поток заново** (новый HTTP-запрос, новый SQL).
-2. **Hot** — источник уже работает; опоздавший подписчик **не получает прошлое** (как радио).
-3. `publish()`, `cache()`, `share()` — делают cold ближе к hot.
-4. WebClient, R2DBC по умолчанию — **cold**.
-5. На собеседовании: cold = «каждый subscribe — новый прогон»; hot = «один источник, прошлое не повторяется».
+> **Важно:** **cold / hot** — это про **источник данных (Publisher)**, а **не** про операторы `map` / `flatMap`.
 
-**Вопрос:** *Explain the difference between cold and hot publishers.*
+| | **Cold (холодный)** | **Hot (горячий)** |
+|---|---------------------|-------------------|
+| **Аналогия** | Netflix: каждый нажал Play → фильм **с начала** | Радио-эфир: включился на 15-й минуте → **прошлое не вернуть** |
+| **Подписка** | Каждый `subscribe()` → **новый** SQL / HTTP | Источник **уже работает**; опоздавший не видит старое |
+| **Примеры** | `WebClient.get()`, R2DBC `findAll()` | `Flux.interval`, WebSocket, SSE после старта |
+| **Как сделать hot** | — | `share()`, `publish().refCount()`, `cache()` (см. §19) |
+
+**Вопрос:** *Explain cold vs hot publishers. How do share() and cache() differ?*
 
 **Источник:** [Reactor — Hot vs Cold](https://projectreactor.io/docs/core/release/reference/#intro-reactive)
 
@@ -522,24 +987,70 @@ Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
 ![§10 Обработка ошибок](./Images-docs/reactor-concept-10.png)
 
 
-**Ответ:**
+**Ответ:** ошибка = сигнал `onError`. Пока не обработаете — цепочка **останавливается**.
 
-Ошибка идёт по цепочке как `onError` — поток обрывается, пока не обработаете.
+---
 
-| Оператор | Когда |
-|----------|-------|
-| `onErrorReturn(x)` | Вернуть значение по умолчанию |
-| `onErrorResume(fn)` | Переключиться на другой `Mono`/`Flux` |
-| `onErrorMap(fn)` | Заменить тип исключения |
-| `onErrorComplete()` | Проглотить ошибку, завершить пустым |
+### `onErrorReturn` — исходник
 
 ```java
 
-return userRepository.findById(id)
+// Mono.java — подставить константу при любой ошибке
+public final Mono<T> onErrorReturn(final T fallbackValue) {
+    return onAssembly(new MonoOnErrorReturn<>(this, null, fallbackValue));
+}
+```
+
+**Пример:**
+
+```java
+
+Mono.error(new RuntimeException("fail"))
+    .onErrorReturn("default")
+    .block();   // "default"
+```
+
+---
+
+### `onErrorResume` — исходник
+
+```java
+
+// Mono.java — переключиться на другой Mono
+public final Mono<T> onErrorResume(
+        Function<? super Throwable, ? extends Mono<? extends T>> fallback) {
+    return onAssembly(new MonoOnErrorResume<>(this, fallback));
+}
+```
+
+**Пример:**
+
+```java
+
+userRepository.findById(id)
     .map(UserResponse::from)
     .onErrorResume(e -> Mono.just(UserResponse.empty()));
 ```
-«Не найдено» в R2DBC — часто `Mono.empty()`, для HTTP 404 используйте `switchIfEmpty`.
+
+---
+
+### `switchIfEmpty` — исходник (404 / «не найдено»)
+
+```java
+
+// Mono.java
+public final Mono<T> switchIfEmpty(Mono<? extends T> alternate) {
+    return onAssembly(new MonoSwitchIfEmpty<>(this, alternate));
+}
+```
+
+**Пример:**
+
+```java
+
+userRepository.findById(id)
+    .switchIfEmpty(Mono.error(new ResponseStatusException(NOT_FOUND)));
+```
 
 **Вопрос:** *How do you handle errors in Project Reactor?*
 
@@ -558,22 +1069,43 @@ return userRepository.findById(id)
 ![§11 Retry](./Images-docs/reactor-concept-11.png)
 
 
-**Ответ:**
+**Ответ:** `retry` = **новая подписка** на upstream с нуля. Осторожно с POST без idempotency-key.
 
-1. `retry` **заново подписывается** на upstream — новая попытка с нуля.
-2. `retry(3)` — до 3 повторов; `retryWhen(Retry.backoff(...))` — с паузой.
-3. Уместно: timeout, 503, разрыв сети, **идемпотентные** операции (GET).
-4. Опасно: POST «создать заказ» без idempotency-key — дубликаты.
-5. Ошибки 4xx (кроме 429) обычно не retry.
+---
+
+### `retry` — исходник
 
 ```java
 
-return webClient.get()
-    .uri("/data")
-    .retrieve()
-    .bodyToMono(Data.class)
-    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1)));
+// Mono.java — повтор при onError
+public final Mono<T> retry() {
+    return retry(Long.MAX_VALUE);
+}
+
+public final Mono<T> retry(long numRetries) {
+    return onAssembly(new MonoRetry<>(this, numRetries));
+}
+
+public final Mono<T> retryWhen(Retry retrySpec) {
+    return onAssembly(new MonoRetryWhen<>(this, retrySpec));
+}
 ```
+
+**Пояснение:** `MonoRetry` заново подписывается на исходный Mono при ошибке.
+
+**Пример:**
+
+```java
+
+Mono.fromCallable(this::flakyCall)
+    .retry(3)
+    .block();
+
+Mono.fromCallable(this::flakyCall)
+    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1)))
+    .block();
+```
+
 **Вопрос:** *How do you implement retry logic in Reactor?*
 
 **Источник:** [Reactor — retry](https://projectreactor.io/docs/core/release/reference/#error.handling)
@@ -775,22 +1307,133 @@ Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
 ![§18 Шпаргалка операторов](./Images-docs/reactor-concept-18.png)
 
 
-**Ответ:**
+**Ответ:** ниже — **сигнатура из исходника** + **минимальный пример** для каждого оператора. `map` / `flatMap` / `concatMap` — подробно в §6.
 
-| Задача | Оператор |
-|--------|----------|
-| Преобразовать значение (лямбда → обычный объект) | `map` |
-| Лямбда → `Mono`/`Flux` | `flatMap` |
-| Порядок важнее скорости | `concatMap` |
-| Отфильтровать | `filter` |
-| Первые N | `take` |
-| Два потока парами | `zip` |
-| Два потока по готовности | `merge` |
-| Два потока по очереди | `concat` |
-| Ждать не дольше N | `timeout` |
-| Отладка | `doOnNext`, `log()` |
+---
 
-**merge** — «перемешать по готовности»; **concat** — «строго один за другим».
+### `filter`
+
+```java
+
+// Flux.java
+public final Flux<T> filter(Predicate<? super T> p) {
+    return onAssembly(new FluxFilter<>(this, p));
+}
+```
+
+```java
+
+Flux.just(1, 2, 3).filter(n -> n % 2 == 0).blockLast();  // 2
+```
+
+---
+
+### `take`
+
+```java
+
+// Flux.java
+public final Flux<T> take(long n) {
+    return onAssembly(new FluxTake<>(this, n));
+}
+```
+
+```java
+
+Flux.range(1, 100).take(3).collectList().block();  // [1, 2, 3]
+```
+
+---
+
+### `zip`
+
+```java
+
+// Flux.java — статический: ждёт элемент из КАЖДОГО источника, склеивает
+public static <T1, T2, O> Flux<O> zip(
+        Publisher<? extends T1> source1,
+        Publisher<? extends T2> source2,
+        BiFunction<? super T1, ? super T2, ? extends O> combinator) {
+    return onAssembly(new FluxZip<>(null, a -> combinator.apply(a[0], a[1]),
+        Queues.XS_BUFFER_SIZE, source1, source2));
+}
+```
+
+```java
+
+Flux.zip(
+    Flux.just("a", "b"),
+    Flux.just(1, 2),
+    (letter, num) -> letter + num
+).collectList().block();  // [a1, b2]
+```
+
+---
+
+### `mergeWith` / `concatWith`
+
+```java
+
+// Flux.java
+public final Flux<T> mergeWith(Publisher<? extends T> other) {
+    return merge(this, other);
+}
+
+public final Flux<T> concatWith(Publisher<? extends T> other) {
+    return concat(this, other);
+}
+```
+
+```java
+
+Flux.just(1, 2).mergeWith(Flux.just(10, 20)).collectList().block();
+Flux.just(1, 2).concatWith(Flux.just(10, 20)).collectList().block();
+```
+
+---
+
+### `timeout`
+
+```java
+
+// Flux.java
+public final Flux<T> timeout(Duration timeout) {
+    return timeout(timeout, null, Schedulers.parallel());
+}
+```
+
+```java
+
+Flux.just(1).delayElements(Duration.ofSeconds(5))
+    .timeout(Duration.ofSeconds(1))
+    .onErrorReturn(-1)
+    .blockLast();   // -1 (timeout)
+```
+
+---
+
+### `doOnNext` / `log`
+
+```java
+
+// Flux.java — side-effect, не меняет поток
+public final Flux<T> doOnNext(Consumer<? super T> onNext) {
+    return doOnSignal(this, null, null, onNext, null, null, null, null);
+}
+
+public final Flux<T> log() {
+    return log(null, Level.INFO);
+}
+```
+
+```java
+
+Flux.just("x")
+    .doOnNext(v -> System.out.println("before: " + v))
+    .map(String::toUpperCase)
+    .log()
+    .blockLast();
+```
 
 **Вопрос:** *What are the most commonly used transformation operators?*
 
@@ -799,6 +1442,219 @@ Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
 > **EN:** «map … flatMap … filter … zip …»
 
 > **RU:** Чаще всего спрашивают map, flatMap, filter, zip.
+
+---
+
+## 19. share() и cache() — cold → hot
+
+> **Аналогия:** **share()** — **прямой эфир**: опоздавший не увидит начало. **cache()** — **запись эфира**: новый зритель может **пересмотреть** с начала.
+
+![§19 share vs cache](./Images-docs/reactor-concept-19.png)
+
+**Ответ:**
+
+| Оператор | Что делает | Когда |
+|----------|------------|-------|
+| **`share()`** | Hot, без истории | Live-события |
+| **`cache()`** | Replay для новых subscribe | Дорогой запрос один раз |
+
+---
+
+### `share()` — исходник
+
+```java
+
+// Mono.java — hot multicast, опоздавшие не получают прошлое
+public final Mono<T> share() {
+    return onAssembly(new MonoShare<>(this));
+}
+```
+
+**Пример:**
+
+```java
+
+Mono<String> hot = Mono.just("once").share();
+hot.subscribe(v -> System.out.println("A:" + v));
+hot.subscribe(v -> System.out.println("B:" + v));
+// оба подписчика делят ОДНУ подписку к источнику
+```
+
+---
+
+### `cache()` — исходник
+
+```java
+
+// Mono.java — запомнить и отдавать новым подписчикам
+public final Mono<T> cache() {
+    return onAssembly(new MonoCacheTime<>(this, Duration.ofMillis(Long.MAX_VALUE),
+        Schedulers.parallel()));
+}
+```
+
+**Пример:**
+
+```java
+
+Mono<String> cached = Mono.fromCallable(() -> expensiveCall()).cache();
+cached.block();   // expensiveCall() один раз
+cached.block();   // из кэша, без повторного вызова
+```
+
+**Вопрос:** *What is the difference between share() and cache()?*
+
+**Источник:** [kindatechnical — Q26](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
+
+> **EN:** «share(): hot multicast, late subscribers miss history. cache(): replays to new subscribers.»
+
+> **RU:** «share — live без прошлого. cache — replay для опоздавших.»
+
+---
+
+## 20. flatMap, concatMap и switchMap
+
+> **Аналогия:** Три способа обработать **очередь задач**: все сразу (**flatMap**), строго по одной (**concatMap**), только **последняя** (**switchMap** — как автодополнение в поиске).
+
+![§20 switchMap vs flatMap vs concatMap](./Images-docs/reactor-concept-20.png)
+
+**Ответ:** три оператора — три стратегии «разворота» inner-`Publisher`. Сигнатуры — §6; здесь **`switchMap`**.
+
+---
+
+### `switchMap` — исходник
+
+```java
+
+// Flux.java — новый элемент → отменить предыдущий inner-Publisher
+public final <R> Flux<R> switchMap(
+        Function<? super T, ? extends Publisher<? extends R>> fn) {
+    return onAssembly(new FluxSwitchMapNoPrefetch<>(this, fn));
+}
+```
+
+**Пояснение:** при каждом `onNext` от upstream **отменяется** предыдущий inner-поток (`FluxSwitchMap`).
+
+**Пример (typeahead):**
+
+```java
+
+Flux.just("a", "ab", "abc")
+    .delayElements(Duration.ofMillis(50))
+    .switchMap(q -> searchApi(q))   // только последний запрос живёт
+    .take(1)
+    .blockLast();
+```
+
+**Вопрос:** *Explain flatMap vs concatMap vs switchMap.*
+
+**Источник:** [kindatechnical — Q10](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
+
+> **EN:** «concatMap: sequential, ordered. flatMap: concurrent. switchMap: cancels previous on new element.»
+
+> **RU:** «concatMap — по очереди. flatMap — параллельно. switchMap — отменяет предыдущий.»
+
+---
+
+## 21. Отладка реактивной цепочки
+
+> **Аналогия:** Цепочка **невидима** — как трубы под полом. **`.log()`** — стеклянные окна; **`checkpoint()`** — табличка «мы здесь».
+
+![§21 Отладка](./Images-docs/reactor-concept-21.png)
+
+**Ответ:** начните с `.log()` на dev.
+
+---
+
+### `log()` — исходник
+
+```java
+
+// Flux.java — печатает onNext / onError / onComplete / request / cancel
+public final Flux<T> log() {
+    return log(null, Level.INFO);
+}
+```
+
+**Пример:**
+
+```java
+
+Flux.just(1, 2)
+    .map(i -> i * 10)
+    .log("demo")
+    .blockLast();
+// в консоли: | demo | onNext(1) | onNext(10) | …
+```
+
+**Вопрос:** *How do you debug reactive pipelines?*
+
+**Источник:** [kindatechnical — Q23](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
+
+> **EN:** «.log(), checkpoint(), Hooks.onOperatorDebug(), ReactorDebugAgent.»
+
+> **RU:** «Начните с .log() и checkpoint(); в prod — ReactorDebugAgent.»
+
+---
+
+## 22. Context — MDC и traceId между потоками
+
+> **Аналогия:** **ThreadLocal** — заметка **на руке** одного кассира. **`publishOn`** — кассир сменился → заметка **потерялась**. **Reactor Context** — **бейдж**, который передаётся по цепочке.
+
+![§22 Context](./Images-docs/reactor-concept-22.png)
+
+**Ответ:**
+
+1. **`ThreadLocal`** (MDC, Spring Security, traceId) **не переносится** при `publishOn` / `subscribeOn`.
+2. **Reactor `Context`** — immutable map на подписчике; **`contextWrite`** / **`deferContextual`**.
+3. **Micrometer Tracing** в Spring Boot 3 часто прокидывает traceId **автоматически**.
+
+**Вопрос:** *How do you propagate MDC / trace context in reactive code?*
+
+**Источник:** [kindatechnical — Q15](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
+
+> **EN:** «ThreadLocal breaks across thread switches. Reactor Context attaches to subscribers.»
+
+> **RU:** «ThreadLocal ломается при смене потока — используйте Reactor Context.»
+
+---
+
+## 23. Сводка: 30 вопросов → разделы
+
+Источник: [Top 30 Reactive Programming Interview Questions](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html) (Feb 2026).
+
+| # | Вопрос | Раздел |
+|---|-----------------|--------|
+| 1 | Reactive vs imperative | §2 |
+| 2 | Reactive Streams — 4 интерфейса | §2 |
+| 3 | Backpressure | §4 |
+| 4 | Mono vs Flux | §3 |
+| 5 | Cold vs hot | §9, §19 |
+| 6 | map vs flatMap | §6 |
+| 7 | Error handling | §10 |
+| 8 | Schedulers | §8 |
+| 9 | Why subscribe()? | §5 |
+| 10 | concatMap vs flatMap vs switchMap | §6, §20 |
+| 11 | WebFlux vs MVC | §13, §15 |
+| 12 | Reactive Manifesto | §15 (системный уровень) |
+| 13 | Circuit breaker | Resilience4j + §10 |
+| 14 | Testing (StepVerifier) | §12 |
+| 15 | Context propagation | §22 |
+| 16 | When NOT reactive | §15 |
+| 17 | Observable vs Flowable (RxJava) | §14 |
+| 18 | R2DBC | §13, §17 |
+| 19 | Reactive transactions | §13 (TransactionalOperator) |
+| 20 | publishOn vs subscribeOn | §7 |
+| 21 | Project Loom / virtual threads | §15 |
+| 22 | Kafka 100K events/sec | §6 flatMap + backpressure + partitions |
+| 23 | Debugging pipelines | §21 |
+| 24 | Operator fusion | §18 (оптимизация Reactor, без ручной настройки) |
+| 25 | Rate limiting | WebFilter / Resilience4j |
+| 26 | share() vs cache() | §19 |
+| 27 | Graceful shutdown | §16 dispose + Spring `server.shutdown=graceful` |
+| 28 | Mono.zip vs when | §18 (zip) |
+| 29 | Reactive + relational DB | §17, §15 |
+| 30 | Migrate MVC → reactive | §15, §17 (инкрементально) |
 
 ---
 
@@ -833,4 +1689,4 @@ public Mono<UserSummaryResponse> getUserSummary(@PathVariable Long id) {
 
 ---
 
-*Документ для подготовки к собеседованиям. Визуализация — только PNG в `docs/Images-docs/` (генератор `gen_reactor_diagrams.py`). Правило: `.cursor/rules/reactor-docs-visual.mdc`.*
+*Документ для подготовки к собеседованиям. Сигнатуры операторов — из [reactor-core](https://github.com/reactor/reactor-core) (`Mono.java`, `Flux.java`). PNG: `docs/Images-docs/`.*
