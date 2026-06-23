@@ -184,7 +184,7 @@ public Mono<User> getUser(@PathVariable Long id) {
 
 > **RU:** «Reactor — полностью неблокирующая основа для JVM.» / «WebFlux … неблокирующий I/O … реактивные потоки.»
 
-**Подробнее:** отдельный документ [Реактивный код: где ждёт запрос и где хранится состояние](./reactive-where-state-lives.md) — Subscription, heap, WebClient, Virtual Threads.
+**Подробнее:** отдельный документ [Реактивный код: где ждёт запрос и где хранится состояние](./reactive-where-state-lives.md) — Event Loop, два запроса А/Б, **[§5 очередь `Queue<Runnable>` и callback](./reactive-where-state-lives.md#5-очередь-event-loop-и-контейнеры-callback)**.
 
 ---
 

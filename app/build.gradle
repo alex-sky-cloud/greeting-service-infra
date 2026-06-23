@@ -51,6 +51,18 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+// Запуск учебного com.example.Main (JDK 21 из toolchain, classpath из Gradle)
+tasks.register('runMain', JavaExec) {
+    group = 'application'
+    description = 'Run com.example.Main'
+    dependsOn classes
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.example.Main'
+}
+
 // Задаём имя выходного JAR-файла
 bootJar {
     archiveFileName = 'app.jar'
