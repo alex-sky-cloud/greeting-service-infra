@@ -11,7 +11,10 @@ replicaCount: 1
 image:
   # Docker Registry на devtools (terraform output devtools_public_ip).
   repository: 72.56.249.137:5000/greeting-service
-  tag: "dev-latest"
+  # Тег НЕ dev-latest: его нет в registry при ручной сборке (Раздел 12).
+  # Перед helm upgrade проверьте: curl -s -u docker:docker http://<IP>:5000/v2/greeting-service/tags/list
+  # Pipeline (ci/.gitlab-ci.yml) задаёт тег через --set image.tag=$CI_COMMIT_SHORT_SHA.
+  tag: "manual-v8"
 
 ingress:
   host: greeting-dev.cloud-terra.online

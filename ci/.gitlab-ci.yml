@@ -153,7 +153,7 @@ deploy-dev:
         --set image.tag="${IMAGE_TAG}" \
         --atomic \
         --timeout 5m
-    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}-greeting-service" -n dev --timeout=300s
+    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}" -n dev --timeout=300s
   environment:
     name: dev
     url: http://greeting-dev.example.com
@@ -208,7 +208,7 @@ deploy-prod:
         --set image.tag="${IMAGE_TAG}" \
         --atomic \
         --timeout 10m
-    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}-greeting-service" -n prod --timeout=600s
+    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}" -n prod --timeout=600s
   environment:
     name: prod
     url: http://greeting.example.com
@@ -253,7 +253,7 @@ rollback-prod:
     - chmod 600 ~/.kube/config
   script:
     - helm rollback "${HELM_RELEASE_NAME}" -n prod
-    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}-greeting-service" -n prod --timeout=300s
+    - kubectl rollout status deployment/"${HELM_RELEASE_NAME}" -n prod --timeout=300s
   environment:
     name: prod
   rules:

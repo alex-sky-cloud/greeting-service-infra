@@ -1,0 +1,72 @@
+# =============================================================================
+# values.yaml — reactive-demo (WebFlux + R2DBC, порт 8081)
+# =============================================================================
+
+replicaCount: 1
+
+image:
+  repository: registry.example.com/reactive-demo
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: registry-credentials
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8081
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  host: reactive-demo.example.com
+  path: /
+  pathType: Prefix
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+env:
+  APP_ENV: "production"
+  APP_VERSION: "0.0.1"
+
+envFromSecret:
+  secretName: "reactive-demo-secret"
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8081
+  initialDelaySeconds: 90
+  periodSeconds: 10
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8081
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  failureThreshold: 6
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  name: ""

@@ -30,6 +30,7 @@ Windows CMD: `scripts\create-reactive-demo-db.cmd`
 | [`apply-k8s-insecure-registry.sh`](apply-k8s-insecure-registry.sh) | Insecure pull с devtools:5000 на worker-ноде | Перезапуск k0sworker на ноде |
 | [`k8s-worker-insecure-registry.sh`](k8s-worker-insecure-registry.sh) | Payload для worker (вызывается из apply-*) | То же |
 | [`setup-registry.sh`](setup-registry.sh) | Установить Docker Registry на devtools (SSH pipe) | Не трогает PostgreSQL |
+| [`tune-registry-upload.sh`](tune-registry-upload.sh) | TCP keepalive + докачка upload для медленного push | Перезапуск registry |
 
 ---
 

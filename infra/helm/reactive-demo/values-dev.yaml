@@ -1,0 +1,22 @@
+replicaCount: 1
+
+image:
+  repository: 72.56.249.137:5000/reactive-demo
+  tag: "dev-latest"
+
+ingress:
+  host: reactive-demo-dev.cloud-terra.online
+
+env:
+  APP_ENV: "dev"
+  APP_VERSION: "dev"
+
+livenessProbe:
+  initialDelaySeconds: 120
+  periodSeconds: 15
+  failureThreshold: 5
+
+readinessProbe:
+  initialDelaySeconds: 90
+  periodSeconds: 10
+  failureThreshold: 6

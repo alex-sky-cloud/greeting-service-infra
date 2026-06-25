@@ -43,10 +43,18 @@ storage:
     rootdirectory: /var/lib/registry
   delete:
     enabled: true
+  maintenance:
+    uploadpurging:
+      enabled: true
+      age: 336h
+      interval: 24h
+      dryrun: false
 http:
   addr: :5000
   headers:
     X-Content-Type-Options: [nosniff]
+  http2:
+    disabled: true
 auth:
   htpasswd:
     realm: Registry Realm

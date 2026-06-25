@@ -1,0 +1,21 @@
+replicaCount: 2
+
+ingress:
+  host: reactive-demo.cloud-terra.online
+
+env:
+  APP_ENV: "production"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"
