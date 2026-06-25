@@ -1,18 +1,6 @@
 # Project Reactor: руководство и вопросы для собеседования
 
 > Краткое руководство по **Project Reactor** для Java-разработчиков.  
-> **Формат:** типичные **вопросы на собеседовании** и **простые пояснения**.
-> В каждом блоке: **аналогия → рисунок → ответ → вопрос → источник → цитата**.
-
-**Правило оформления каждого раздела:**
-
-1. **Аналогия** → **PNG-рисунок**
-2. **Ответ** — коротко, без обрывков терминов
-3. **Сигнатура оператора** — отдельный блок `java` из [reactor-core](https://github.com/reactor/reactor-core) (`Mono.java` / `Flux.java`) + одна строка «что внутри»
-4. **Простой пример** — отдельный блок `java` (можно `Flux.just`, без Spring)
-5. **Вопрос** → источник → цитата EN/RU
-
-**Перегенерация PNG:** `python docs/Images-docs/gen_reactor_diagrams.py`.
 
 ---
 
@@ -46,41 +34,50 @@
 
 ## Введение
 
-**Project Reactor** — библиотека для Java: вы описываете **цепочку шагов** над потоком данных, а не «вызвал метод — поток ждёт ответ».
+**Project Reactor** — библиотека для реактивного (неблокирующего) программирования на JVM. 
+ - Вместо «вызвал метод — ждёшь результат» вы описываете _**последовательность операций**_ над потоками данных; 
+ - эти операции запускаются только когда кто‑то подпишется на поток.
 
-> **Аналогия:** вы не носите каждую деталь по цеху — вы **навешиваете операции на конвейер** (`Mono` / `Flux`).
+**Аналогия**: не носите каждую деталь по цеху — а навешиваете операции на конвейер, который эту деталь обработает.
 
-![Цепочка от PostgreSQL до JSON](./Images-docs/reactor-concept-intro.png)
+Типы:
 
+- **Mono<T>** — один элемент или пусто (например, findById).
+- **Flux<T>** — ноль или больше элементов (например, findAll, SSE).
 
-| Тип | Контейнер | Пример |
-|-----|-----------|--------|
-| `Mono<T>` | **один** элемент (или пусто) | `findById`, один HTTP-ответ |
-| `Flux<T>` | **ноль и больше** элементов | `findAll`, список, SSE |
-
-**Стандартное форматирование цепочки** — каждый оператор с новой строки («лесенка»):
+Стиль кода (рекомендуется — «лесенка»):
 
 ```java
-
 return userRepository.findById(id)
-    .map(User::email)
+    .map(User::getEmail)
     .map(String::toUpperCase);
 ```
 
-Зависимости Maven:
+Ключевые моменты:
 
-```xml
+- Реализует спецификацию **Reactive Streams**: управление потоком (_**backpressure**_) встроено.
+- Операции объявляются декларативно и выполняются при подписке.
+- Не блокируйте реактивный поток (
+   - то есть не используйте в коде .block(), Thread.sleep()...
+  ).
 
-<dependency>
-    <groupId>io.projectreactor</groupId>
-    <artifactId>reactor-core</artifactId>
-</dependency>
-<dependency>
-    <groupId>io.projectreactor</groupId>
-    <artifactId>reactor-test</artifactId>
-    <scope>test</scope>
-</dependency>
 ```
+- Если внутренняя операция возвращает Mono<T> или Flux<T>, используйте flatMap (или flatMapMany), чтобы продолжить цепочку без вложенных контейнеров. Пример:
+```
+
+```java
+// userRepository.findById(id) -> Mono<User>
+// emailService.sendConfirmation(email) -> Mono<Void>
+        return userRepository
+                .findById(id)
+                .flatMap(
+        user -> emailService.sendConfirmation(user.getEmail())
+        .thenReturn(user)
+                );
+```
+
+- Для переключения потоков используйте **publishOn**/_subscribeOn_ с **Schedulers**.
+- Тестируйте цепочки через **reactor-test** (**StepVerifier**).
 
 **Источник:** [Reactor 3 Reference Guide — Introduction](https://projectreactor.io/docs/core/release/reference/#intro-reactor)
 
@@ -92,32 +89,60 @@ return userRepository.findById(id)
 
 ## 1. Что такое Project Reactor
 
-> **Аналогия из жизни:** Reactor — это **конвейер на фабрике**. Вы не таскаете каждую деталь руками до конца цеха, а **навешиваете на ленту** шаги: «прикрути → покрась → упакуй». Лента сама движется, когда её **включают** (`subscribe()` или Spring в WebFlux).
+> **Аналогия из жизни:** 
+>  - Reactor — это **конвейер на фабрике**. 
+>   - Вы не таскаете каждую деталь руками до конца цеха, а **навешиваете на ленту** шаги: «прикрути → покрась → упакуй». 
+>   - Лента сама движется, когда её **включают** (`subscribe()` или Spring в WebFlux).
 
 ![§1 Project Reactor — конвейер](./Images-docs/reactor-concept-01.png)
 
 
 **Ответ:**
 
-1. Java-библиотека для **неблокирующего** кода: цепочка `Mono`/`Flux` + операторы (`map`, `flatMap`, …).
-2. Два типа: `Mono` (0–1 элемент), `Flux` (0–N элементов).
-3. Цепочка **ленивая** — сама по себе ничего не делает, пока нет `subscribe()` (в WebFlux подписывается Spring).
-4. Реализует **Reactive Streams** (протокол подписчик ↔ источник, в том числе backpressure).
-5. Основа Spring WebFlux, WebClient, R2DBC.
+**Project Reactor** — это Java‑библиотека для неблокирующего реактивного программирования на JVM. Она позволяет описывать последовательность операций над потоками данных; выполнение этих операций начинается только при подписке на поток (например, Spring автоматически подписывает возвращаемые Mono/Flux в WebFlux).
 
-**Вопрос:** *What is Project Reactor and how does it relate to Reactive Streams?*
+В ней используютя специальные **Контейнеры-обертки**, для обрабатываемых данных:
 
-**Источник:** [Reactor 3 Reference Guide](https://projectreactor.io/docs/core/release/reference/#intro-reactor)
+**Mono**<T> и **Flux**<T> — это типы‑**обёртки** (публикаторы), в которых хранятся данные и список операторов; 
+ 
+  - Они используются для представления и обработки асинхронных потоков: 
+    - **Mono**<T> содержит 0 или 1 элемент,
+    - **Flux**<T> — 0 и более элементов.
+- Операторы (**map, flatMap, filter, concat, zip** и др.) добавляют преобразования, комбинирование и управление потоком данных.
 
-> **EN:** «Reactor is a fully non-blocking reactive programming foundation for the JVM … Flux (for [N] elements) and Mono (for [0|1] elements) … implements the Reactive Streams specification.»
+**Ленивость и выполнение**
+ - Операторы в реактивном стеке, собирают «конвейер» (assembly) — они описывают то, что нужно сделать; 
+ - реальное выполнение начинается при подписке (subscription). 
 
-> **RU:** «Reactor — неблокирующая основа для реактивного программирования на JVM … Flux и Mono … реализует спецификацию Reactive Streams.»
+ - Обычно подписку выполняет фреймворк (например, Spring WebFlux) или явный вызов **subscribe()**.
+
+**Спецификация и управление потоком**
+
+- Reactor реализует спецификацию **Reactive Streams**: 
+  - есть контракт «подписчик ↔ источник» и встроенная поддержка **backpressure** (механизм управления скоростью передачи данных между производителем и потребителем).
+
+**Короткие практические моменты**
+
+- Не блокируйте реактивный поток (.block(), Thread.sleep()....).
+- Для управления потоками используйте **subscribeOn** / **publishOn** и **Schedulers**.
+- Тестирование — reactor-test и StepVerifier.
+
+Документация и полезные чтения
+
+https://projectreactor.io/docs/core/release/reference/\#intro-reactor
+
+https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
+
+https://spring.io/blog/2019/03/06/flight-of-the-flux-1-assembly-vs-subscription
 
 ---
 
 ## 2. Что такое реактивное программирование
 
-> **Аналогия:** Обычный код — **стоите у окна** и ждёте одно письмо. Реактивный — **подписались на уведомления**: пришло → обработали → ждёте следующее.
+> **Аналогия:** 
+>  - Обычный код — **стоите у окна** и ждёте одно письмо. 
+>  - Реактивный — **подписались на уведомления**: 
+>    - пришло → обработали → ждёте следующее.
 
 ![§2 Observer и Listener — схема](./Images-docs/reactor-concept-02.png)
 

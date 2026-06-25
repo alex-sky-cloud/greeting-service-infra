@@ -50,9 +50,12 @@ public class UserService {
      */
     public Mono<UserResponse> findById(Long id) {
 
-        return userRepository.findById(id)
+        return userRepository
+                .findById(id)
                 .map(UserResponse::from)
-                .switchIfEmpty(Mono.error(new UserNotFoundException(id)));
+                .switchIfEmpty(
+                        Mono.error(new UserNotFoundException(id))
+                );
     }
 
     /**
@@ -89,11 +92,7 @@ public class UserService {
      * @return {@link Mono} со сводкой; ошибка, если пользователь не найден
      */
     public Mono<UserSummaryResponse> getUserSummary(Long id) {
-        return userRepository.findById(id)
-                .switchIfEmpty(Mono.error(new UserNotFoundException(id)))
-                .flatMap(user -> orderRepository.findByUserId(user.id())
-                        .collectList()
-                        .map(orders -> UserSummaryResponse.of(user, orders)));
+        return userRepository.findById(id).switchIfEmpty(Mono.error(new UserNotFoundException(id))).flatMap(user -> orderRepository.findByUserId(user.id()).collectList().map(orders -> UserSummaryResponse.of(user, orders)));
     }
 
     /**
@@ -106,10 +105,7 @@ public class UserService {
      * @return {@link Flux} заказов в виде {@link OrderResponse}
      */
     public Flux<OrderResponse> getOrdersForUser(Long userId) {
-        return userRepository.findById(userId)
-                .switchIfEmpty(Mono.error(new UserNotFoundException(userId)))
-                .flatMapMany(user -> orderRepository.findByUserId(user.id()))
-                .map(OrderResponse::from);
+        return userRepository.findById(userId).switchIfEmpty(Mono.error(new UserNotFoundException(userId))).flatMapMany(user -> orderRepository.findByUserId(user.id())).map(OrderResponse::from);
     }
 
     /**
@@ -129,9 +125,6 @@ public class UserService {
      * @return {@link Mono} с email в верхнем регистре
      */
     public Mono<String> getUserEmailUpperCase(Long id) {
-        return userRepository.findById(id)
-                .switchIfEmpty(Mono.error(new UserNotFoundException(id)))
-                .map(User::email)
-                .map(String::toUpperCase);
+        return userRepository.findById(id).switchIfEmpty(Mono.error(new UserNotFoundException(id))).map(User::email).map(String::toUpperCase);
     }
 }
