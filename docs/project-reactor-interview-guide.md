@@ -8,6 +8,7 @@
 
 1. [Что такое Project Reactor](#1-что-такое-project-reactor)
 2. [Что такое реактивное программирование](#2-что-такое-реактивное-программирование)
+   - [Observer и Listener — в чём разница](#observer-и-listener--в-чём-разница)
 3. [Mono и Flux — в чём разница](#3-mono-и-flux--в-чём-разница)
 4. [Backpressure (обратное давление)](#4-backpressure-обратное-давление)
 5. [subscribe() и block() — в чём разница](#5-subscribe-и-block--в-чём-разница)
@@ -144,8 +145,6 @@ https://spring.io/blog/2019/03/06/flight-of-the-flux-1-assembly-vs-subscription
 >  - Реактивный — **подписались на уведомления**: 
 >    - пришло → обработали → ждёте следующее.
 
-![§2 Observer и Listener — схема](./Images-docs/reactor-concept-02.png)
-
 **Ответ:**
 
 Вы не «вызвали метод и ждёте ответ», а **описали, что делать, когда придут данные**. В Reactor это сигналы: **`onNext`** (данные), **`onError`** (ошибка), **`onComplete`** (конец).
@@ -213,7 +212,12 @@ public Mono<User> getUser(@PathVariable Long id) {
 
 ---
 
+
+
 ### Паттерн Observer (Наблюдатель)
+
+![§2 Observer и Listener — схема](./Images-docs/reactor-concept-02.png)
+
 
 **Кто есть кто на рисунке слева:**
 
