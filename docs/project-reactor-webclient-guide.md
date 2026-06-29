@@ -3,7 +3,7 @@
 > Краткое руководство по **Spring WebClient** (реактивный HTTP-клиент) и типичным вопросам на Java-собеседованиях.  
 > Формат каждого блока: **ответ простым языком → вопрос → источник → цитата (EN/RU)**.
 
-**См. также:** [project-reactor-interview-guide.md](./project-reactor-interview-guide.md) — Mono, Flux, flatMap, retry.
+**См. также:** [project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md) — Mono, Flux, flatMap, retry.
 
 ---
 

@@ -5,7 +5,7 @@
 
 **См. также:**
 
-- [project-reactor-interview-guide.md](./project-reactor-interview-guide.md) — теория
+- [project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md) — теория
 - [project-reactor-r2dbc-guide.md](./project-reactor-r2dbc-guide.md) — R2DBC
 - [project-reactor-webclient-guide.md](./project-reactor-webclient-guide.md) — WebClient
 

@@ -114,6 +114,49 @@
 
  - **Selector** сообщает: канал готов к чтению/записи, пришло новое соединение, соединение закрыто.
 
+
+- Это **обычный Java NIO Selector**, который Netty использует как основу для неблокирующего I/O. 
+  - Netty сверху добавляет свою _архитектуру каналов_, **event loop** и обработчиков, а сам **селектор** — это механизм, через который JVM спрашивает ОС: “какие сокеты уже готовы к чтению или записи?” [Selector docs](https://learn.microsoft.com/ru-ru/dotnet/api/java.nio.channels.selector?view=net-android-34.0) [Netty SelectStrategy](https://netty.io/4.0/api/io/netty/channel/SelectStrategy.html)
+
+## Что это такое
+
+`Selector` — это Java-объект из NIO, а не интерфейс Netty. Netty строит свой **event loop** вокруг него и регистрирует туда каналы, чтобы **одним потоком** следить за многими соединениями одновременно. [Selector docs](https://learn.microsoft.com/ru-ru/dotnet/api/java.nio.channels.selector?view=net-android-34.0)
+
+## Как он узнаёт о событии
+
+**Селектор** сам не “угадывает” событие. Он делает **системный вызов** вниз в ОС, а уже **ОС** сообщает ему, что на каком-то **сокете** есть готовность к чтению, записи или подключению. [Java IO/NIO overview](https://proselyte.net/java-io/) [Selector docs](https://learn.microsoft.com/ru-ru/dotnet/api/java.nio.channels.selector?view=net-android-34.0)
+
+## Как это выглядит с ОС
+
+На уровне системы это обычно завязано на нативные механизмы вроде **epoll** на Linux, **kqueue** на BSD/macOS или аналогичные механизмы на других платформах. 
+  - Java NIO прячет это за общим API, а Netty использует эту абстракцию и при необходимости опирается на нативные транспорты для большей эффективности. [Selector docs](https://learn.microsoft.com/ru-ru/dotnet/api/java.nio.channels.selector?view=net-android-34.0) [Netty review](https://xakep.ru/2015/07/10/netty-review/)
+
+## Что делает Netty
+
+**Netty**:
+
+- регистрирует `Channel` в `Selector`;
+- ждёт готовности событий;
+- когда событие пришло, переводит его в свою внутреннюю обработку;
+- дальше вызывает **pipeline** и **handlers**. [Netty review](https://xakep.ru/2015/07/10/netty-review/)
+
+То есть Netty не “заменяет” селектор, а **оборачивает его и управляет всем жизненным циклом событий**. [Netty SelectStrategy](https://netty.io/4.0/api/io/netty/channel/SelectStrategy.html)
+
+## Простая картинка в голове
+
+Представь:
+
+- **ОС** — это охрана на входе в здание;
+- **Selector** — журнал, куда записаны все двери, которые надо наблюдать;
+- **Netty event loop** — дежурный, который смотрит журнал и идёт к той двери, где уже кто-то постучал.
+
+**ОС** сообщает **о событии**, селектор **фиксирует** готовность, а **Netty** уже выполняет обработку. [Selector docs](https://learn.microsoft.com/ru-ru/dotnet/api/java.nio.channels.selector?view=net-android-34.0)
+
+## Самая короткая суть
+
+**Selector — это не отдельная магическая сущность Netty, а механизм NIO, через который Netty ждёт готовности сокетов у ОС.** [Selector docs](https://learn.microsoft.com/ru-ru/dotnet/api/java.nio.channels.selector?view=net-android-34.0)
+
+
 **5. ChannelPipeline** — цепочка обработчиков как конвейер:
   - **Inbound** (сеть → приложение): чтение с сокета → … → ваш код;
   - **Outbound** (приложение → сеть): ответ → … → запись в сокет.
@@ -327,7 +370,7 @@ return Mono.fromCallable(() -> callExternalApi())
 Понимание **Event Loop** и потоков **WebFlux** объясняет, как реактивное приложение держит много соединений на малом числе потоков.
 
 Следующий вопрос из статьи автора: что если данные приходят **быстрее**, чем их успевают обработать? Это **Backpressure**. 
- - В проекте: [Backpressure в project-reactor-interview-guide.md](./project-reactor-interview-guide.md#4-backpressure-обратное-давление).
+ - В проекте: [Backpressure в project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md#4-backpressure-обратное-давление).
 
 ---
 

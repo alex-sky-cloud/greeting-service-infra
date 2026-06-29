@@ -9,7 +9,7 @@
 1. [Что такое Project Reactor](#1-что-такое-project-reactor)
 2. [Что такое реактивное программирование](#2-что-такое-реактивное-программирование)
    - [2.1 Императивный и реактивный код — кто ждёт и где](#21-императивный-и-реактивный-код--кто-ждёт-и-где)
-   - [Observer и Listener — отдельный документ](./observer-vs-listener.md)
+   - [Observer и Listener — отдельный документ](observer-vs-listener.md)
 3. [Mono и Flux — в чём разница](#3-mono-и-flux--в-чём-разница)
 4. [Backpressure (обратное давление)](#4-backpressure-обратное-давление)
 5. [subscribe() и block() — в чём разница](#5-subscribe-и-block--в-чём-разница)
@@ -96,7 +96,7 @@ return userRepository.findById(id)
 >   - Вы не таскаете каждую деталь руками до конца цеха, а **навешиваете на ленту** шаги: «прикрути → покрась → упакуй». 
 >   - Лента сама движется, когда её **включают** (`subscribe()` или Spring в WebFlux).
 
-![§1 Project Reactor — конвейер](./Images-docs/reactor-concept-01.png)
+![§1 Project Reactor — конвейер](../Images-docs/reactor-concept-01.png)
 
 
 **Ответ:**
@@ -154,9 +154,12 @@ https://spring.io/blog/2019/03/06/flight-of-the-flux-1-assembly-vs-subscription
 
 ### 2.1 Императивный и реактивный код — кто ждёт и где
 
-> **Аналогия (ж/д):** **Императивно** — поезд с грузом **стоит на главном пути**, пока вагоны грузят 2 минуты; линия **занята**, остальные поезда **ждут в очереди**. **Реактивно** — вагоны отправили на **отстойный путь** (ожидание данных), **локомотив** (поток event loop) **свободен** и везёт другие составы по главной; когда груз готов — вагоны **прицепляют** и состав едет дальше (`onNext`).
+> **Аналогия (ж/д):** 
+>   - **Императивно** — поезд с грузом **стоит на главном пути**, пока вагоны грузят 2 минуты; линия **занята**, остальные поезда **ждут в очереди**. 
+>   - **Реактивно** — вагоны отправили на **отстойный путь** (ожидание данных), **локомотив** (поток event loop) **свободен** и везёт другие составы по главной; 
+>     - когда груз готов — вагоны **прицепляют** и состав едет дальше (`onNext`).
 
-![§2.1 Императивный vs реактивный — кто ждёт](./Images-docs/reactor-concept-02-1.png)
+![§2.1 Императивный vs реактивный — кто ждёт](../Images-docs/reactor-concept-02-1.png)
 
 #### Императивный код (Servlet, блокирующий JDBC)
 
@@ -209,9 +212,9 @@ public Mono<User> getUser(@PathVariable Long id) {
 
 > **RU:** «Reactor — полностью неблокирующая основа для JVM.» / «WebFlux … неблокирующий I/O … реактивные потоки.»
 
-**Подробнее:** отдельный документ [Реактивный код: где ждёт запрос и где хранится состояние](./reactive-where-state-lives.md) — Event Loop, два запроса А/Б, **[§5 очередь `Queue<Runnable>` и callback](./reactive-where-state-lives.md#5-очередь-event-loop-и-контейнеры-callback)**.
+**Подробнее:** отдельный документ [Реактивный код: где ждёт запрос и где хранится состояние](./Реактивный код  где ждёт запрос и где хранится состояние (EventLoop)) — Event Loop, два запроса А/Б, **[§5 очередь `Queue<Runnable>` и callback](./Реактивный код  где ждёт запрос и где хранится состояние (EventLoop)#5-очередь-event-loop-и-контейнеры-callback)**.
 
-**Паттерны Observer и Listener:** отдельный документ [Observer и Listener: паттерны в Java и Spring](./observer-vs-listener.md) — `Observable`/`Observer`, Spring Events, сравнение, Reactor.
+**Паттерны Observer и Listener:** отдельный документ [Observer и Listener: паттерны в Java и Spring](observer-vs-listener.md) — `Observable`/`Observer`, Spring Events, сравнение, Reactor.
 
 ---
 
@@ -219,7 +222,7 @@ public Mono<User> getUser(@PathVariable Long id) {
 
 > **Аналогия:** **`Mono`** и **`Flux`** — это **контейнеры** для данных. Контейнер **сам по себе пустой**, пока вы не **подпишетесь** (`subscribe`) или Spring не «откроет» его в WebFlux.
 
-![§3 Mono и Flux — контейнеры](./Images-docs/reactor-concept-03.png)
+![§3 Mono и Flux — контейнеры](../Images-docs/reactor-concept-03.png)
 
 **Ответ:**
 
@@ -263,7 +266,7 @@ Flux<User> many = userRepository.findAll();
 
 > **Аналогия:** Официант приносит **порциями по три** блюда — вы съели → просите ещё три. Не вываливает все 50 тарелок сразу.
 
-![§4 Backpressure](./Images-docs/reactor-concept-04.png)
+![§4 Backpressure](../Images-docs/reactor-concept-04.png)
 
 **Ответ:**
 
@@ -427,7 +430,7 @@ public final Disposable subscribe(Consumer<? super T> consumer) {
 
 > **Аналогия из жизни:** **`subscribe()`** — включили **Netflix** и занялись своими делами; сериал идёт **фоном**. **`block()`** — **замёрли перед экраном** до финала серии; ничего другого в этот момент не делаете.
 
-![§5 subscribe vs block](./Images-docs/reactor-concept-05.png)
+![§5 subscribe vs block](../Images-docs/reactor-concept-05.png)
 
 
 **Ответ:**
@@ -519,7 +522,7 @@ public Mono<String> getEmail(@PathVariable Long id) {
 > - **`map`** — вы **снимаете кожуру** на месте: яблоко → очищенное яблоко → дольки. Объект уже в руках.
 > - **`flatMap`** — вам дали **закрытую коробку с наклейкой «внутри яблоко»** (`Mono<User>`). **`map`** положит **саму коробку** на ленту. **`flatMap`** **откроет** коробку и положит **яблоко**.
 
-![§6 map vs flatMap — сигнатуры](./Images-docs/reactor-concept-06.png)
+![§6 map vs flatMap — сигнатуры](../Images-docs/reactor-concept-06.png)
 
 
 **Ответ:** смотрите **сигнатуру** — что возвращает лямбда: **обычный объект** → `map`, **`Mono`/`Flux`** → `flatMap`.
@@ -683,7 +686,7 @@ return userRepository.findById(id)
     .map(User::email)
     .map(String::toUpperCase);
 ```
-![Sequence: map после findById](./Images-docs/reactor-seq-map-email.png)
+![Sequence: map после findById](../Images-docs/reactor-seq-map-email.png)
 
 **На диаграмме:** один SQL → User в памяти → два `map` → JSON. БД больше не вызывается.
 
@@ -722,7 +725,7 @@ return userRepository.findById(id)
 | `flatMap(… findByUserId …)` | **flatMap** | `findByUserId` → `Flux<Order>` |
 | `map(orders -> …)` | **map** | DTO — обычный объект |
 
-![Sequence: getUserSummary — flatMap + map](./Images-docs/reactor-seq-get-user-summary.png)
+![Sequence: getUserSummary — flatMap + map](../Images-docs/reactor-seq-get-user-summary.png)
 
 **Проверка:** `curl http://localhost:8081/api/users/1/summary`
 
@@ -738,7 +741,7 @@ return userRepository.findById(id)
 return Flux.fromIterable(ids)
     .map(userRepository::findById);
 ```
-![Sequence: map + findById — ошибка](./Images-docs/reactor-seq-map-wrong-db.png)
+![Sequence: map + findById — ошибка](../Images-docs/reactor-seq-map-wrong-db.png)
 
 **SQL не уходит** — в потоке лежит объект `Mono`, а не `User`.
 
@@ -750,7 +753,7 @@ return Flux.fromIterable(ids)
     .flatMap(userRepository::findById)
     .map(UserResponse::from);
 ```
-![Sequence: flatMap + findById — правильно](./Images-docs/reactor-seq-flatmap-db.png)
+![Sequence: flatMap + findById — правильно](../Images-docs/reactor-seq-flatmap-db.png)
 
 **Проверка:**
 
@@ -789,7 +792,7 @@ Flux.fromIterable(ids)
 Flux.fromIterable(ids)
     .concatMap(userRepository::findById);
 ```
-![Sequence: flatMap vs concatMap](./Images-docs/reactor-seq-flatmap-vs-concatmap.png)
+![Sequence: flatMap vs concatMap](../Images-docs/reactor-seq-flatmap-vs-concatmap.png)
 
 **Проверка в reactive-demo:**
 
@@ -843,7 +846,7 @@ Mono.just(userId)
 
 > **Аналогия из жизни:** **`subscribeOn`** — **в каком цехе включают конвейер** (у источника). **`publishOn`** — **на какой ленте работают следующие станки** после развилки. Один заказ может начаться на складе, а упаковка — в другом зале.
 
-![§7 subscribeOn / publishOn](./Images-docs/reactor-concept-07.png)
+![§7 subscribeOn / publishOn](../Images-docs/reactor-concept-07.png)
 
 
 **Ответ:** оба переносят код на другой **Scheduler**, но в **разное место** цепочки.
@@ -916,7 +919,7 @@ Flux.just(1)
 
 > **Аналогия из жизни:** **Scheduler** — **бригады рабочих**. `parallel()` — математики за столами (CPU). `boundedElastic()` — грузчики для тяжёлых коробок (JDBC, файлы). Нельзя просить математика **час стоять у закрытого сейфа** (`block()` на `parallel()`).
 
-![§8 Schedulers](./Images-docs/reactor-concept-08.png)
+![§8 Schedulers](../Images-docs/reactor-concept-08.png)
 
 
 **Ответ:**
@@ -949,7 +952,7 @@ Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
 
 > **Аналогия из жизни:** **Cold** — **Netflix по запросу**: каждый зритель нажал Play → фильм **начался с начала** для него. **Hot** — **прямой эфир радио**: включился на 15-й минуте — **прошлое не перемотаешь**.
 
-![§9 Cold vs Hot](./Images-docs/reactor-concept-09.png)
+![§9 Cold vs Hot](../Images-docs/reactor-concept-09.png)
 
 
 **Ответ:**
@@ -977,7 +980,7 @@ Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
 
 > **Аналогия из жизни:** Конвейер — **красная лампа** (`onError`). Пока не нажмёте «аварийный сценарий», лента **стоит**. `onErrorReturn` — подставить **заглушку**. `onErrorResume` — **переключить на запасной конвейер**.
 
-![§10 Обработка ошибок](./Images-docs/reactor-concept-10.png)
+![§10 Обработка ошибок](../Images-docs/reactor-concept-10.png)
 
 
 **Ответ:** ошибка = сигнал `onError`. Пока не обработаете — цепочка **останавливается**.
@@ -1059,7 +1062,7 @@ userRepository.findById(id)
 
 > **Аналогия из жизни:** **`retry`** — **перезвонить**, если линия занята: не «дожимать трубку», а **набрать номер заново** (новая подписка на upstream).
 
-![§11 Retry](./Images-docs/reactor-concept-11.png)
+![§11 Retry](../Images-docs/reactor-concept-11.png)
 
 
 **Ответ:** `retry` = **новая подписка** на upstream с нуля. Осторожно с POST без idempotency-key.
@@ -1113,7 +1116,7 @@ Mono.fromCallable(this::flakyCall)
 
 > **Аналогия из жизни:** **StepVerifier** — **чек-лист курьера**: «ожидаю посылку "a" → ожидаю "b" → конец маршрута». Без чек-листа вы не знаете, приехало ли уже или ещё в пути.
 
-![§12 StepVerifier](./Images-docs/reactor-concept-12.png)
+![§12 StepVerifier](../Images-docs/reactor-concept-12.png)
 
 
 **Ответ:**
@@ -1147,7 +1150,7 @@ StepVerifier.create(Flux.just("a", "b"))
 
 > **Аналогия из жизни:** **WebFlux** — **ресторан с одной умной кассой**: официант (контроллер) **не готовит сам**, а передаёт **заказ-цепочку** (`Mono`) на кухню (сервис → R2DBC). Касса **сама ждёт** готовность — вам не нужно стоять у плиты (`subscribe()` / `block()`).
 
-![§13 WebFlux](./Images-docs/reactor-concept-13.png)
+![§13 WebFlux](../Images-docs/reactor-concept-13.png)
 
 
 **Ответ:**
@@ -1178,7 +1181,7 @@ return userRepository.findById(id)
 
 > **Аналогия из жизни:** Две марки **электроинструментов** с похожими насадками: **Reactor** — набор **в мастерской Spring**. **RxJava** — часто в **Android** и старых Java-проектах. Задача одна (крутить гайки), бренд и коробка разные.
 
-![§14 Reactor vs RxJava](./Images-docs/reactor-concept-14.png)
+![§14 Reactor vs RxJava](../Images-docs/reactor-concept-14.png)
 
 
 **Ответ:**
@@ -1203,7 +1206,7 @@ return userRepository.findById(id)
 
 > **Аналогия из жизни:** Reactive — **скоростной автобус с одной полосой** (мало потоков, много пассажиров, если никто не «застрял» в дверях). Обычный MVC + virtual threads — **такси на каждого** (проще, если поездок немного и без стриминга).
 
-![§15 Когда reactive](./Images-docs/reactor-concept-15.png)
+![§15 Когда reactive](../Images-docs/reactor-concept-15.png)
 
 
 **Ответ:**
@@ -1234,7 +1237,7 @@ return userRepository.findById(id)
 
 > **Аналогия из жизни:** **`Disposable`** — **пульт от будильника**: подписка тикает (`Flux.interval`), пока не нажмёте **выключить** (`dispose()`).
 
-![§16 Disposable](./Images-docs/reactor-concept-16.png)
+![§16 Disposable](../Images-docs/reactor-concept-16.png)
 
 
 **Ответ:**
@@ -1266,7 +1269,7 @@ sub.dispose();
 
 > **Аналогия из жизни:** Поток Netty — **единственная касса в супермаркете**. **`block()` / JDBC** — покупатель **5 минут ищет сдачу** — очередь встаёт. **`boundedElastic`** — **отдельная касса «медленные операции»**.
 
-![§17 Блокирующий код](./Images-docs/reactor-concept-17.png)
+![§17 Блокирующий код](../Images-docs/reactor-concept-17.png)
 
 
 **Ответ:**
@@ -1297,7 +1300,7 @@ Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
 
 > **Аналогия из жизни:** Операторы — **надписи над станками на конвейере**: «перекрасить» (`map`), «открыть коробку и достать содержимое» (`flatMap`), «пропустить брак» (`filter`), «взять первые три» (`take`).
 
-![§18 Шпаргалка операторов](./Images-docs/reactor-concept-18.png)
+![§18 Шпаргалка операторов](../Images-docs/reactor-concept-18.png)
 
 
 **Ответ:** ниже — **сигнатура из исходника** + **минимальный пример** для каждого оператора. `map` / `flatMap` / `concatMap` — подробно в §6.
@@ -1442,7 +1445,7 @@ Flux.just("x")
 
 > **Аналогия:** **share()** — **прямой эфир**: опоздавший не увидит начало. **cache()** — **запись эфира**: новый зритель может **пересмотреть** с начала.
 
-![§19 share vs cache](./Images-docs/reactor-concept-19.png)
+![§19 share vs cache](../Images-docs/reactor-concept-19.png)
 
 **Ответ:**
 
@@ -1509,7 +1512,7 @@ cached.block();   // из кэша, без повторного вызова
 
 > **Аналогия:** Три способа обработать **очередь задач**: все сразу (**flatMap**), строго по одной (**concatMap**), только **последняя** (**switchMap** — как автодополнение в поиске).
 
-![§20 switchMap vs flatMap vs concatMap](./Images-docs/reactor-concept-20.png)
+![§20 switchMap vs flatMap vs concatMap](../Images-docs/reactor-concept-20.png)
 
 **Ответ:** три оператора — три стратегии «разворота» inner-`Publisher`. Сигнатуры — §6; здесь **`switchMap`**.
 
@@ -1553,7 +1556,7 @@ Flux.just("a", "ab", "abc")
 
 > **Аналогия:** Цепочка **невидима** — как трубы под полом. **`.log()`** — стеклянные окна; **`checkpoint()`** — табличка «мы здесь».
 
-![§21 Отладка](./Images-docs/reactor-concept-21.png)
+![§21 Отладка](../Images-docs/reactor-concept-21.png)
 
 **Ответ:** начните с `.log()` на dev.
 
@@ -1594,7 +1597,7 @@ Flux.just(1, 2)
 
 > **Аналогия:** **ThreadLocal** — заметка **на руке** одного кассира. **`publishOn`** — кассир сменился → заметка **потерялась**. **Reactor Context** — **бейдж**, который передаётся по цепочке.
 
-![§22 Context](./Images-docs/reactor-concept-22.png)
+![§22 Context](../Images-docs/reactor-concept-22.png)
 
 **Ответ:**
 
@@ -1673,7 +1676,7 @@ public Mono<UserSummaryResponse> getUserSummary(@PathVariable Long id) {
 ```
 Живые примеры map/flatMap: модуль **`reactive-demo`**, порт **8081**, раздел 6 этого документа.
 
-**Источник:** [reactive-demo/README.md](../reactive-demo/README.md) · [Reactor Reference — which operator](https://projectreactor.io/docs/core/release/reference/#which-operator)
+**Источник:** [reactive-demo/README.md](../../reactive-demo/README.md) · [Reactor Reference — which operator](https://projectreactor.io/docs/core/release/reference/#which-operator)
 
 > **EN:** «map applies a synchronous transformation; flatMap applies an asynchronous transformation that returns a Publisher.»
 

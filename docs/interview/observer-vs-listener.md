@@ -1,6 +1,6 @@
 # Observer и Listener: паттерны в Java и Spring
 
-> Отдельное руководство к [project-reactor-interview-guide.md](./project-reactor-interview-guide.md), §2.  
+> Отдельное руководство к [project-reactor-interview-guide.md](project-reactor-interview-guide.md), §2.  
 > **Формат:** схема → кто есть кто → как выглядит код → источник → цитата EN/RU.
 
 **Перегенерация PNG:** `python docs/Images-docs/gen_reactor_diagrams.py`.
@@ -17,7 +17,7 @@
 
 ---
 
-![Observer и Listener — схема](./Images-docs/reactor-concept-02.png)
+![Observer и Listener — схема](../Images-docs/reactor-concept-02.png)
 
 **Как читать рисунок:** слева — **классический Observer** (объект **сам хранит** список наблюдателей). Справа — **события Spring** (издатель **публикует** событие, контекст **вызывает** зарегистрированные listener'ы).
 
@@ -180,7 +180,7 @@ public class BlockedListNotifier {
 
 Типичный **Spring Boot** listener — реакция на **жизненный цикл** приложения (не Reactor).
 
-![Sequence: старт Spring Boot → ApplicationReadyEvent](./Images-docs/reactor-seq-spring-boot-startup.png)
+![Sequence: старт Spring Boot → ApplicationReadyEvent](../Images-docs/reactor-seq-spring-boot-startup.png)
 
 **Цепочка:** `SpringApplication.run()` → контекст поднят → runners → **`ApplicationReadyEvent`** → ваш `@EventListener`.
 
