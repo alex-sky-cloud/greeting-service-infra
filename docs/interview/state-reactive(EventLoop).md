@@ -1,6 +1,6 @@
 # Реактивный код: где ждёт запрос и где хранится состояние
 
-> Отдельное руководство к [project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md), §2.1.  
+> Отдельное руководство к [project-reactor-interview-guide.md](project-reactor-interview-guide.md), §2.1.  
 > **Формат:** аналогия → PNG → ответ → пример → источник → цитата EN/RU.
 
 **Перегенерация PNG:** `python docs/Images-docs/gen_reactor_diagrams.py`.
@@ -32,7 +32,7 @@
 > 
 > - Долгая погрузка вагонов — **не его работа**: поезд на **отстойном пути**, диспетчер **свободен** для других поездов.
 
-![Что такое Event Loop](./Images-docs/reactive-state-00-event-loop.png)
+![Что такое Event Loop](../Images-docs/reactive-state-00-event-loop.png)
 
 **Ответ:**
 
@@ -77,7 +77,7 @@
 **Zero-copy** — это не значит, что копирования вообще никогда нет.
 Это значит, что **его стараются не делать там, где можно обойтись без него**
 
-![](./Images-docs/zero-copy-Netty.png)
+![](../Images-docs/zero-copy-Netty.png)
 
 В **Spring WebFlux** event loop реализует **Netty** — библиотека для неблокирующего HTTP.
 
@@ -107,7 +107,7 @@
 
 - То есть **TCP-сокет** - это **не** «соединение с БД». С БД и с API курсов — уходят **отдельные** неблокирующие запросы, которые R2DBC/WebClient используют внутри цепочек Reactor.
 
-![Два запроса — очередь loop и heap](./Images-docs/reactive-state-00-two-requests.png)
+![Два запроса — очередь loop и heap](../Images-docs/reactive-state-00-two-requests.png)
 
 **Хронология (что делает поток loop — по одной задаче за раз):**
 
@@ -195,7 +195,7 @@ return userRepository.findById(id).map(User::email);
 **`publishOn(Schedulers…)`** — это **отдельный** оператор Reactor: «**ниже по цепочке** выполняй на **другом** пуле потоков». Он нужен, когда вы **сами** переносите работу (например, тяжёлый CPU или осторожно — блокирующий код на `boundedElastic`). 
  - В простых примерах из этого документа **нет** описания такой ситуации — не путайте с обычным ожиданием HTTP/БД.
 
-Подробнее про `publishOn` / `subscribeOn` — смотрите в [§7 в interview-guide](interview/project-reactor-interview-guide.md#7-subscribeon-и-publishon).
+Подробнее про `publishOn` / `subscribeOn` — смотрите в [§7 в interview-guide](project-reactor-interview-guide.md#7-subscribeon-и-publishon).
 
 **Сколько потоков используется для обработки запроса?** Обычно **немного** (часто ~число ядер CPU), а не «по потоку на каждый запрос». Поэтому важно: **не блокировать** event loop.
 
@@ -213,12 +213,13 @@ return userRepository.findById(id).map(User::email);
 
 > Пока ждёте цемент с завода (БД, HTTP) — **бригада уехала на другой объект** (поток event loop свободен), а **план работ лежит в офисе** (Subscription в heap).
 
-![Когда приходит HTTP-запрос](./Images-docs/reactive-state-01-request-flow.png)
+![Когда приходит HTTP-запрос](../Images-docs/reactive-state-01-request-flow.png)
 
 **Ответ — по шагам:**
 
 1. **Создаётся декларативная цепочка из различных операторов, обрабатыващих запрос** (`Mono`/`Flux` + операторы `map`, `flatMap`, `filter` и др.…) — это **описание** вычисления, не готовый результат и не «уже выполненный код».
 2. При вызове метода **`subscribe()`** (в WebFlux это делает **Spring**, не вы в контроллере) цепочка **запускается** на потоке **event loop** и выполняет ту часть, которая не ждёт внешний мир (то есть данных из базы или другого сервера).
+ -  Spring WebFlux делает это через **DispatcherHandler**, который внутри **подписывается** на возвращённый **Publisher**.
 3. Когда нужно **ждать внешний вызов** (БД, удалённый сервер) — поток **освобождается**, то есть выходит из текущей задачи и возвращается в цикл **_event loop_** — берёт другие задачи. (см. §1).
 4. **Состояние задачи** (куда приходить дальше, что уже получено) хранится в объектах в **куче** — в первую очередь в **`Subscription`** и связанных подписчиках/операторах.
 5. Когда внешний сервис отвечает — ОС и Netty формируют задачу (Runnable), то есть **задача в очереди event loop**; 
@@ -233,7 +234,7 @@ return userRepository.findById(id).map(User::email);
 > 
 >**Реактивно** — заявка **лежит в канцелярии** (heap), мастер **уехал**; когда готово — **звонок** (задача на event loop, §1).
 
-![Стек потока vs heap](./Images-docs/reactive-state-02-stack-vs-heap.png)
+![Стек потока vs heap](../Images-docs/reactive-state-02-stack-vs-heap.png)
 
 ### Императивный подход (Servlet + Tomcat)
 
@@ -263,8 +264,9 @@ Request → EventLoop → Mono/Flux (описание) → subscribe() →
 | **Context** (Reactor) | trace ID, tenant и др. между операторами                                                                                 | **heap** |
 | **Стек вызовов** | в момент ожидания нет «**глубокого**» стека; продолжение (**_continuation_**) представлено как **машина состояний** в объектах | — |
 
-В Reactor **нет стека вызовов в привычном смысле** для ожидания I/O: цепочка операторов выполняется как **state machine** — на каждом шаге знаем, **куда перейти после** `onNext` / `onComplete` / `onError`.
- - Каждый оператор знает, что делать при `onNext`, `onComplete`, `onError`, и хранит своё состояние в полях и связях с другими объектами.
+В Reactor есть **стек вызовов* , в момент выполнения задачи — когда Runnable запущен и операторы вызывают друг друга. 
+
+Стека **нет** только **в момент ожидания** между задачами.
 
 **Источник:** [Reactive Streams — Subscription](https://www.reactive-streams.org/reactive-stacks) · [Reactor — Core Features](https://projectreactor.io/docs/core/release/reference/coreFeatures.html)
 
@@ -278,7 +280,7 @@ Request → EventLoop → Mono/Flux (описание) → subscribe() →
 
 > **Аналогия:** вы **отправили курьера** (HTTP-запрос через Netty) и **не стоите у двери** — занимаетесь другими делами. Курьер **звонит**, когда посылка пришла (`onNext`).
 
-![Sequence: WebClient](./Images-docs/reactive-state-03-webclient-sequence.png)
+![Sequence: WebClient](../Images-docs/reactive-state-03-webclient-sequence.png)
 
 ```java
 
@@ -316,13 +318,14 @@ public Mono<User> getUser(@PathVariable Long id) {
 > 
 > **ОС (epoll/kqueue)** — **почтовое уведомление**: «на сокете появились байты».
 
-![Три контейнера](./Images-docs/reactive-state-05-three-containers.png)
+![Три контейнера](../Images-docs/reactive-state-05-three-containers.png)
 
 **Ответ:** вы правы — **callback где-то хранится**. Не в вашем `ArrayList`, а в **трёх разных местах** одновременно (В картине Netty + Reactor есть три основных контейнера.):
 
 ### Контейнер 1 — `Queue<Runnable>` у каждого потока EventLoop (Netty)
 
   - **Как выглядит:** у каждого потока event loop внутри Netty есть **очередь задач** — в коде Netty это `Queue<Runnable> taskQueue` (часто **MPSC-очередь** — multi-producer, single-consumer).
+    - **MPSC-очередь**, это когда много потоков (producer) кладут задачи в очередь — например, ОС через Netty при получении байт с разных сокетов. Один event **loop-поток** (**consumer**) их читает.
 
   **Что в ней лежит:** не «имена callback», а **готовые к выполнению кусочки работы** — объекты `Runnable` в **heap**. Каждый `Runnable` означает, «прочитай байты с канала и запусти `pipeline.fireChannelRead()» / «вызови `onNext` у Reactor, для перехода к обработке следующего элемента (если нужно)».
 
@@ -473,7 +476,9 @@ eventLoop.execute(() -> {
 
 > **EN:** «`DEFAULT_MAX_PENDING_TASKS = Math.max(16, SystemPropertyUtil.getInt("io.netty.eventloop.maxPendingTasks", Integer.MAX_VALUE))`.» / «`maxPendingTasks` — the maximum number of pending tasks before new tasks will be rejected.»
 
-> **RU:** «По умолчанию лимит очереди задач — `Integer.MAX_VALUE` (минимум 16), задаётся через `io.netty.eventloop.maxPendingTasks`.» / «При превышении лимита новые задачи отклоняются.»
+> **RU:** Integer.MAX_VALUE — это значение по умолчанию для system property, если она не задана. Но это не означает «лимит фактически равен Integer.MAX_VALUE».
+
+> В Netty **maxPendingTasks** задаётся на каждый **EventExecutor** отдельно, а не на всю группу. То есть группа из 20 потоков может иметь до **20 × maxPendingTasks** задач суммарно.
 
 ---
 
@@ -508,7 +513,7 @@ eventLoop.execute(() -> {
 
 ## 7. Сравнение с Virtual Threads (Java 21+)
 
-![WebFlux vs Virtual Threads](./Images-docs/reactive-state-04-virtual-threads.png)
+![WebFlux vs Virtual Threads](../Images-docs/reactive-state-04-virtual-threads.png)
 
 Оба подхода позволяют **не держать OS-поток** всё время ожидания I/O — но механизм разный.
 
@@ -527,7 +532,9 @@ eventLoop.execute(() -> {
 3. **Carrier thread** выполняет **другой** _виртуальный поток_.
 4. I/O завершился → виртуальный поток **монтируется** на свободный **Carrier thread** и продолжает выполнение с сохранённого стека.
 
-Это **cooperative scheduling** (планировщик) на уровне JVM, но **синтаксис** остаётся привычным императивным.
+**Virtual Threads** используют **preemptive scheduling** на уровне JVM-планировщика **ForkJoinPool**. 
+ - Термин **cooperative** здесь неверен — VT не «добровольно уступают» управление, JVM сам их демонтирует при блокирующем вызове. 
+ - **Cooperative scheduling** — это про coroutines/goroutines, где явный yield.
 
 **Источник:** [JEP 444: Virtual Threads](https://openjdk.org/jeps/444) · [Spring Boot 3.2+ Virtual Threads](https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.virtual-threads)
 
@@ -550,7 +557,7 @@ eventLoop.execute(() -> {
 
 > **Магия масштаба:**  много одновременных соединений на небольшом числе event loop-потоков, потому что ожидание I/O привязано не к стеку OS-потока, а к состоянию в heap (Subscription/операторы/контекст) и структурам Netty/ОС.
 
-**Связанные разделы:** [§2.1 в interview-guide](interview/project-reactor-interview-guide.md#21-императивный-и-реактивный-код--кто-ждёт-и-где) · [§5 subscribe vs block](interview/project-reactor-interview-guide.md#5-subscribe-и-block--в-чём-разница) · [§22 Context](interview/project-reactor-interview-guide.md#22-context--mdc-и-traceid-между-потоками)
+**Связанные разделы:** [§2.1 в interview-guide](project-reactor-interview-guide.md#21-императивный-и-реактивный-код--кто-ждёт-и-где) · [§5 subscribe vs block](project-reactor-interview-guide.md#5-subscribe-и-block--в-чём-разница) · [§22 Context](project-reactor-interview-guide.md#22-context--mdc-и-traceid-между-потоками)
 
 ---
 

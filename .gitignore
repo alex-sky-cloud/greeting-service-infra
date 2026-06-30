@@ -27,6 +27,7 @@ kubeconfig.yaml
 *.env
 .env
 infra/terraform/docker/.env
+infra/terraform-serverspace/docker/.env
 secrets/
 
 # OS

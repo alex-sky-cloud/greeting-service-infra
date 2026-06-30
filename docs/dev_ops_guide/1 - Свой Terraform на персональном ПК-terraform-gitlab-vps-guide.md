@@ -1,7 +1,10 @@
 # Свой Terraform на персональном ПК (Docker) + VPS под GitLab
 
 > **Канонический путь:** `D:\Project_infra\greeting-service-infra\docs\`  
-> **Ядро документа:** Terraform работает **только на вашем ПК в Docker**. Облака (Timeweb, Serverspace) — лишь **цель API** (куда создаются VPS, K8s, БД). **Не** используем HCP Terraform / Terraform Cloud (удалённый Terraform в облаке HashiCorp).
+> **Ядро документа:** 
+>  - Terraform работает **только на вашем ПК в Docker**. 
+>  - Облака (Timeweb, Serverspace) — лишь **цель API** (куда создаются VPS, K8s, БД). 
+>  - **Не** используем HCP Terraform / Terraform Cloud (удалённый Terraform в облаке HashiCorp).
 
 ---
 
@@ -53,7 +56,7 @@
 
 ## 2. Что запрещено и что разрешено
 
-![Локальный Docker — ядро](Images-docs/terraform-local-docker.png)
+![Локальный Docker — ядро](../Images-docs/terraform-local-docker.png)
 
 | | Запрещено | Разрешено |
 |---|-----------|-----------|
@@ -185,7 +188,7 @@ services:
 
 ## 6. Цикл init → plan → apply → destroy
 
-![Цикл Terraform](Images-docs/terraform-cycle.png)
+![Цикл Terraform](../Images-docs/terraform-cycle.png)
 
 **Пояснение.**
 
@@ -249,7 +252,7 @@ chmod +x scripts/terraform-docker.sh   # один раз, если нет пра
 
 ## 9. Несколько облаков из одного локального Docker
 
-![Multi-cloud из одного Docker](Images-docs/terraform-multi-cloud.png)
+![Multi-cloud из одного Docker](../Images-docs/terraform-multi-cloud.png)
 
 **Пояснение.** Один контейнер на ПК, один `terraform.tfstate`, в `.tf` — несколько блоков `provider`. Каждое облако получает HTTP-запросы от **вашего** локального Terraform. Ни одно облако не хостит процесс `terraform`.
 
@@ -288,7 +291,7 @@ chmod +x scripts/terraform-docker.sh   # один раз, если нет пра
 
 ## 12. Архитектура GitLab на одном VPS
 
-![Архитектура GitLab VPS](Images-docs/gitlab-vps-architecture.png)
+![Архитектура GitLab VPS](../Images-docs/gitlab-vps-architecture.png)
 
 **Пояснение.** После `apply` вы по SSH ставите **GitLab Omnibus** (`gitlab-ctl`) — это **не** Terraform. Terraform только **заказал** VPS. Registry и Runner — на той же VM (учебный стенд).
 
@@ -326,7 +329,7 @@ Serverspace: pay-as-you-go, цену считать в [калькуляторе
 
 ## 14. DNS Dynadot и HTTPS Let's Encrypt
 
-![DNS Dynadot](Images-docs/gitlab-dns-dynadot.png)
+![DNS Dynadot](../Images-docs/gitlab-dns-dynadot.png)
 
 Домен в **Dynadot** — A-записи `gitlab`, `registry` → IP VPS (после `apply`).
 
@@ -338,7 +341,7 @@ Serverspace: pay-as-you-go, цену считать в [калькуляторе
 > **RU**
 > Subdomain Records → тип A → IP вашего VPS.
 
-![HTTPS](Images-docs/gitlab-https-letsencrypt.png)
+![HTTPS](../Images-docs/gitlab-https-letsencrypt.png)
 
 На VPS: `external_url "https://gitlab.домен"` в `/etc/gitlab/gitlab.rb` → `gitlab-ctl reconfigure`.
 
