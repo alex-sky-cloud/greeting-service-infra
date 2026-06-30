@@ -230,10 +230,6 @@ Scheduler ioScheduler = Schedulers.newBoundedElastic(
 
 ## Когда использовать publishOn и subscribeOn
 
-Это один из самых частых источников путаницы.
-
-***
-
 Представь: ты **менеджер**, у тебя есть **архив** (база данных) и **аналитик**.
 
 ***
@@ -245,64 +241,62 @@ Mono.fromCallable(() -> archive.findDocument(id))
     .subscribeOn(Schedulers.boundedElastic())
 ```
 
-Без `subscribeOn` — **ты сам идёшь в архив** и стоишь там, пока документ ищут. Ты заблокирован.
+Без `subscribeOn` — **ты сам идёшь в архив** и стоишь там, пока документ ищут. Ты заблокировал поток (путь) по которому нужно отправить данные (а ведь этот путь для передачи грузов(данных) могли использовать другие подписчики).
 
-С `subscribeOn(boundedElastic())` — курьер из отдела **boundedElastic** идёт в архив вместо тебя. Ты свободен и занимаешься другим.
+А вот если ты используешь `subscribeOn(boundedElastic())` — это как курьер из отдела **boundedElastic** идёт в архив вместо тебя. Ты свободен и занимаешься другим (то есть ты освободил путь для других данных, а работу со своими данными перевел на запасной путь.
 
+`subscribeOn` — это не подписчик. 
+ - Это **инструкция**: «когда кто-то подпишется — запусти источник на этом **scheduler**». Подписчик всегда один — тот, кто вызвал `.subscribe()` в самом конце цепочки.
+
+- То есть думай так, если метод который ты вызвал, будет долго ждать данные, а значит заблокирует поток и не даст другим задачам выполниться, пока не получит данные, значит нужно его перевести на `boundedElastic`, 
+   - и здесь нужен `subscribeOn`, потому что результат этих данных, затем будет использован ниже в цепочке операторов!
 ***
 
 ### publishOn — кто потом работает с результатом
 
 ```java
 Mono.fromCallable(() -> archive.findDocument(id))
-    .subscribeOn(Schedulers.boundedElastic())   // курьер идёт в архив
-    .map(doc -> doc.toUpperCase())              // курьер сам обрабатывает пока несёт
-    .publishOn(Schedulers.parallel())           // --- передаёт документ аналитику ---
-    .map(doc -> analyze(doc))                   // аналитик делает своё дело
-    .subscribe(result -> save(result));         // аналитик же и сохраняет
+    .subscribeOn(Schedulers.boundedElastic())    // курьер идёт в архив
+    .map(doc -> doc.toUpperCase())               // курьер обрабатывает по дороге
+    .publishOn(Schedulers.parallel())            // передаёт документ аналитику
+    .map(doc -> analyze(doc))                    // аналитик делает своё дело
+    .subscribe(result -> save(result));          // аналитик же и сохраняет
 ```
 
-Когда курьер принёс документ и встретил `publishOn(parallel())` — он **передаёт документ аналитику из parallel-пула**. 
- - Всё что дальше: `analyze()` и `save()` — делает уже **аналитик, не курьер**.
+ Когда курьер принёс документ (смотри задачу, которую направили в `.subscribeOn(Schedulers.boundedElastic())` )
+ - затем документ полученный ранее из архива будет вынут из коробки ( `.map(doc -> doc.toUpperCase())` ) и это быстрая задача
+ - затем курьер когда достал из коробки документ  — он **передаёт документ аналитику из parallel-пула** и далее нужно документ будут проанализировать, а это займет время
+ - используем `publishOn(parallel())`, который позволит направить работу такого объема на соседний "путь" (отдельный поток), а значит и операторы `analyze()` и `save()`, будут работать на этом же выделнном потоке
+ - то есть мы делегировали работу по обработке документа **аналитику, а не курьеру**.
+ - Всё что дальше: `analyze()` и `save()` — 
 
 ***
 
-### Главная мысль
-
-Ответ **не возвращается к тебе** сам по себе. Он идёт к тому, кому передали через `publishOn`. 
- - Если `publishOn` нет — курьер сам несёт документ до конца цепочки.
-
-
-### subscribeOn
-
-`subscribeOn(...)` влияет на то, **где будет выполняться источник** и всё, что идёт вверх по цепочке **от точки подписки**. 
-  - Для оборачивания **blocking source** это обычно лучший и самый чистый вариант:
-
-```java
-Mono.fromCallable(this::blockingCall)
-    .subscribeOn(Schedulers.boundedElastic());
-```
-
-Именно такой шаблон чаще всего показывается в документации Reactor для synchronous/blocking call — https://docs.spring.io/projectreactor/reactor-core/docs/3.7.0-M3/reference/html/coreFeatures/schedulers.html
-
-### publishOn
-
-`publishOn(...)` переключает выполнение **дальнейших операторов вниз по цепочке**:
-
-```java
-flux
-    .map(this::cheapStep)
-    .publishOn(Schedulers.boundedElastic())
-    .map(this::blockingStep)
-    .map(this::nextStep);
-```
-
-Это подходит, когда у тебя уже есть реактивный источник, но один участок downstream-обработки блокирует поток — https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
-
 ### Короткое правило
 
-- blocking **источник** → чаще `subscribeOn(boundedElastic())`;
-- blocking **кусок pipeline после нескольких операторов** → часто `publishOn(boundedElastic())`.
+**Блокирует источник в начале** — например, вызов удалённого сервиса или обращение к базе через JDBC:
+
+```java
+Mono.fromCallable(() -> remoteService.getData())  // долго отвечает
+    .subscribeOn(Schedulers.boundedElastic())      // ← источник на boundedElastic
+    .map(data -> process(data))
+    .map(data -> format(data))
+```
+
+**Блокирует один оператор посередине** — например, получение курса валют после быстрых расчётов:
+
+```java
+Flux.of(100.0, 200.0, 300.0)
+    .map(amount -> calculate(amount))              // быстро
+    .publishOn(Schedulers.boundedElastic())        // ← переключаем перед медленным
+    .map(amount -> currencyService.getRate(amount)) // долго, блокирует
+    .map(rate -> format(rate))
+```
+
+Ответ **не возвращается к тебе** сам по себе. Он идёт к тому, кому передали через `publishOn`. Если `publishOn` нет — курьер сам несёт документ до конца цепочки.
+
+
+
 
 ---
 
