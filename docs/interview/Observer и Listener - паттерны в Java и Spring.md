@@ -51,6 +51,115 @@
 
 ---
 
+### Минимальный пример (доменное событие — из документации Spring)
+
+**1. Событие:**
+
+```java
+/**
+ * Доменное событие: адрес добавлен в чёрный список.
+ * <p>Расширяет {@link ApplicationEvent}: Spring автоматически
+ * передаст объект всем listener'ам, подписанным на этот тип.</p>
+ */
+public class BlockedListEvent extends ApplicationEvent {
+
+    private final String address;
+
+    /**
+     * @param source  объект, опубликовавший событие (обычно {@code this})
+     * @param address e-mail адрес, попавший в чёрный список
+     */
+    public BlockedListEvent(Object source, String address) {
+        super(source);
+        this.address = address;
+    }
+
+    /** @return заблокированный адрес */
+    public String getAddress() { return address; }
+}
+```
+
+**2. Публикация** (сервис реализует `ApplicationEventPublisherAware`):
+
+```java
+/**
+ * Сервис рассылки.
+ * <p>Реализует {@link ApplicationEventPublisherAware}, чтобы Spring
+ * автоматически внедрил {@link ApplicationEventPublisher} — через него
+ * сервис публикует события, <em>не зная</em>, кто на них подписан.</p>
+ */
+@Service
+public class EmailService implements ApplicationEventPublisherAware {
+
+    /** Внедряется Spring'ом автоматически через setApplicationEventPublisher. */
+    private ApplicationEventPublisher publisher;
+
+    @Override
+    public void setApplicationEventPublisher(ApplicationEventPublisher publisher) {
+        this.publisher = publisher;
+    }
+
+    /**
+     * Добавляет адрес в чёрный список и публикует событие.
+     * <p>Издатель не вызывает listener'ы напрямую —
+     * он лишь «бросает» событие в контекст.</p>
+     *
+     * @param address адрес для блокировки
+     */
+    public void blockAddress(String address) {
+        publisher.publishEvent(new BlockedListEvent(this, address));
+    }
+}
+```
+
+**3. Слушатель** — стиль `ApplicationListener`:
+
+```java
+/**
+ * Listener, отправляющий уведомление при блокировке адреса.
+ * <p>Реализует {@link ApplicationListener}: Spring найдёт этот bean
+ * в контексте и вызовет {@code onApplicationEvent} при каждой
+ * публикации {@link BlockedListEvent}.</p>
+ */
+@Component
+public class BlockedListNotifier implements ApplicationListener<BlockedListEvent> {
+
+    /**
+     * Вызывается Spring'ом (через {@code ApplicationEventMulticaster}),
+     * <em>не</em> вызывается издателем напрямую.
+     *
+     * @param event опубликованное событие
+     */
+    @Override
+    public void onApplicationEvent(BlockedListEvent event) {
+        System.out.println("Заблокирован адрес: " + event.getAddress());
+    }
+}
+```
+
+**4. Тот же слушатель** — стиль `@EventListener` (рекомендуемый):
+
+```java
+/**
+ * Listener в аннотационном стиле.
+ * <p>{@link EventListener} заменяет реализацию интерфейса —
+ * Spring сам определяет тип события по параметру метода.</p>
+ */
+@Component
+public class BlockedListNotifier {
+
+    /**
+     * Вызывается контекстом при публикации {@link BlockedListEvent}.
+     *
+     * @param event опубликованное событие
+     */
+    @EventListener
+    public void onBlocked(BlockedListEvent event) {
+        System.out.println("Заблокирован адрес: " + event.getAddress());
+    }
+}
+```
+
 ## Что происходит внутри Spring
 
 Когда код вызывает:
@@ -59,7 +168,39 @@
 publisher.publishEvent(new BlockedListEvent(this, address));
 ```
 
-это не означает, что `EmailService` сам ищет нужные listener'ы и вызывает их. На практике вызов уходит внутрь `ApplicationContext`, а дальше событие передаётся компоненту `ApplicationEventMulticaster`, который уже находит подходящие listener'ы и вызывает их.
+- это не означает, что `EmailService` сам ищет нужные **listener**'ы и вызывает их. 
+  - На практике **вызов** уходит внутрь `ApplicationContext`, а дальше **событие** передаётся компоненту `ApplicationEventMulticaster`, который уже находит подходящие **listener**'ы и вызывает их.
+
+```java
+/**
+* Сервис рассылки.
+* <p>Реализует {@link ApplicationEventPublisherAware}, чтобы Spring
+* автоматически внедрил {@link ApplicationEventPublisher} — через него
+* сервис публикует события, <em>не зная</em>, кто на них подписан.</p>
+  */
+  @Service
+  public class EmailService implements ApplicationEventPublisherAware {
+
+  /** Внедряется Spring'ом автоматически через setApplicationEventPublisher. */
+  private ApplicationEventPublisher publisher;
+
+  @Override
+  public void setApplicationEventPublisher(ApplicationEventPublisher publisher) {
+  this.publisher = publisher;
+  }
+
+  /**
+    * Добавляет адрес в чёрный список и публикует событие.
+    * <p>Издатель не вызывает listener'ы напрямую —
+    * он лишь «бросает» событие в контекст.</p>
+    *
+    * @param address адрес для блокировки
+      */
+      public void blockAddress(String address) {
+      publisher.publishEvent(new BlockedListEvent(this, address));
+      }
+  }
+```
 
 То есть фактическая цепочка такая:
 
@@ -71,13 +212,14 @@ EmailService
         → ApplicationListener / @EventListener
 ```
 
-Именно эту внутреннюю цепочку рисунок и показывает.
+- Именно эту внутреннюю цепочку рисунок и показывает.
 
 ---
 
 ## Почему `ApplicationEventMulticaster` есть на схеме
 
-Он нужен на рисунке не потому, что разработчик обязан его писать в коде, а потому что без него трудно объяснить, **почему Spring structurally ближе к Listener + Mediator, чем к классическому GoF Observer**.
+Он нужен на рисунке не потому, что разработчик обязан его писать в коде, а потому что без него трудно объяснить, 
+ - **почему Spring structurally ближе к Listener + Mediator, чем к классическому GoF Observer**.
 
 В GoF Observer:
 
@@ -112,11 +254,9 @@ EmailService
 
 Если задача — **понять паттерн**, тогда важно знать внутреннюю роль `ApplicationEventMulticaster`:
 
-- он выступает посредником между издателем и listener'ами;
-- он решает, какие listener'ы подходят по типу события;
-- он делает реальную dispatch-рассылку внутри Spring.
-
-На этом уровне рисунок полезнее, чем минимальный код, потому что показывает скрытый слой архитектуры.
+- он выступает **посредником** между _издателем_ и _listener'ами_;
+- он решает, какие **listener'ы** подходят _по типу_ **события**;
+- он делает реальную dispatch-**рассылку** внутри Spring.
 
 ---
 
@@ -134,13 +274,16 @@ EmailService
 
 ## Практический вывод
 
-Если документ ориентирован на **объяснение паттернов**, `ApplicationEventMulticaster` на схеме нужен. Если документ ориентирован только на **прикладное использование API**, его можно было бы не рисовать.
+- Если документ ориентирован на **объяснение паттернов**, `ApplicationEventMulticaster` на схеме нужен. 
+- Если документ ориентирован только на **прикладное использование API**, его можно было бы не рисовать.
 
 Для текущего документа логичнее оставить `ApplicationEventMulticaster` на рисунке, но рядом с примером кода добавить короткое пояснение в отдельной теме:
 
 > `ApplicationEventMulticaster` не участвует в пользовательском коде напрямую, но участвует во внутренней доставке события внутри `ApplicationContext`.
 
-Так схема и код перестают конфликтовать: один показывает **что пишет разработчик**, другой — **как это реально работает внутри Spring**.
+Так схема и код перестают конфликтовать: 
+  - один показывает **что пишет разработчик**, другой — **как это реально работает внутри Spring**.
+
 ---
 
 ## 1. Observer в Java — `Observable` / `Observer`
@@ -158,63 +301,171 @@ EmailService
 
 * GoF — это «Gang of Four», четыре автора книги “Design Patterns: Elements of Reusable Object-Oriented Software” (Gamma, Helm, Johnson, Vlissides), где формализованы классические паттерны проектирования, включая Observer
 
-### Минимальный пример (идея JDK)
+### пример
 
 ```java
-import java.util.Observable;
-import java.util.Observer;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Subject (наблюдаемый объект).
- * <p>Расширяет {@link Observable}: при смене статуса сам уведомляет
- * всех зарегистрированных {@link Observer}.</p>
+ * ROLE: Observer
  *
- * @deprecated Использует {@link Observable}, помеченный
- *             {@code @Deprecated} с Java 9. Оставлен как канонический
- *             пример GoF-паттерна.
+ * <p>Общий контракт для всех наблюдателей.</p>
+ * <p>Любой Observer обязан реализовать метод {@link #update(String)},
+ * чтобы Subject мог уведомить его об изменении состояния.</p>
  */
-@SuppressWarnings("deprecation")
-class OrderStatus extends Observable {
+interface OrderObserver {
 
+    /**
+     * Вызывается Subject'ом при изменении статуса заказа.
+     *
+     * @param newStatus новое состояние Subject'а
+     */
+    void update(String newStatus);
+}
+
+/**
+ * ROLE: Subject
+ *
+ * <p>Наблюдаемый объект из GoF Observer.</p>
+ * <p><b>Главный признак Subject:</b> он сам хранит список Observer'ов
+ * и сам вызывает их метод {@code update()}.</p>
+ */
+class OrderStatus {
+
+    /**
+     * 1. Subject ХРАНИТ список подписчиков.
+     * <p>Это ключевая часть GoF Observer:
+     * список наблюдателей находится внутри Subject.</p>
+     */
+    private final List<OrderObserver> observers = new ArrayList<>();
+
+    /**
+     * Текущее состояние Subject'а.
+     */
     private String status;
 
     /**
-     * Меняет статус заказа и уведомляет всех наблюдателей.
+     * 2. Подписка Observer на Subject.
      *
-     * @param newStatus новый статус, например {@code "SHIPPED"}
+     * @param observer наблюдатель, которого нужно добавить
      */
-    void setStatus(String newStatus) {
+    public void addObserver(OrderObserver observer) {
+        observers.add(observer);
+    }
+
+    /**
+     * 3. Отписка Observer от Subject.
+     *
+     * @param observer наблюдатель, которого нужно удалить
+     */
+    public void removeObserver(OrderObserver observer) {
+        observers.remove(observer);
+    }
+
+    /**
+     * 4. Изменение состояния Subject'а.
+     * <p>Как только состояние изменилось, Subject сам запускает
+     * механизм уведомления всех подписчиков.</p>
+     *
+     * @param newStatus новый статус заказа
+     */
+    public void setStatus(String newStatus) {
         this.status = newStatus;
-        setChanged();            // 1. пометить: состояние изменилось
-        notifyObservers(status); // 2. обойти всех Observer и вызвать update()
+        notifyObservers();
+    }
+
+    /**
+     * 5. Subject САМ обходит список Observer'ов
+     * и САМ вызывает {@code update()} у каждого.
+     *
+     * <p>Именно это и есть суть GoF Observer.</p>
+     * <p>Здесь нет Spring, нет EventBus, нет Mediator,
+     * нет скрытой логики в родительском классе.</p>
+     */
+    private void notifyObservers() {
+        for (OrderObserver observer : observers) {
+            observer.update(status);
+        }
     }
 }
 
 /**
- * Конкретный Observer.
- * <p>Реализует {@link Observer#update}: получает уведомление
- * от Subject каждый раз, когда тот вызывает
- * {@code notifyObservers()}.</p>
+ * ROLE: ConcreteObserver
+ *
+ * <p>Конкретная реализация Observer.</p>
+ * <p>Получает уведомление от Subject'а и выполняет свою реакцию.</p>
  */
-class OrderLogger implements Observer {
+class OrderLogger implements OrderObserver {
 
     /**
-     * Вызывается Subject'ом автоматически.
+     * Реакция на изменение состояния Subject'а.
      *
-     * @param o   ссылка на Observable (Subject), который изменился
-     * @param arg данные, переданные при вызове {@code notifyObservers(arg)}
+     * @param newStatus новый статус заказа
      */
     @Override
-    public void update(Observable o, Object arg) {
-        System.out.println("Статус заказа: " + arg);
+    public void update(String newStatus) {
+        System.out.println("OrderLogger: статус заказа = " + newStatus);
     }
 }
 
-// ── Использование ──────────────────────────────────────────────────────
-// Subject сам хранит список — никакого внешнего посредника.
-OrderStatus subject = new OrderStatus();
-subject.addObserver(new OrderLogger()); // Subject ЗНАЕТ своего Observer
-subject.setStatus("SHIPPED");          // → "Статус заказа: SHIPPED"
+/**
+ * ROLE: ConcreteObserver
+ *
+ * <p>Ещё один конкретный Observer.</p>
+ * <p>Показывает, что у одного Subject может быть несколько подписчиков.</p>
+ */
+class OrderNotifier implements OrderObserver {
+
+    /**
+     * Реакция на изменение статуса.
+     *
+     * @param newStatus новый статус заказа
+     */
+    @Override
+    public void update(String newStatus) {
+        System.out.println("OrderNotifier: отправляем уведомление о статусе " + newStatus);
+    }
+}
+
+/**
+ * ROLE: Client
+ *
+ * <p>Клиентский код собирает паттерн:</p>
+ * <ol>
+ *   <li>создаёт Subject;</li>
+ *   <li>создаёт ConcreteObserver'ов;</li>
+ *   <li>подписывает Observer'ов на Subject;</li>
+ *   <li>меняет состояние Subject'а.</li>
+ * </ol>
+ */
+public class OrderObserverDemo {
+
+    public static void main(String[] args) {
+
+        // Шаг 1. Создаём Subject
+        OrderStatus subject = new OrderStatus();
+
+        // Шаг 2. Создаём ConcreteObserver'ов
+        OrderObserver logger = new OrderLogger();
+        OrderObserver notifier = new OrderNotifier();
+
+        // Шаг 3. Подписываем Observer'ов на Subject
+        subject.addObserver(logger);
+        subject.addObserver(notifier);
+
+        // Шаг 4. Меняем состояние Subject'а
+        // Subject сам вызовет update() у каждого подписчика
+        subject.setStatus("PAID");
+        subject.setStatus("SHIPPED");
+
+        // Шаг 5. Можно отписать одного Observer'а
+        subject.removeObserver(logger);
+
+        // Теперь уведомление получит только оставшийся Observer
+        subject.setStatus("DELIVERED");
+    }
+}
 ```
 
 > `Observable` / `Observer` помечены **`@Deprecated` с Java 9** — для нового кода JDK их не рекомендует, но они остаются **каноническим примером** паттерна в Java API.

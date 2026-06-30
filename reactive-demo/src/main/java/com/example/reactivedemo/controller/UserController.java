@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * <p>REST API пользователей в стиле <strong>Spring WebFlux</strong>.</p>
@@ -55,6 +56,7 @@ public class UserController {
      */
     @GetMapping("/{id}")
     public Mono<UserResponse> getUser(@PathVariable Long id) {
+
         return userService.findById(id);
     }
 
