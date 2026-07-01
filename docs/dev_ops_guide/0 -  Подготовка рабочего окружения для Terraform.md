@@ -393,6 +393,57 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terr
 
 Если все пункты отмечены — рабочее окружение готово.
 
+У **Serverspace** есть официальный Terraform-провайдер, зарегистрированный в реестре **Terraform Registry**.
+
+**Как Serverspace понимает запросы от Terraform**
+
+**Serverspace** разработал плагин — Terraform-провайдер `itglobalcom/serverspace`. Он опубликован на официальном сайте реестра:
+
+https://registry.terraform.io/providers/itglobalcom/serverspace/latest/docs
+
+Когда выполняется `terraform init`, **Terraform** скачивает этот плагин. Через него все команды передаются в **API Serverspace**.
+
+Цепочка выглядит так:
+
+```
+terraform apply
+      ↓
+провайдер itglobalcom/serverspace
+      ↓
+API Serverspace (api.serverspace.by)
+      ↓
+VPS создан — виден в панели управления
+```
+
+**Где это указано у Serverspace**
+
+У **Serverspace** поддержка Terraform оформлена не внутри панели управления, а на отдельной странице и в разделе **Автоматизация** бокового меню. Там же находится документация и кнопка создания API-ключа для Terraform.
+
+https://serverspace.by/services/terraform-provajder-serverspace/
+
+**2. Если облачный провайдер не поддерживает Terraform**
+
+**Terraform** работает только если для провайдера написан плагин. 
+  - Если его нет — вариантов два:
+
+ - Написать свой провайдер на Go, используя **Terraform Plugin SDK**
+ - Использовать универсальный провайдер `hashicorp/http` или `null` — но это костыль, подходит только для простых HTTP-запросов
+
+На практике проще выбрать другого провайдера. Почти все крупные облака (AWS, GCP, Azure, Hetzner, DigitalOcean) уже имеют готовые провайдеры в реестре:
+
+https://registry.terraform.io/browse/providers
+
+***
+
+**3. Если своё железо и своё облако**
+
+Нужно развернуть платформу, которая уже умеет работать с Terraform. Популярные варианты:
+
+- **OpenStack** — есть готовый провайдер `hashicorp/openstack`, полноценная поддержка
+- **Proxmox** — есть провайдер `bpg/proxmox`, подходит для домашних серверов
+- **VMware vSphere** — провайдер `hashicorp/vsphere`, для корпоративного железа
+
+Сама по себе машина Terraform не понимает. Нужно сначала поставить одну из этих платформ, а затем подключить соответствующий провайдер.
 
 ### Следующий документ
 

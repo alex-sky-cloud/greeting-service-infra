@@ -82,7 +82,7 @@ infra/terraform-serverspace/
 
 ## 21. Файлы docker и запуск Terraform
 
-В исходном гайде уже используется схема с `docker/docker-compose.yml`, `docker/.env` и запуском Terraform из Git Bash через Docker.[^1]
+В исходном гайде уже используется схема с `docker/docker-compose.yml`, `docker/.env` и запуском Terraform из Git Bash через Docker.
 
 Для нового каталога повторяем тот же подход.
 
@@ -122,14 +122,14 @@ SERVERSPACE_REGION=ru-ams
 
 ### 21.3 Первый принцип запуска
 
-Все команды выполнять в **Git Bash**, как и в базовом документе.[^1]
+Все команды выполнять в **Git Bash**, как и в базовом документе.
 
 Переход в каталог:
 
 ```bash
+
 cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
 ```
-
 
 ***
 
@@ -140,6 +140,7 @@ cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
 ### 22.1 Создать рабочий `.env`
 
 ```bash
+
 cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
 cp docker/.env.example docker/.env
 ```
@@ -147,6 +148,7 @@ cp docker/.env.example docker/.env
 После этого вручную заполнить:
 
 ```env
+
 SERVERSPACE_TOKEN=ваш_api_token
 SERVERSPACE_REGION=ru-ams
 ```
@@ -156,21 +158,21 @@ SERVERSPACE_REGION=ru-ams
 
 В `.env` держим:
 
-- токен Serverspace;
-- регион по умолчанию;
-- позже можно добавить дополнительные секреты.
+- токен **Serverspace**;
+- **регион** по умолчанию;
+- позже можно добавить дополнительные **секреты**.
 
 
 ### 22.3 Что храним в `terraform.tfvars`
 
 В `terraform.tfvars` держим:
 
-- размеры VPS;
-- имена серверов;
-- образы ОС;
-- SSH-ключи;
-- доменные имена;
-- параметры PostgreSQL и GitLab, если нужно.
+ - **размеры** VPS;
+ - **имена** серверов;
+ - **образы** ОС;
+ - SSH-**ключи**;
+ - доменные **имена**;
+ - **параметры** PostgreSQL и GitLab, если нужно.
 
 ***
 
@@ -185,20 +187,35 @@ terraform {
   required_providers {
     serverspace = {
       source  = "itglobalcom/serverspace"
-      version = "~> 1.0"
+      version = "~> 0.3.2"
     }
   }
 }
 
+# Configure the Serverspace Provider
 provider "serverspace" {
-  token  = var.serverspace_token
-  region = var.serverspace_region
+  key = var.api_key # объявить данную переменую в variables.tf
 }
+
+# — рекомендую проверить актуальную схему аргументов через
+#      `terraform providers schema -json`
+# перед сдачей работы,
 ```
 
 На первом этапе этого достаточно.
 
 Если провайдер потребует другой `source` или версию, скорректируем после первого `init`.
+
+
+**Утверждение:**  `providers.tf` совпадает со схемой официального провайдера — `key = var.api_key` корректен.
+
+Источник: https://serverspace.ru/support/help/automation-terraform/
+
+> "terraform { required_providers { serverspace = { source = "itglobalcom/serverspace" version = "0.2.2" } } } variable "s2_token" { type = string default = "<api-ключ>" } provider "serverspace" { key = var.s2_token }"
+
+Перевод:
+> "Провайдер настраивается через блок `provider "serverspace" { key = var.s2_token }`, ключ передаётся как строковая переменная."
+
 
 ***
 
@@ -207,12 +224,12 @@ provider "serverspace" {
 Создать файл `variables.tf`:
 
 ```hcl
-variable "serverspace_token" {
+variable "api_key" {
   type      = string
   sensitive = true
 }
 
-variable "serverspace_region" {
+variable "location" {
   type = string
 }
 
@@ -232,7 +249,7 @@ variable "control_plane_ram" {
   type = number
 }
 
-variable "control_plane_disk" {
+variable "control_plane_boot_volume_size" {
   type = number
 }
 
@@ -248,7 +265,7 @@ variable "apps_ram" {
   type = number
 }
 
-variable "apps_disk" {
+variable "apps_boot_volume_size" {
   type = number
 }
 
@@ -264,7 +281,7 @@ variable "postgres_ram" {
   type = number
 }
 
-variable "postgres_disk" {
+variable "postgres_boot_volume_size" {
   type = number
 }
 
@@ -280,11 +297,11 @@ variable "gitlab_ram" {
   type = number
 }
 
-variable "gitlab_disk" {
+variable "gitlab_boot_volume_size" {
   type = number
 }
 
-variable "image_family" {
+variable "image" {
   type = string
 }
 ```
@@ -295,6 +312,8 @@ variable "image_family" {
 ## 25. Файл terraform tfvars
 
 Создать файл `terraform.tfvars.example`:
+
+ Добавьте ваш 
 
 ```hcl
 serverspace_region = "ru-ams"
