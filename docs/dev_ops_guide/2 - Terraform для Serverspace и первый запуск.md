@@ -225,89 +225,127 @@ provider "serverspace" {
 
 ```hcl
 variable "api_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "location" {
-  type = string
+  description = "API key проекта Serverspace для аутентификации провайдера"
+  type        = string
+  sensitive   = true
 }
 
 variable "ssh_public_key" {
-  type = string
+  description = "Публичный SSH-ключ для ресурса serverspace_ssh"
+  type        = string
+}
+
+variable "location" {
+  description = "Локация Serverspace для создаваемых серверов"
+  type        = string
+  default     = "am2"
+}
+
+variable "image_family" {
+  description = "Образ ОС для serverspace_server"
+  type        = string
+  default     = "Ubuntu-20.04-X64"
 }
 
 variable "control_plane_name" {
-  type = string
+  description = "Имя сервера control plane"
+  type        = string
 }
 
 variable "control_plane_cpu" {
-  type = number
+  description = "Количество vCPU для control plane"
+  type        = number
 }
 
 variable "control_plane_ram" {
-  type = number
+  description = "Объём RAM для control plane в МБ"
+  type        = number
 }
 
-variable "control_plane_boot_volume_size" {
-  type = number
+variable "control_plane_disk" {
+  description = "Размер диска control plane в ГБ; в main.tf обычно преобразуется в boot_volume_size"
+  type        = number
 }
 
 variable "apps_name" {
-  type = string
+  description = "Имя сервера приложений"
+  type        = string
 }
 
 variable "apps_cpu" {
-  type = number
+  description = "Количество vCPU для сервера приложений"
+  type        = number
 }
 
 variable "apps_ram" {
-  type = number
+  description = "Объём RAM для сервера приложений в МБ"
+  type        = number
 }
 
-variable "apps_boot_volume_size" {
-  type = number
+variable "apps_disk" {
+  description = "Размер диска сервера приложений в ГБ; в main.tf обычно преобразуется в boot_volume_size"
+  type        = number
 }
 
 variable "postgres_name" {
-  type = string
+  description = "Имя сервера PostgreSQL"
+  type        = string
 }
 
 variable "postgres_cpu" {
-  type = number
+  description = "Количество vCPU для сервера PostgreSQL"
+  type        = number
 }
 
 variable "postgres_ram" {
-  type = number
+  description = "Объём RAM для сервера PostgreSQL в МБ"
+  type        = number
 }
 
-variable "postgres_boot_volume_size" {
-  type = number
+variable "postgres_disk" {
+  description = "Размер диска сервера PostgreSQL в ГБ; в main.tf обычно преобразуется в boot_volume_size"
+  type        = number
 }
 
 variable "gitlab_name" {
-  type = string
+  description = "Имя сервера GitLab"
+  type        = string
 }
 
 variable "gitlab_cpu" {
-  type = number
+  description = "Количество vCPU для сервера GitLab"
+  type        = number
 }
 
 variable "gitlab_ram" {
-  type = number
+  description = "Объём RAM для сервера GitLab в МБ"
+  type        = number
 }
 
-variable "gitlab_boot_volume_size" {
-  type = number
+variable "gitlab_disk" {
+  description = "Размер диска сервера GitLab в ГБ; в main.tf обычно преобразуется в boot_volume_size"
+  type        = number
 }
 
-variable "image" {
-  type = string
+```
+***
+
+## ssh_key.tf
+
+```hcl
+resource "serverspace_ssh" "terraform" {
+  name       = "terraform-key"
+  public_key = var.ssh_public_key
 }
 ```
 
+Синтаксис ресурса подтверждён официальным примером.
 
-***
+Источник: https://serverspace.ru/support/help/automation-terraform/
+
+> "resource "serverspace_ssh" "terraform" 
+> 
+> { name = "terraform-key" public_key = "ssh-rsa AAAAB3Nza...JUDjlM= root@CentOS.local" }"
 
 ## 25. Файл terraform tfvars
 
