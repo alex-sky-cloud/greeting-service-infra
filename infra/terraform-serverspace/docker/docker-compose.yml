@@ -7,7 +7,8 @@ services:
       - terraform-plugin-cache:/root/.terraform.d/plugin-cache # Кэш провайдеров — чтобы не скачивать при каждом запуске
     environment:
       TF_PLUGIN_CACHE_DIR: /root/.terraform.d/plugin-cache
-      TF_VAR_serverspace_token: ${SERVERSPACE_TOKEN:-} # Токен API Serverspace — читается из .env файла
+      TF_VAR_api_key: ${SERVERSPACE_TOKEN:-} # Токен API Serverspace — читается из .env файла
+      TF_VAR_location: ${SERVERSPACE_REGION:-} # Регион Serverspace — читается из .env файла
     entrypoint: ["terraform"] # При запуске контейнера сразу выполняет terraform
 
 volumes:

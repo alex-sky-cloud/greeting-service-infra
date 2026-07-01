@@ -351,12 +351,54 @@ resource "serverspace_ssh" "terraform" {
 
 Создать файл `terraform.tfvars.example`:
 
- Добавьте ваш 
+Нужен именно готовый конфигурационный файл `terraform.tfvars.example`
+
+**Источник:** https://developer.hashicorp.com/terraform/language/values/variables
+
+> "You can add variable blocks to your configuration to define input interface for your module. This lets users pass custom values to your module at runtime."
+
+Перевод:
+> "Вы можете добавлять блоки переменных в конфигурацию, чтобы определить входной интерфейс модуля. Это позволяет передавать собственные значения в модуль во время выполнения."
+
+**Утверждение:**
+В `.tfvars` должны быть именно присваивания значений уже объявленным переменным, а не новые объявления переменных.
+
+**Источник:** https://developer.hashicorp.com/terraform/language/values/variables
+
+> "You can assign values directly to variable names in files with a `.tfvars` or `.auto.tfvars` extension."
+
+Перевод:
+> "Вы можете напрямую присваивать значения именам переменных в файлах с расширением `.tfvars` или `.auto.tfvars`."
+
+**Утверждение:**
+Файл `terraform.tfvars` Terraform загружает автоматически, если он лежит в текущем каталоге и называется именно так.
+
+**Источник:** https://developer.hashicorp.com/terraform/tutorials/configuration-language/variables
+
+> "Terraform automatically loads all files in the current directory with the exact name terraform.tfvars or matching *.auto.tfvars."
+
+Перевод:
+> "Terraform автоматически загружает все файлы в текущем каталоге с точным именем `terraform.tfvars` или подходящие под шаблон `*.auto.tfvars`."
+
+**Утверждение:**
+Так как в ваших текущих файлах используются `api_key` и `location`, а не `serverspace_region`, конфигурационный пример нужно привести именно к этим именам.
+
+**Источник:** https://developer.hashicorp.com/terraform/language/values/variables
+
+> "To reference a `variable` in other parts of your configuration, use `var.<NAME>` syntax."
+
+Перевод:
+> "Чтобы ссылаться на переменную в других частях конфигурации, используйте синтаксис `var.<ИМЯ>`."
+
+Готовый файл:
 
 ```hcl
-serverspace_region = "ru-ams"
+api_key = "your_serverspace_api_key"
 
 ssh_public_key = "ssh-ed25519 AAAA... ваш_публичный_ключ"
+
+location     = "am2"
+image_family = "Ubuntu-20.04-X64"
 
 control_plane_name = "k8s-control-plane-1"
 control_plane_cpu  = 2
@@ -377,16 +419,31 @@ gitlab_name = "gitlab-1"
 gitlab_cpu  = 4
 gitlab_ram  = 8192
 gitlab_disk = 120
-
-image_family = "ubuntu"
 ```
 
-Потом создать рабочий файл:
+**Утверждение:**
+Если нужен шаблонный файл, его правильно назвать `terraform.tfvars.example`, а рабочую копию затем создать отдельно.
+
+**Источник:** https://developer.hashicorp.com/terraform/tutorials/configuration-language/variables
+
+> "Terraform automatically loads all files in the current directory with the exact name terraform.tfvars or matching *.auto.tfvars."
+
+Перевод:
+> "Terraform автоматически загружает все файлы в текущем каталоге с точным именем `terraform.tfvars` или подходящие под шаблон `*.auto.tfvars`."
+
+Рабочая команда:
 
 ```bash
+
 cp terraform.tfvars.example terraform.tfvars
 ```
 
+**Утверждение:**
+RAM в вашем примере действительно задаётся в мегабайтах, поэтому `4096 = 4 GB`, а `8192 = 8 GB`.
+
+**Источник:** https://serverspace.ru/support/help/automation-terraform/
+
+В официальном примере **Serverspace** память сервера задаётся числовыми значениями вроде `2048` и `8192`, что соответствует передаче RAM в мегабайтах.
 
 ### Пояснение по RAM
 
@@ -404,41 +461,106 @@ cp terraform.tfvars.example terraform.tfvars
 Создать файл `main.tf`:
 
 ```hcl
+resource "serverspace_isolated_network" "reactive_net" {
+  location       = var.location
+  name           = "reactive_net"
+  description    = "Example for Terraform"
+  network_prefix = "192.168.0.0"
+  mask           = 24
+}
+
 resource "serverspace_server" "control_plane" {
-  name             = var.control_plane_name
-  vcpus            = var.control_plane_cpu
-  ram_mb           = var.control_plane_ram
-  boot_disk_size   = var.control_plane_disk
   image            = var.image_family
-  ssh_keys         = [var.ssh_public_key]
+  name             = var.control_plane_name
+  location         = var.location
+  cpu              = var.control_plane_cpu
+  ram              = var.control_plane_ram
+  boot_volume_size = var.control_plane_disk * 1024
+
+  nic {
+    network      = ""
+    network_type = "PublicShared"
+    bandwidth    = 50
+  }
+
+  nic {
+    network      = serverspace_isolated_network.reactive_net.id
+    network_type = "Isolated"
+    bandwidth    = 0
+  }
+
+  ssh_keys = [
+    serverspace_ssh.terraform.id,
+  ]
 }
 
 resource "serverspace_server" "apps" {
-  name             = var.apps_name
-  vcpus            = var.apps_cpu
-  ram_mb           = var.apps_ram
-  boot_disk_size   = var.apps_disk
   image            = var.image_family
-  ssh_keys         = [var.ssh_public_key]
+  name             = var.apps_name
+  location         = var.location
+  cpu              = var.apps_cpu
+  ram              = var.apps_ram
+  boot_volume_size = var.apps_disk * 1024
+
+  nic {
+    network      = ""
+    network_type = "PublicShared"
+    bandwidth    = 50
+  }
+
+  nic {
+    network      = serverspace_isolated_network.reactive_net.id
+    network_type = "Isolated"
+    bandwidth    = 0
+  }
+
+  ssh_keys = [
+    serverspace_ssh.terraform.id,
+  ]
 }
 
 resource "serverspace_server" "postgres" {
-  name             = var.postgres_name
-  vcpus            = var.postgres_cpu
-  ram_mb           = var.postgres_ram
-  boot_disk_size   = var.postgres_disk
   image            = var.image_family
-  ssh_keys         = [var.ssh_public_key]
+  name             = var.postgres_name
+  location         = var.location
+  cpu              = var.postgres_cpu
+  ram              = var.postgres_ram
+  boot_volume_size = var.postgres_disk * 1024
+
+  nic {
+    network      = ""
+    network_type = "PublicShared"
+    bandwidth    = 70
+  }
+
+  nic {
+    network      = serverspace_isolated_network.reactive_net.id
+    network_type = "Isolated"
+    bandwidth    = 0
+  }
 }
 
 resource "serverspace_server" "gitlab" {
-  name             = var.gitlab_name
-  vcpus            = var.gitlab_cpu
-  ram_mb           = var.gitlab_ram
-  boot_disk_size   = var.gitlab_disk
   image            = var.image_family
-  ssh_keys         = [var.ssh_public_key]
+  name             = var.gitlab_name
+  location         = var.location
+  cpu              = var.gitlab_cpu
+  ram              = var.gitlab_ram
+  boot_volume_size = var.gitlab_disk * 1024
+
+  nic {
+    network      = ""
+    network_type = "PublicShared"
+    bandwidth    = 50
+  }
+
+  nic {
+    network      = serverspace_isolated_network.reactive_net.id
+    network_type = "Isolated"
+    bandwidth    = 0
+  }
 }
+
 ```
 
 Это черновик для первого `plan`.
