@@ -115,6 +115,7 @@
 ### Шаг 2. Секреты
 
 ```bash
+
 cd '/d/Project_infra/greeting-service-infra/infra/terraform'
 cp docker/.env.example docker/.env
 # Отредактируйте docker/.env — токены API облаков (не коммитить!)
@@ -124,6 +125,7 @@ cp terraform.tfvars.example terraform.tfvars
 ### Шаг 3. Первый запуск
 
 ```bash
+
 cd '/d/Project_infra/greeting-service-infra'
 ./scripts/terraform-docker.sh init
 ./scripts/terraform-docker.sh validate
@@ -133,6 +135,7 @@ cd '/d/Project_infra/greeting-service-infra'
 Или напрямую через compose:
 
 ```bash
+
 cd '/d/Project_infra/greeting-service-infra/infra/terraform'
 docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform init
 ```
@@ -437,5 +440,3 @@ Serverspace: pay-as-you-go, цену считать в [калькуляторе
 | Dynadot A-record | https://www.dynadot.com/help/question/create-A-record |
 
 ---
-
-*Диаграммы: `docs/Images-docs/gen_terraform_gitlab_diagrams.py`. Docker-рецепт: `infra/terraform/docker/`.*

@@ -5,6 +5,7 @@ services:
     volumes:
       - ..:/workspace # Монтирует каталог terraform-serverspace с твоего диска в контейнер
       - terraform-plugin-cache:/root/.terraform.d/plugin-cache # Кэш провайдеров — чтобы не скачивать при каждом запуске
+      - ./terraformrc:/root/.terraformrc # Конфиг CLI — зеркало реестра вместо заблокированного registry.terraform.io
     environment:
       TF_PLUGIN_CACHE_DIR: /root/.terraform.d/plugin-cache
       TF_VAR_api_key: ${SERVERSPACE_TOKEN:-} # Токен API Serverspace — читается из .env файла

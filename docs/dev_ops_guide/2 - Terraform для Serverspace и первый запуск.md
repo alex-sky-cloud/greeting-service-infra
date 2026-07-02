@@ -571,11 +571,14 @@ resource "serverspace_server" "gitlab" {
 
 ## 27. Первый init validate plan
 
-В исходном документе уже используется рабочий порядок `init → validate → plan`, и его сохраняем здесь.[^1]
+В исходном документе уже используется рабочий порядок `init → validate → plan`, и его сохраняем здесь.
+
+ - Запускаем Docker Desktop
 
 Команды:
 
 ```bash
+
 cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
 
 docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform init
@@ -591,7 +594,241 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terr
 
 Если `validate` или `plan` ругаются на имена полей ресурса, это нормально для первого прогона. Тогда просто корректируем `main.tf` под фактический синтаксис провайдера.
 
+```bash
+
+$ docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform init
+ Container docker-terraform-run-c5ad9a04146e Creating
+ Container docker-terraform-run-c5ad9a04146e Created
+Initializing the backend...
+Initializing provider plugins...
+- Finding itglobalcom/serverspace versions matching "~> 0.3.2"...
+╷
+│ Error: Invalid provider registry host
+│
+│ The host "registry.terraform.io" given in provider source address
+│ "registry.terraform.io/itglobalcom/serverspace" does not offer a Terraform
+│ provider registry.
+```
+
+- или же
+
+```bash
+
+docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform providers schema -json
+ Container docker-terraform-run-a2e88b55e322 Creating
+ Container docker-terraform-run-a2e88b55e322 Created
+╷
+│ Error: Inconsistent dependency lock file
+│
+│ The following dependency selections recorded in the lock file are
+│ inconsistent with the current configuration:
+│   - provider registry.terraform.io/itglobalcom/serverspace: required by this configuration but no version is selected
+│
+│ To make the initial dependency selections that will initialize the
+│ dependency lock file, run:
+│   terraform init
+╵
+
+```
+
+**Причина найдена**:  нужно включить VPN или создать свое "зеркало."
+
+
+## Что сделать дальше
+
+1. Удалить старый lock-файл (если он есть), так как он уже "запомнил" неправильную версию:
+
+```bash
+
+rm .terraform.lock.hcl
+rm -rf .terraform
+```
+
+
+### Создать локальное зеркало
+
+Вот исправленный `docker-compose.yml` с сохранением твоего оригинального формата (комментарии на той же строке, тот же порядок ключей) — добавлена только строка монтирования `.terraformrc` для обхода блокировки реестра.
+
+```yaml
+services:
+  terraform:
+    image: hashicorp/terraform:1.9 # Образ с Terraform — Docker скачает сам при первом запуске
+    working_dir: /workspace # Рабочий каталог внутри контейнера
+    volumes:
+      - ..:/workspace # Монтирует каталог terraform-serverspace с твоего диска в контейнер
+      - terraform-plugin-cache:/root/.terraform.d/plugin-cache # Кэш провайдеров — чтобы не скачивать при каждом запуске
+      - ./terraformrc:/root/.terraformrc # Конфиг CLI — зеркало реестра вместо заблокированного registry.terraform.io
+    environment:
+      TF_PLUGIN_CACHE_DIR: /root/.terraform.d/plugin-cache
+      TF_VAR_api_key: ${SERVERSPACE_TOKEN:-} # Токен API Serverspace — читается из .env файла
+      TF_VAR_location: ${SERVERSPACE_REGION:-} # Регион Serverspace — читается из .env файла
+    entrypoint: ["terraform"] # При запуске контейнера сразу выполняет terraform
+
+volumes:
+  terraform-plugin-cache:
+```
+
+
+## Дополнительный файл — `docker/terraformrc`
+
+Создай рядом с `.env` файл `terraformrc` (без точки в начале, монтируется как `.terraformrc` внутри контейнера):
+
+```hcl
+provider_installation {
+  network_mirror {
+    url     = "https://terraform-mirror.yandexcloud.net/"
+    include = ["registry.terraform.io/*/*"]
+  }
+  direct {
+    exclude = ["registry.terraform.io/*/*"]
+  }
+}
+```
+
+Источник: https://dev.to/kvendingoldo/kak-nastroit-zierkalo-rieiestrov-dlia-opentofu-i-terraform-277k
+
+> "provider_installation { network_mirror { url = "https://terraform-mirror.yandexcloud.net/" include = ["registry.terraform.io/*/*"] } direct { exclude = ["registry.terraform.io/*/*"] } }"
+
+## Запуск после изменений
+
+```bash
+
+docker compose -f docker/docker-compose.yml down -v
+
+rm -rf .terraform .terraform.lock.hcl
+
+docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform init
+```
+
+Получаем:
+
+```bash
+
+ Warning: Incomplete lock file information for providers
+│
+│ Due to your customized provider installation methods, Terraform was forced
+│ to calculate lock file checksums locally for the following providers:
+│   - itglobalcom/serverspace
+│
+│ The current .terraform.lock.hcl file only includes checksums for
+│ linux_amd64, so Terraform running on another platform will fail to install
+│ these providers.
+│
+│ To calculate additional checksums for another platform, run:
+│   terraform providers lock -platform=linux_amd64
+│ (where linux_amd64 is the platform to generate)
+╵
+Terraform has been successfully initialized!
+
+You may now begin working with Terraform. Try running "terraform plan" to see
+any changes that are required for your infrastructure. All Terraform commands
+should now work.
+
+If you ever set or change modules or backend configuration for Terraform,
+rerun this command to reinitialize your working directory. If you forget, other
+commands will detect it and remind you to do so if necessary.
+
+
+```
+Это просто предупреждение (Warning), а не ошибка — `init` уже прошёл успешно, о чём говорит последняя строка "Terraform has been successfully initialized!".
+
+**Что означает предупреждение:**
+
+Поскольку ты используешь кастомное зеркало (`network_mirror` вместо прямого реестра), Terraform не смог скачать заранее готовые контрольные суммы (checksums) провайдера для всех платформ — он посчитал их локально только для одной платформы, на которой ты сейчас работаешь: `linux_amd64` (это платформа внутри Docker-контейнера).
+
+Источник: https://developer.hashicorp.com/terraform/cli/config/config-file
+
+> "The CLI configuration file configures per-user settings for CLI behaviors, which apply across all Terraform working directories."
+
+Это значит: файл `.terraform.lock.hcl` теперь "знает" контрольные суммы провайдера только для Linux внутри контейнера. Если бы кто-то другой запускал этот же проект на Windows или Mac напрямую (без Docker), `init` бы не сработал — понадобилось досчитать чексуммы под ту платформу.
+
+**В твоём случае это не проблема**, потому что:
+
+- Terraform у тебя всегда запускается только в Docker-контейнере с `hashicorp/terraform:1.9` на базе Linux.
+- Ты никогда не запускаешь этот `main.tf` напрямую на Windows.
+
+Можно спокойно двигаться дальше:
+
+```bash
+
+cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
+docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform validate
+```
+
+```bash
+
+cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
+docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform validate
+
+ Container docker-terraform-run-a82abe90d900 Creating
+ Container docker-terraform-run-a82abe90d900 Created
+Success! The configuration is valid.
+```
+
+Если `validate` пройдёт без ошибок — переходи к `plan`.
+
 ***
+
+```bash
+cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
+docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform plan -out=tfplan
+
+.....
+
+Plan: 6 to add, 0 to change, 0 to destroy.
+─────────────────────────────────────────────────────────────────────────────
+Saved the plan to: tfplan
+
+To perform exactly these actions, run the following command to apply:
+    terraform apply "tfplan"
+
+```
+
+- Теперь выполняем план
+
+```bash
+
+docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terraform apply tfplan
+```
+ - если будут ошибки при выполнении:
+  - может быть недоступна выбранная локация (тогда посмотри документ 1, там есть способ посмотреть доступные локации серверов)
+  - может просто нет денег на сервере
+
+```bash
+.........
+│   "status_code": 400,
+│   "status": "400 Bad Request",
+│   "response": {
+│     "errors": [
+│       {
+│         "code": -19003,
+│         "message": "Insufficient funds. Minimum balance: 2683.05"
+│       }
+│     ]
+│   }
+│ }
+
+```
+
+- Может быть ошибка на стороне провайдера
+
+```bash
+
+
+serverspace_server.control_plane: Creation complete after 51s [id=l44s1304964]
+╷
+│ Error: task 'lt6336740' failed
+│
+│   with serverspace_server.gitlab,
+│   on main.tf line 80, in resource "serverspace_server" "gitlab":
+│   80: resource "serverspace_server" "gitlab" {
+│
+╵
+
+
+```
+
+- На текущий момент они не знают что делать. Нужно писать в поддержку чтобы перезапустили задачу.
 
 ## 28. Что должно получиться после первого plan
 
@@ -607,20 +844,12 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env run --rm terr
 
 ### Результат этого документа
 
-Этот документ не поднимает серверы сразу.
-
-Он делает главное:
-
-- создаёт отдельный фундамент под Serverspace;
-- отделяет его от других облаков;
-- подводит к первому корректному `plan`.
-
+ - должны получить развернутую инфрастуктуру
 
 ### Следующий документ
 
 Следующим документом будет:
 
-`Кластер-на-4-VPS-Serverspace-4.md`
 
 В нём уже пойдём дальше:
 
