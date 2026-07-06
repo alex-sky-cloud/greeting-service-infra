@@ -73,16 +73,18 @@
 > **RU**
 > Интеграция с HCP Terraform требует блока `cloud { }` и передаёт выполнение в облако HashiCorp. **В этом проекте блок `cloud` не используем** — только локальный CLI в Docker.
 
-**Важно:** слово *provider* в Terraform — это **плагин** (драйвер API), который скачивается при `terraform init` в папку `.terraform/` **на вашем ПК**. Это не «Terraform в облаке Timeweb». Плагин лишь учит локальный Terraform, как вызывать API облака.
+**Важно:** 
+ - слово *provider* в Terraform — это **плагин** (драйвер API), который скачивается при `terraform init` в папку `.terraform/` **на вашем ПК**. 
+ - Это не «Terraform в облаке Timeweb». Плагин лишь учит локальный Terraform, как вызывать API облака.
 
 ---
 
 ## 3. Архитектура: ПК → Docker → API облаков
 
 **Пояснение.** Вы нажимаете `plan` на ноутбуке: 
-    → контейнер Docker читает `.tf` 
-    → обращается по HTTPS к API **Timeweb**/**Serverspace** 
-    → облако создаёт VPS. 
+  - → контейнер Docker читает `.tf` 
+  -  → обращается по HTTPS к API **Timeweb**/**Serverspace** 
+  -  → облако создаёт VPS. 
 
 Ни **Timeweb**, ни **Serverspace**, ни _HashiCorp Cloud_ **не выполняют** ваш `terraform apply` вместо вас.
 
@@ -206,6 +208,7 @@ services:
 Все команды — через локальный Docker:
 
 ```bash
+
 ./scripts/terraform-docker.sh plan
 ./scripts/terraform-docker.sh apply
 ```
@@ -242,7 +245,9 @@ services:
 
 ```bash
 # Из корня репозитория (Git Bash):
-cd '/d/Project_infra/greeting-service-infra'
+
+cd '/d/Project_infra/greeting-service-infra/infra/terraform-serverspace'
+
 chmod +x scripts/terraform-docker.sh   # один раз, если нет права на запуск
 ./scripts/terraform-docker.sh init
 ./scripts/terraform-docker.sh plan -out=tfplan

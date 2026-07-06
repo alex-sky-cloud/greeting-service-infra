@@ -269,57 +269,116 @@ Flux<User> many = userRepository.findAll();
 
 ## 4. Backpressure (обратное давление)
 
-> **Аналогия:** Официант приносит **порциями по три** блюда — вы съели → просите ещё три. Не вываливает все 50 тарелок сразу.
 
-![§4 Backpressure](../Images-docs/reactor-concept-04.png)
+
+## 4. Backpressure (обратное давление)
+
+> **Аналогия:** Официант приносит **порциями по три** блюда — вы съели → просите ещё три. Не вываливает все 50 тарелок сразу.
 
 **Ответ:**
 
 1. Источник может отдавать данные **быстрее**, чем вы обрабатываете.
-2. Подписчик через **`Subscription.request(n)`** говорит: «готов принять **n** штук».
-3. Простой **`subscribe()`** внутри запрашивает «сколько угодно» (`Long.MAX_VALUE`). Для **`Mono`** — OK. Для миллионов строк **`Flux`** — риск памяти → нужны операторы ниже.
+2. Подписчик через `Subscription.request(n)` говорит: «готов принять n штук».
+3. Простой `subscribe()` внутри запрашивает «сколько угодно» (`Long.MAX_VALUE`). Для `Mono` — OK. Для миллионов строк `Flux` — риск памяти → нужны операторы ниже.
 
----
+Официальное описание механизма:
+
+> "A subscriber can work in *unbounded* mode and let the source push all the data at its fastest achievable rate or it can use the `request` mechanism to signal the source that it is ready to process at most `n` elements."
+
+Перевод:
+
+> «Подписчик может работать в *неограниченном* режиме, позволяя источнику слать данные с максимальной скоростью, либо использовать механизм `request`, чтобы сообщить источнику, что готов обработать не более `n` элементов.»
+
+Источник: https://projectreactor.io/docs/core/3.6.3/reference
+
+***
+
+### Где физически лежат данные — очередь vs пул потоков
+
+Это два **разных объекта**, их нельзя путать:
+
+**Очередь (buffer/queue)** — обычная структура данных в памяти JVM (массив или связный список), находится **внутри конкретного оператора**. Она хранит элементы, которые уже пришли от источника, но ещё не обработаны подписчиком. Кода она не выполняет.
+
+**Scheduler (пул потоков)** — набор потоков ОС, которые **выполняют** код операторов (`map`, `flatMap` и т.д.). Он ничего не хранит.
+
+> "Some operators also implement **prefetching** strategies, which avoid `request(1)` round-trips."
+
+Перевод:
+
+> «Некоторые операторы также реализуют стратегии **prefetching** (предварительной загрузки), которые позволяют избежать множества round-trip вызовов `request(1)`.»
+
+Источник: https://projectreactor.io/docs/core/3.6.3/reference
+
+**Проще**:
+элемент сначала кладётся в **очередь** оператора → затем берётся оттуда и **обрабатывается** в потоке, который выделил Scheduler. Очередь — «склад», Scheduler — «рабочие руки». Разные задачи.
+
+***
 
 ### `limitRate` — просить порциями
 
 **Исходник** (`Flux.java`):
 
 ```java
-
 /**
  * Ensure that backpressure signals from downstream subscribers are capped
  * at the provided prefetchRate.
+ * (Гарантирует, что сигналы backpressure от подписчика ограничены
+ * значением prefetchRate — то есть подписчик не может запросить
+ * больше элементов за раз, чем указано)
  */
 public final Flux<T> limitRate(int prefetchRate) {
     return onAssembly(this.publishOn(Schedulers.immediate(), prefetchRate));
 }
 ```
 
-**Пояснение:** downstream не сможет запросить больше `prefetchRate` элементов за раз — источник отдаёт **порциями**.
+**Пояснение:** downstream не сможет запросить больше `prefetchRate` элементов за раз — источник отдаёт **порциями**. Важно: оператор **ничего не буферизует сам по себе** — он просто регулирует размер `request`.
 
-**Пример:**
+**Реальный пример** (рассылка приветственных писем новым пользователям из БД через R2DBC):
 
 ```java
+Flux<User> newUsers = userRepository.findByOnboardingStatus("PENDING");
 
-Flux.range(1, 1_000_000)
-    .limitRate(10)                    // не больше 10 за запрос
-    .doOnNext(n -> System.out.println(n))
-    .blockLast();
-// в логе видно: запросы идут порциями, а не «все миллион сразу»
+newUsers
+    .limitRate(50)                                        // читаем из БД пачками по 50
+    .flatMap(user -> emailService.sendWelcomeEmail(user))  // асинхронный вызов, Mono<Void>
+    .subscribe(
+        v -> {},
+        error -> log.error("Email send failed", error)
+    );
 ```
 
----
+**Как это работает по шагам** (диаграмма ниже):
+
+1. `limitRate(50)` вызывает `request(50)` у R2DBC-драйвера.
+2. Драйвер открывает **курсор** на стороне PostgreSQL и делает `FETCH 50` — просит у сервера БД именно 50 строк.
+3. PostgreSQL читает 50 строк с диска и шлёт их по сети драйверу.
+4. Драйвер конвертирует их в Java-объекты и вызывает `onNext` 50 раз.
+5. Как только эти 50 обработаны, `flatMap` сигнализирует о готовности, `limitRate` снова шлёт `request(50)`.
+
+![limitRate](./images/limitRate.png)
+
+Важно: **остальные 999 950 строк всё это время физически лежат на диске сервера БД**, а не в памяти Java-приложения. Java-очереди на миллион элементов не существует — в этом смысл backpressure на уровне протокола.
+
+> "R2DBC is fully reactive and backpressure-aware all the way down to the database wire protocol."
+
+Перевод:
+> «R2DBC полностью реактивен и учитывает backpressure вплоть до самого протокола общения с базой данных.»
+
+Источник: https://r2dbc.github.io
+
+***
 
 ### `onBackpressureBuffer` — склад для лишнего
 
 **Исходник** (`Flux.java`):
 
 ```java
-
 /**
  * Request an unbounded demand and push to the returned Flux, or park elements
  * when not enough demand is requested downstream.
+ * (Запрашивает у источника неограниченное количество элементов и передаёт их
+ * дальше; если подписчик не успевает — временно "паркует" (складывает)
+ * элементы в буфер)
  */
 public final Flux<T> onBackpressureBuffer() {
     return onAssembly(new FluxOnBackpressureBuffer<>(this,
@@ -331,195 +390,408 @@ public final Flux<T> onBackpressureBuffer(int maxSize) {
 }
 ```
 
-**Пояснение:** если потребитель отстаёт — элементы **складываются в буфер** (ограниченный `maxSize` или нет).
+**Пояснение:**
 
-**Пример:**
+- если потребитель отстаёт — элементы **складываются в буфер** (ограниченный `maxSize` или нет).
+- **Буфер** — это конкретная структура данных: **очередь** фиксированного или неограниченного размера (внутри Reactor используются реализации вроде `SpscLinkedArrayQueue`), физически хранящая объекты в памяти JVM, пока подписчик их не заберёт.
+
+**Реальный пример** (события заказов из Kafka, обработка — HTTP-вызов в аналитический сервис):
 
 ```java
+Flux<OrderEvent> kafkaEvents = kafkaReceiver.receive()
+    .map(record -> record.value());
 
-Flux.interval(Duration.ofMillis(1))     // источник быстрый
-    .onBackpressureBuffer(100)           // склад максимум 100 значений
-    .delayElements(Duration.ofSeconds(1)) // обработка медленная
-    .take(5)
-    .blockLast();
+kafkaEvents
+    .onBackpressureBuffer(10_000)                        // очередь на 10 000 событий в памяти
+    .flatMap(event -> analyticsClient.send(event), 20)    // не более 20 параллельных HTTP-вызовов
+    .subscribe(
+        v -> {},
+        error -> log.error("Analytics send failed", error)
+    );
 ```
 
----
+**Как это работает по шагам, и почему event loop не блокируется:**
+
+1. Kafka Consumer быстро шлёт события через `onNext`.
+2. `onBackpressureBuffer(10_000)` — события **складываются в очередь в памяти**, если `flatMap` ещё не готов их забрать. Поток **Kafka Consumer** не ждёт — кладёт элемент и продолжает читать дальше.
+3. `flatMap(mapper, 20)` держит **20 "слотов"**. Он берёт из очереди по одному событию на каждый свободный слот и вызывает `analyticsClient.send(event)`.
+4. Каждый `send()` — асинхронный HTTP-вызов через Netty. Сокет регистрируется в неблокирующем I/O ОС (epoll/kqueue), и поток event loop **немедленно освобождается** для других задач — никакой блокировки нет.
+5. Когда ответ приходит по сети, ОС уведомляет event loop через callback.
+6. Слот в `flatMap` освобождается → вызывается `request(1)` у очереди → берётся следующее событие.
+
+![flatMapOnBackpressure](./images/flatMapOnBackpressure.png)
+
+> "The concurrency argument controls how many inner publishers can be subscribed to and merged in parallel."
+
+Перевод:
+> «Аргумент concurrency определяет, сколько внутренних Publisher'ов может быть подписано и объединено параллельно.»
+
+Источник: https://eherrera.net/project-reactor-course/03-working-with-map-and-flatmap/flatmap.html
+
+**Риск:** если поток событий стабильно быстрее обработки → очередь на 10 000 переполнится и Reactor выбросит `OverflowException`.
+
+***
+
+## Чем подтверждается механизм "слотов"
+
+В исходном коде reactor-core, в классе `FluxFlatMap` (внутренний класс `FlatMapMain`), параметр `maxConcurrency` используется буквально:
+- при подписке у источника сразу запрашивается ровно столько элементов, сколько указано в `concurrency` (через вызов вида `s.request(Operators.unboundedOrPrefetch(maxConcurrency))`), а для каждого полученного элемента создаётся объект-подписчик `FlatMapInner`, который добавляется в служебный массив-трекер.
+
+Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxFlatMap.java
+
+- Когда один из внутренних **Publisher**'ов завершается, у главного источника запрашивается ещё один элемент, освобождая место для следующего — именно этот механизм и создаёт эффект "фиксированного числа слотов".
+
+Официальная трактовка этого параметра дана в учебном курсе по Project Reactor:
+
+> "The concurrency argument controls how many inner publishers can be subscribed to and merged in parallel."
+
+Перевод:
+
+> "Аргумент concurrency определяет, сколько внутренних Publisher'ов может быть подписано и объединено параллельно."
+
+Источник: https://eherrera.net/project-reactor-course/03-working-with-map-and-flatmap/flatmap.html
+
+## Что такое "слот" физически
+
+- "**Слот**" — это не поток и не объект операционной системы, а просто ячейка в массиве Java-объектов внутри трекера flatMap, каждая из которых хранит ссылку на активную подписку (Subscription) на один внутренний Publisher — в вашем примере это подписка на результат `analyticsClient.send(event)`.
+- Когда подписка завершается, ячейка освобождается, и **upstream** получает запрос на следующий элемент из очереди `onBackpressureBuffer`.
+
+Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxFlatMap.java
+
+## Откуда цифра "20" в вашем примере
+
+- Число 20 в `flatMap(mapper, 20)` — это буквально значение параметра `concurrency`, которое сохраняется в поле `maxConcurrency` и используется именно как лимит запроса у источника, описанный выше.
+- Статья Baeldung подтверждает ту же семантику на уровне API:
+    - **flatMap** асинхронно трансформирует элементы, а версия с указанием **concurrency** ограничивает число одновременно обрабатываемых внутренних Publisher'ов.
+
+Источник: https://www.baeldung.com/java-reactor-map-flatmap
+
+## А как же "параллельно", если это один event loop
+
+- Слово "параллельно" в реактивном контексте означает не одновременное выполнение кода на CPU, а число одновременно "в процессе" (in-flight) асинхронных операций. Поток **event loop** физически один — каждый Netty event loop это один поток, выполняющий код строго последовательно.
+
+Источник: https://cosysoft.org/blog/4345jbi341-spring-webflux-na-realnih-proektah-chto
+
+- Когда вызывается `analyticsClient.send(event)`, Netty регистрирует **TCP-сокет** в неблокирующем I/O операционной системы (epoll/kqueue) и не ждёт ответа — вызов возвращается почти мгновенно, а поток идёт выполнять следующую задачу.
+- "20 параллельных вызовов" значит, что до 20 таких сокетов могут одновременно находиться в состоянии "запрос отправлен, ответ ещё не пришёл" — именно эти операции физически идут параллельно на уровне сети и ядра ОС, а не на уровне вашего Java-потока.
+
+- Дополнительно про параметр **prefetch** в связке с flatMap и распределением задач по "рельсам" разбирается в статье на Habr:
+
+Источник: https://habr.com/ru/companies/gazprombank/articles/562482/
+
+Поэтому корректная формулировка звучит так:
+- до **20 асинхронных операций** могут **одновременно** быть в состоянии ожидания результата, и как только у любой из них ОС сигнализирует о готовности данных, единственный поток **event loop** быстро обрабатывает этот результат и, если освободился слот, запрашивает следующий элемент из буфера.
+
+
+***
 
 ### `onBackpressureDrop` — лишнее выбросить
 
 **Исходник** (`Flux.java`):
 
 ```java
-
-/** Drop observed elements if not enough demand is requested downstream. */
+/**
+ * Drop observed elements if not enough demand is requested downstream.
+ * (Отбрасывает наблюдаемые элементы, если подписчик не запросил
+ * достаточное количество — то есть спроса не хватает)
+ */
 public final Flux<T> onBackpressureDrop() {
     return onAssembly(new FluxOnBackpressureDrop<>(this));
 }
 ```
 
-**Пояснение:** нет места / нет demand → элемент **отбрасывается** (актуально, когда важнее **последнее** значение, а не все подряд).
+**Пояснение:** нет спроса (`request`) → элемент **отбрасывается**, очередь при этом вообще не создаётся (в отличие от `onBackpressureBuffer`). Актуально, когда важнее **последнее/текущее** значение, а не все подряд.
 
-**Пример:**
+**Реальный пример** (метрики CPU/памяти сервиса, отправляемые в дашборд):
 
 ```java
+Flux<SystemMetric> metrics = metricsCollector.stream(); // тикает каждые 100 мс
 
-Flux.range(1, 100)
-    .onBackpressureDrop()
-    .map(n -> { Thread.sleep(100); return n; })  // медленный потребитель
-    .take(3)
-    .collectList()
-    .block();
-// часть чисел потеряна — это ожидаемо
+metrics
+    .onBackpressureDrop(dropped -> log.warn("Metric dropped: {}", dropped))
+    .flatMap(metric -> dashboardClient.push(metric), 5)  // максимум 5 параллельных отправок
+    .subscribe();
 ```
 
----
+**Пошаговый алгоритм — когда именно срабатывает drop:**
+
+1. `metrics` тикает каждые 100 мс, приходят метрики №1 – №5.
+2. `flatMap(mapper, 5)` — 5 слотов, все заняты: `push(#1)`...`push(#5)` улетели асинхронно.
+3. Приходит метрика **№6**. `flatMap` физически не может её взять — слотов нет, `request` для нового элемента не приходил.
+4. Именно в этот момент срабатывает `onBackpressureDrop`: он видит, что спроса нет → **выбрасывает метрику №6**.
+5. Передан `Consumer` (`dropped -> log.warn(...)`) — он вызывается с выброшенным элементом → лог `"Metric dropped: 6"`.
+6. Когда ответ на `push(#1)` приходит, слот освобождается, `flatMap` шлёт `request(1)` — следующая метрика примется нормально.
+
+![onBackpressureDrop](./images/onBackpressureDrop.png)
+
+> "onBackpressureDrop(Consumer): Drops any items produced above what was requested and calls the given Consumer for each dropped item."
+
+Перевод:
+
+> «**onBackpressureDrop** с **Consumer**: отбрасывает любые элементы, произведённые сверх запрошенного количества, и вызывает переданный **Consumer** для каждого отброшенного элемента.»
+
+Источник: http://www.adamldavis.com/blog/2020/03.html
+
+***
 
 ### `onBackpressureLatest` — только последнее
 
 **Исходник** (`Flux.java`):
 
 ```java
-
-/** Keep only the most recent observed item if not enough demand downstream. */
+/**
+ * Keep only the most recent observed item if not enough demand downstream.
+ * (Сохраняет только самый последний наблюдаемый элемент, если подписчик
+ * не успевает его забрать)
+ */
 public final Flux<T> onBackpressureLatest() {
     return onAssembly(new FluxOnBackpressureLatest<>(this));
 }
 ```
 
-**Пояснение:** пока вы заняты, источник **перезаписывает** значение — вы получите **самое свежее**.
+**Пояснение:**
+- пока подписчик занят, источник **перезаписывает** значение — вы получите **самое свежее**. В отличие от **буфера**, здесь хранится не очередь, а буквально **одна ячейка памяти**.
 
-**Пример:**
+**Реальный пример** (котировки акций для UI, где важна только последняя цена):
 
 ```java
 
-Flux.interval(Duration.ofMillis(10))
+Flux<StockPrice> priceStream = stockFeed.subscribe("AAPL"); // тикает часто
+
+priceStream
     .onBackpressureLatest()
-    .map(n -> { Thread.sleep(500); return n; })
-    .take(2)
-    .collectList()
-    .block();
-// номера «перескакивают» — в списке не 0,1,2,3… а большие числа
+    .flatMap(price -> uiPushService.send(price), 1) // UI обновляется строго по одному
+    .subscribe();
 ```
 
----
+**Пошаговый алгоритм — что и когда перезаписывается:**
+
+1. Приходит цена **100.1**.
+- `flatMap(mapper, 1)` — 1 слот, занимает его:
+    - `send(100.1)` начал выполняться (например, рендер через **WebSocket**, ещё не завершился).
+2. Приходит цена **100.3** — `onBackpressureLatest` кладёт её в свою **единственную ячейку**.
+3. Приходит цена **100.5** — **перезаписывает** ячейку поверх **100.3**. Цена **100.3** потеряна.
+4. Приходит цена **100.7** — снова перезаписывает ячейку.
+5. Когда `send(100.1)` завершается, слот освобождается, вызывается `request(1)`.
+6. `onBackpressureLatest` отдаёт то, что сейчас в ячейке — **100.7**.
+- Значения **100.3** и **100.5** никогда не отправятся в **UI**.
+
+![onBackpressureLatest](./images/onBackpressureLatest.png)
+> "**onBackpressureLatest** ensures that if the subscriber can't keep up, it will only get the most recent value emitted by the producer, discarding any previous values that have not been processed yet."
+
+Перевод:
+> «**onBackpressureLatest** гарантирует, что если **подписчик** не успевает, он получит только **самое последнее** значение от источника, **отбросив** все предыдущие **необработанные значения**.»
+
+Источник: https://blog.devops.dev/managing-back-pressure-in-reactive-streams-c64f91a10adf
+
+***
 
 ### `subscribe()` и unbounded request
 
 **Исходник** (`Mono.java`):
 
 ```java
-
 /**
- * Subscribe a Consumer to this Mono …
- * It will request an unbounded demand (Long.MAX_VALUE).
+ * Subscribe a Consumer to this Mono that can terminate either successfully
+ * or with an error. It will request an unbounded demand (Long.MAX_VALUE).
+ * (Подписывает Consumer на этот Mono, который завершится либо успехом,
+ * либо ошибкой. При этом запрашивается неограниченный спрос —
+ * Long.MAX_VALUE)
  */
 public final Disposable subscribe(Consumer<? super T> consumer) {
     return subscribe(consumer, null, null);
 }
 ```
 
-**Пояснение:** «unbounded» = подписчик сразу говорит источнику «отдай всё, что можешь». Для **одного** элемента (`Mono.just("a")`) это безопасно.
+**Пояснение:** «**unbounded**» означает, что **подписчик** сразу говорит **источнику** «отдай всё, что можешь». Для одного элемента (`Mono.just("a")`) это безопасно — источник физически не может прислать больше одного значения. Для миллионов строк `Flux` это риск, если **downstream** не успевает
+- поэтому лучше применять операторы описанные выше.
+
+***
+
+### Когда что использовать
+
+| Оператор | Что делает с "лишними" элементами               | Где хранятся данные                                                                | Когда использовать                                                                                                                                   |
+| :-- |:------------------------------------------------|:-----------------------------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `limitRate` | Ничего не хранит, уменьшает размер `request`    | Нигде не храниться, а только регулирует спрос на источник                          | Источником данных является — БД/API, важно не перегрузить его запросом                                                                               |
+| `onBackpressureBuffer` | Складывает в очередь                            | В памяти JVM, реальная очередь ограниченного размера                               | Используется, когда **нельзя терять** данные (Kafka, события заказов)                                                                                |
+| `onBackpressureDrop` | Выбрасывает                                     | Нигде не хранит промежуточные данные, очередь не создаётся                         | Используется, когда потеря данных не критична (метрики, телеметрия)                                                                                  |
+| `onBackpressureLatest` | Перезаписывает старое значение, новым значением | Данные храняться (перезаписываются) в одной переменной (ячейка памяти), не очередь | Используется, когда в нужный момент времени (когда данные потребляются подписчиком), поэтому используется самая свежая версия данных (котировки, UI) |
 
 **Вопрос:** *What is backpressure? When do you use limitRate vs onBackpressureBuffer vs drop?*
 
-**Источник:** [Reactor — Backpressure](https://projectreactor.io/docs/core/release/reference/#backpressure)
+**Источник:** https://projectreactor.io/docs/core/release/reference/\#backpressure
 
 > **EN:** «Consumer pressure is propagated back to the source by sending a request to the upstream operator.»
 
-> **RU:** «Потребитель через request сообщает источнику, сколько элементов готов принять.»
+Перевод:
+- «Потребитель через request сообщает источнику, сколько элементов готов принять.»
+
+
 
 ---
 
 ## 5. subscribe() и block() — в чём разница
 
-> **Аналогия из жизни:** **`subscribe()`** — включили **Netflix** и занялись своими делами; сериал идёт **фоном**. **`block()`** — **замёрли перед экраном** до финала серии; ничего другого в этот момент не делаете.
+Разница между `subscribe()` и `block()` в том, кто именно ждёт результат и что происходит с текущим потоком.
 
-![§5 subscribe vs block](../Images-docs/reactor-concept-05.png)
+- `subscribe()` — запускает выполнение цепочки и возвращается сразу, текущий поток не ждёт конца обработки.
+- `block()` — подписывается и блокирует именно тот поток, из которого вызван метод, пока не будет результат или завершение.
 
+***
 
-**Ответ:**
+## Как работает subscribe()
 
-1. **`subscribe()`** — запуск в фоне; поток **не блокируется**.
-2. **`block()`** — текущий поток **ждёт** результат. Только тест / `main`. **Не** в WebFlux.
-3. **WebFlux:** `return Mono/Flux` — подписывается Spring.
-
----
-
-### `subscribe()` — исходник
+**Исходник** (`Mono.java` / `Flux.java`, упрощённо):
 
 ```java
+/**
+ * Subscribe a Consumer to this Mono …
+ * It will request an unbounded demand (Long.MAX_VALUE).
+ * (Подписывает Consumer к этому Mono и запрашивает неограниченное
+ * количество элементов — Long.MAX_VALUE)
+ */
+public final Disposable subscribe(Consumer<? super T> consumer) { … }
+```
 
-// Mono.java — запрос без лимита (Long.MAX_VALUE)
-public final Disposable subscribe(Consumer<? super T> consumer) {
-    return subscribe(consumer, null, null);
-}
+![subscribe](./images/subscribe.png)
 
-public final void subscribe(Subscriber<? super T> actual) {
-    // … цепочка операторов, в конце LambdaMonoSubscriber
+Пошагово:
+
+1. Ты вызываешь `mono.subscribe(...)` из какого-то конкретного потока — например, `main` в обычном приложении, поток Netty event-loop в WebFlux, или поток из `Schedulers.boundedElastic()`.
+2. Reactor собирает `Subscriber` и вызывает `Publisher.subscribe(subscriber)`.
+3. Дальше всё зависит от операторов: если ты не использовал `subscribeOn/publishOn` и нет операторов, переключающих потоки (например, `delayElements`), вся цепочка выполняется в том же потоке, из которого вызван `subscribe()`. Если есть `publishOn/subscribeOn`, часть работы уйдёт в потоки соответствующего Scheduler.
+
+Официальное подтверждение переключения потоков через **Scheduler**:
+
+**En:**
+> "In this post, we explore the threading model, how some (most) operators are concurrent agnostic, the Scheduler abstraction and how to hop from one thread to another."
+
+**Ru:**
+> «В этой статье мы разбираем **модель работы** с потоками, то, как большинство операторов не зависят от конкретного потока, абстракцию **Scheduler** и то, как переключаться с одного потока на другой.»
+
+Источник: https://spring.io/blog/2019/12/13/flight-of-the-flux-3-hopping-threads-and-schedulers
+
+Ключ:
+
+- сам факт вызова `subscribe()` не обязан блокировать поток, но операции внутри цепочки могут быть синхронными и выполняться в том же потоке, если ты не переключил их на Scheduler.
+
+***
+
+## Как работает block()
+
+**Исходник** (`Mono.java`):
+
+```java
+/**
+ * Subscribe to this Mono and block indefinitely until a next signal is
+ * received. Will return that value, or null if the Mono completes empty.
+ * (Подписывается на этот Mono и блокирует выполнение неограниченно
+ * долго, пока не придёт следующий сигнал. Вернёт значение, либо null,
+ * если Mono завершился пустым)
+ */
+public @Nullable T block() {
+    BlockingMonoSubscriber<T> subscriber = new BlockingMonoSubscriber<>(context);
+    subscribe((Subscriber<T>) subscriber); // здесь создаётся подписка
+    return subscriber.blockingGet();       // здесь текущий поток ждёт
 }
 ```
 
-**Пояснение:** `subscribe()` **запускает** цепочку и сразу возвращает `Disposable` — управление возвращается в ваш код.
+![block](./images/block.png)
+
+Источник: https://eherrera.net/project-reactor-course/08-working-with-blocking-calls/back-to-synchronous-types.html
+
+> "block subscribes to the Mono and blocks indefinitely until the element is received, returning that element."
+
+**Ru**:
+
+> «**block** подписывается на Mono и **блокирует** выполнение неограниченно, пока не получит элемент, возвращая этот элемент.»
+
+Что важно пояснить явно:
+
+- «Текущий поток» — это ровно тот поток, из которого ты вызвал `block()`.
+    - Если это `main` — блокируется `main`.
+    - Если это Netty event-loop (WebFlux) — ты блокируешь **event-loop**, и делать так нельзя.
+- Внутри метода: сначала вызывается обычный `subscribe(...)`, создаётся специальный `BlockingMonoSubscriber`, он ставит блокировку (через `CountDownLatch`) и ждёт сигналов `onNext`/`onComplete`/`onError`.
+
+То есть `block()` — это **синхронный мост** из реактивного мира в обычный, и этот **мост** держит поток до результата.
+
+***
+
+## Где какой поток «живёт»
+
+Чтобы не было догадок, называем вещи своими именами:
+
+- «Текущий поток» — тот поток, где написано `subscribe()` или `block()` в твоём коде.
+- **EventLoop** (Netty, WebFlux) — поток(и), обслуживающие чтение/запись сокетов, обработку HTTP-запросов и ответов.
+- **Scheduler-потоки**:
+    - `Schedulers.boundedElastic()` — пул для блокирующих задач (БД, файловая система и т.д.),
+    - `Schedulers.parallel()` — CPU-bound задачи.
+
+Источник (модель потоков Reactor): https://spring.io/blog/2019/12/13/flight-of-the-flux-3-hopping-threads-and-schedulers
+
+Рекомендации:
+
+- `block()` допустим в `main()` при запуске приложения, в миграциях, в тестах.
+- `block()` нельзя в контроллерах WebFlux, в обработчиках на Netty event-loop, в реактивных цепочках, которые должны оставаться неблокирующими.
+
+***
+
+## Что такое Disposable
+
+**Исходник:**
+
+```java
+/**
+ * Subscribe a Consumer to this Mono …
+ * Returns a Disposable that allows disposing the subscription.
+ * (Подписывает Consumer к этому Mono. Возвращает Disposable,
+ * с помощью которого можно отменить подписку)
+ */
+public final Disposable subscribe(Consumer<? super T> consumer);
+```
+
+Источник: https://www.maoudia.com/blog/reactor-disposable-management/
+
+> "Reactor Disposable provides a mechanism for managing resources, subscriptions, or actions in a reactive application."
+
+**Ru**:
+
+«**Disposable** в Reactor предоставляет механизм управления ресурсами, подписками или действиями в реактивном приложении.»
+
+Проще:
+- `Disposable` — это ручка, с помощью которой ты можешь **отменить подписку** (`dispose()`) и **освободить** связанные ресурсы (соединения, таймеры и т.д.).
 
 **Пример:**
 
 ```java
-
-Disposable d = Mono.just("hello")
-    .doOnNext(System.out::println)
+Disposable subscription = flux
+    .flatMap(service::process)
     .subscribe();
-// println может выполниться чуть позже; d.dispose() — отмена
+
+// позже, например при остановке сервиса:
+subscription.dispose(); // отменить выполнение цепочки
 ```
+***
 
----
+## Publisher, Mono, Flux
 
-### `block()` — исходник
+Правильная формулировка:
 
-```java
+- `Publisher<T>` — это интерфейс из спецификации Reactive Streams.
 
-// Mono.java
-public @Nullable T block() {
-    BlockingMonoSubscriber<T> subscriber = new BlockingMonoSubscriber<>(context);
-    subscribe((Subscriber<T>) subscriber);
-    return subscriber.blockingGet();   // поток ЗДЕСЬ ждёт
-}
-```
+Источник: https://javadoc.io/doc/org.reactivestreams/reactive-streams/latest/org/reactivestreams/Subscriber.html
 
-**Пояснение:** внутри `block()` всё равно вызывается `subscribe()`, но **текущий поток блокируется** до `onNext` / `onComplete` / `onError`.
 
-**Пример (только тест):**
+- `Mono<T>` и `Flux<T>` — конкретные реализации `Publisher` от Project Reactor:
+    - `Mono<T>` испускает максимум 1 элемент,
+    - `Flux<T>` — от 0 до N элементов.
 
-```java
 
-String value = Mono.just("hello")
-    .map(String::toUpperCase)
-    .block();          // OK в тесте
-// value == "HELLO"
-```
+Источник: https://projectreactor.io/docs/core/release/reference/coreFeatures/simple-ways-to-create-a-flux-or-mono-and-subscribe-to-it.html
 
----
+То есть `Mono`/`Flux` — виды `Publisher`, а не «равно Publisher».
 
-### WebFlux — без subscribe/block
-
-```java
-
-@GetMapping("/{id}/email")
-public Mono<String> getEmail(@PathVariable Long id) {
-    return userRepository.findById(id)
-        .map(User::email);
-}
-```
-
-**Вопрос:** *What is the difference between block() and subscribe()?*
-
-**Источник:** [Reactor — Backpressure / subscribing](https://projectreactor.io/docs/core/release/reference/#backpressure)
-
-> **EN:** «subscribe() and block(), blockFirst(), blockLast() immediately trigger an unbounded request of Long.MAX_VALUE.»
-
-> **RU:** «subscribe() и block() сразу запрашивают неограниченное количество элементов (Long.MAX_VALUE).»
-
----
+***
 
 ## 6. map и flatMap — когда что использовать
 
@@ -649,6 +921,34 @@ Flux.just(1L, 2L)
 // Flux<UserResponse>
 ```
 
+## flatMap — inner-потоки и их «переплетение»
+
+Когда используется `flatMap`, каждый элемент исходного потока превращается во **внутренний Publisher** (inner publisher) — то есть в новый поток данных, порождённый функцией-преобразователем для конкретного элемента.
+
+**Пример** (реальная задача — получить заказы нескольких активных пользователей):
+
+```java
+Flux<UserId> userIds = userService.activeUserIds();
+
+Flux<Order> orders = userIds
+    .flatMap(id -> orderRepository.findByUserId(id)); // каждый вызов возвращает Flux<Order>
+```
+
+Здесь `userIds` — внешний `Flux`,
+- а каждый вызов `orderRepository.findByUserId(id)` — это **inner** _Flux_, порождённый для конкретного `id`.
+
+Источник: https://stackoverflow.com/questions/64072896/how-does-backpressure-work-in-flatmap-operator-of-project-reactor
+
+Официальная механика:
+- `flatMap` может подписываться сразу на несколько **inner Publisher** и **обрабатывать** их **одновременно** (параллельно, в терминах _**порядка прихода данных**_), количество одновременных inner-подписок ограничивается параметром `concurrency`.
+    - Поэтому элементы разных внутренних потоков могут «переплетаться» в итоговом Flux:
+        - сначала часть заказов пользователя 1,
+        - затем пользователя 2,
+        - затем снова пользователя 1 и так далее — **порядок** исходных id **не сохраняется**.
+
+![flatMap](./images/flatMap.png)
+***
+
 ---
 
 ### `Flux.concatMap` — исходник (порядок)
@@ -670,6 +970,51 @@ public final <R> Flux<R> concatMap(
 
 ---
 
+## concatMap — зачем нужен и как работает
+
+**Исходник** (`Flux.java`):
+
+```java
+/**
+ * Transform the elements emitted by this Flux asynchronously into Publishers,
+ * then flatten these inner publishers into a single Flux, executing them
+ * one after the other and preserving order.
+ * (Асинхронно преобразует элементы этого Flux в Publisher, затем
+ * разворачивает эти внутренние publisher'ы в единый Flux, выполняя их
+ * строго по очереди, сохраняя порядок исходных элементов)
+ */
+public final <V> Flux<V> concatMap(Function<? super T, ? extends Publisher<? extends V>> mapper)
+```
+
+Источник: https://www.javacodegeeks.com/2020/07/backpressure-in-project-reactor.html
+
+> "concatMap is similar to flatMap but concatenates inner sequences, processing them one after the other, preserving order."
+
+**Ru**:
+> «**concatMap** похож на flatMap, но **объединяет** внутренние **последовательности**, обрабатывая их одну за другой, **сохраняя порядок**.»
+
+**Пример:**
+
+```java
+Flux<Long> ids = Flux.just(1L, 2L, 3L);
+
+ids.concatMap(id -> userRepository.findById(id))
+   .subscribe();
+```
+
+Принцип, по которому `concatMap` сохраняет порядок (пошагово):
+
+1. Берётся `id = 1`, вызывается `userRepository.findById(1)` — это отдельный **inner-Publisher**.
+2. `concatMap` **ждёт**, пока этот inner-Publisher полностью завершится (`onComplete`), и только после этого подписывается на следующий.
+3. Берётся `id = 2`, вызывается `findById(2)`, снова полное ожидание завершения.
+4. Берётся `id = 3`, и так далее.
+
+То есть сортировки как таковой нет — есть строгая **последовательная подписка**:
+- следующий **inner-Publisher** создаётся только после завершения предыдущего, поэтому порядок результатов всегда совпадает с порядком исходных элементов. Плата за это — **отсутствие параллелизма**: если один запрос выполняется долго, все последующие ждут.
+
+![concatMap](./images/concatMap.png)
+***
+
 ### Одно правило
 
 | Что пишете в лямбде после `->` | Оператор |
@@ -677,7 +1022,8 @@ public final <R> Flux<R> concatMap(
 | `user.email()`, `UserResponse.from(u)`, `"hello"` | **`map`** |
 | `userRepository.findById(id)`, `webClient.get()…bodyToMono(...)` | **`flatMap`** |
 
-**Не путайте:** «можно ли вызвать БД в map» — можно, но если метод репозитория возвращает **`Mono<User>`**, в `map` вы кладёте в поток **сам Mono**, а не User. Reactor **не подписывается** на него автоматически. Нужен **`flatMap`**.
+**Не путайте:** 
+  - «можно ли вызвать БД в map» — можно, но если метод репозитория возвращает **`Mono<User>`**, в `map` вы кладёте в поток **сам Mono**, а не User. Reactor **не подписывается** на него автоматически. Нужен **`flatMap`**.
 
 ---
 
@@ -837,13 +1183,60 @@ Mono.just(userId)
 // Flux<Order>
 ```
 
+## flatMapMany — превращает Mono в Flux
+
+**Исходник** (`Mono.java`):
+
+```java
+/**
+ * Transform the item emitted by this Mono into a Publisher, then forward
+ * its emissions into the returned Flux.
+ * (Преобразует элемент, испущенный этим Mono, в Publisher, а затем
+ * передаёт все его элементы в итоговый Flux)
+ */
+public final <R> Flux<R> flatMapMany(
+        Function<? super T, ? extends Publisher<? extends R>> mapper) {
+    return Flux.onAssembly(new MonoFlatMapMany<>(this, mapper));
+}
+```
+
+Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html
+
+Зачем нужен:
+- у тебя есть `Mono<T>` (ровно 1 элемент), но по этому элементу нужно получить много результатов — например, есть один `userId`, а нужны все его заказы.
+
+**Пример:**
+
+```java
+Mono<UserId> userIdMono = authService.currentUserId();
+
+Flux<Order> orders = userIdMono
+    .flatMapMany(id -> orderRepository.findByUserId(id));
+```
+
+Что происходит пошагово:
+
+1. `userIdMono` выдаёт ровно один элемент — `userId`.
+2. `flatMapMany` применяет `mapper`: вызывает `orderRepository.findByUserId(id)`, что возвращает `Flux<Order>`.
+3. Этот внутренний `Flux<Order>` «разворачивается» — его элементы становятся элементами итогового потока.
+4. Дальше с `orders` можно работать как с обычным `Flux` (`filter`, `map`, `collect` и т.д.).
+
+Это удобный **мост**:
+- один элемент на входе → много элементов на выходе.
+
+![flatMapMany](./images/flatMapMany.png)
+
+***
+
 **Вопрос:** *What is the difference between map and flatMap in Project Reactor?*
 
 **Источник:** [Reactor — which operator](https://projectreactor.io/docs/core/release/reference/#which-operator)
 
 > **EN:** «map applies a function returning a new element; flatMap applies a function that returns a Publisher, merging elements into a single output stream.»
 
-> **RU:** «map возвращает новый элемент; flatMap — Publisher, элементы которого сливаются в один поток.»
+> **RU:** 
+>  - «map возвращает новый элемент; 
+>  - flatMap — возвращает inner-Publisher, элементы которого сливаются в один поток.»
 
 ---
 
