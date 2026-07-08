@@ -1,15 +1,20 @@
-# Reactor: cold/hot, share/cache/replay/refCount + Spring WebClient examples
+
+# Reactor: 
+ - cold Publisher/hot Publisher, 
+ - share/cache/replay/refCount
+    - Spring WebClient examples
 
 ## Оглавление
 
-- [1. Базовые понятия](#1-базовые-понятия)
-- [2. Когда использовать что](#2-когда-использовать-что)
-- [3. Структура примера](#3-структура-примера)
-- [4. `@Configuration` и `WebClient`-бины](#4-configuration-и-webclient-бины)
-- [5. Минимальные DTO](#5-минимальные-dto)
-- [6. Клиенты и сервисы](#6-клиенты-и-сервисы)
+- [1. Базовые понятия](#1-%D0%B1%D0%B0%D0%B7%D0%BE%D0%B2%D1%8B%D0%B5-%D0%BF%D0%BE%D0%BD%D1%8F%D1%82%D0%B8%D1%8F)
+- [2. Когда использовать что](#2-%D0%BA%D0%BE%D0%B3%D0%B4%D0%B0-%D0%B8%D1%81%D0%BF%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D1%8C-%D1%87%D1%82%D0%BE)
+- [3. Структура примера](#3-%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D0%B0-%D0%BF%D1%80%D0%B8%D0%BC%D0%B5%D1%80%D0%B0)
+- [4. `@Configuration` и `WebClient`-бины](#4-configuration-%D0%B8-webclient-%D0%B1%D0%B8%D0%BD%D1%8B)
+- [5. Минимальные DTO](#5-%D0%BC%D0%B8%D0%BD%D0%B8%D0%BC%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B5-dto)
+- [6. Клиенты и сервисы](#6-%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D1%8B-%D0%B8-%D1%81%D0%B5%D1%80%D0%B2%D0%B8%D1%81%D1%8B)
 - [7. `DemoRunner`](#7-demorunner)
-- [8. Что должно быть видно в логах](#8-что-должно-быть-видно-в-логах)
+- [8. Что должно быть видно в логах](#8-%D1%87%D1%82%D0%BE-%D0%B4%D0%BE%D0%BB%D0%B6%D0%BD%D0%BE-%D0%B1%D1%8B%D1%82%D1%8C-%D0%B2%D0%B8%D0%B4%D0%BD%D0%BE-%D0%B2-%D0%BB%D0%BE%D0%B3%D0%B0%D1%85)
+
 
 ## 1. Базовые понятия
 
@@ -18,17 +23,20 @@
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
 > "They generate data anew for each subscription. If no subscription is created, data never gets generated."
->
-> **Ru**: 
+
+**Ru**:
+
 > "Они заново генерируют данные для каждой подписки. Если подписка не создана, данные вообще не генерируются."
 
-Практический смысл для Spring WebFlux такой: если один и тот же `Mono` с HTTP-вызовом подписать два раза, то обычно будут выполнены два отдельных запроса.
+Практический смысл для Spring WebFlux такой: 
+ - если один и тот же `Mono` с HTTP-вызовом подписать два раза, то обычно будут выполнены два отдельных запроса.
 
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
 > "Think of an HTTP request: Each new subscriber triggers an HTTP call, but no call is made if no one is interested in the result."
->
-> **Ru**: 
+
+**Ru**:
+
 > "Представь HTTP-запрос: каждый новый подписчик запускает HTTP-вызов, а если результат никому не нужен, вызова вообще не будет."
 
 **Hot publisher** — это источник, который не обязан пересоздаваться заново для каждого нового подписчика.
@@ -36,8 +44,9 @@
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
 > "Hot publishers, on the other hand, do not depend on any number of subscribers."
->
-> **Ru**: 
+
+**Ru**:
+
 > "Hot publishers, напротив, не зависят от количества подписчиков."
 
 - Если подписчик подключился поздно к уже идущему **hot**-потоку, он обычно видит только новые элементы после своей подписки.
@@ -45,41 +54,45 @@
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
 > "...the subscriber would see only new elements emitted after it subscribed."
->
-> **Ru**: 
->  "...подписчик увидит только новые элементы, которые были отправлены после того, как он подписался."
 
- - `share()` и `replay(...)` используются, чтобы превратить **cold**-источник в общий **hot**-поток.
+Ru:
+
+> "...подписчик увидит только новые элементы, которые были отправлены после того, как он подписался."
+
+- `share()` и `replay(...)` используются, чтобы превратить **cold**-источник в общий **hot**-поток.
 
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
 > "On the opposite, `share()` and `replay(…​)` can be used to turn a cold publisher into a hot one (at least once a first subscription has happened)."
->
-> **Ru**: 
+
+**Ru**:
+
 > "Напротив, `share()` и `replay(...)` можно использовать, чтобы превратить cold-источник в hot-источник (по крайней мере после первой подписки)."
 
- - Для `Flux` оператор `share()` по смыслу эквивалентен `publish().refCount()`.
+- Для `Flux` оператор `share()` по смыслу эквивалентен `publish().refCount()`.
 
-**Источник:** https://stackoverflow.com/questions/56922389/why-project-reactors-mono-doesnt-have-a-share-operator
+**Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
-> "`share()` is equivalent to you calling `publish().refcount()` on your Flux."
->
-> **Ru**: 
->  "`share()` эквивалентен вызову `publish().refCount()` на `Flux`."
+> "On the opposite, `share()` and `replay(…​)` can be used to turn a cold publisher into a hot one..."
+
+**Ru**:
+
+> "`share()` используют, чтобы сделать поток общим hot-потоком."
 
 `Mono.cache()` нужен в тех случаях, когда результат дорого получить, но потом его нужно быстро отдавать следующим подписчикам без нового вызова источника.
 
-**Источник:** https://www.javacodegeeks.com/using-reactor-mono-cache-for-memoization-in-spring.html
+**Источник:** https://projectreactor.io/docs/core/3.4.8/api/reactor/core/publisher/Mono.html
 
-> "The Mono.cache() operator in Project Reactor allows you to cache the result of a Mono and replay it to subsequent subscribers."
->
-> **Ru**: 
-> "Оператор `Mono.cache()` в Project Reactor позволяет закэшировать результат `Mono` и переигрывать его последующим подписчикам."
+> "Turn this Mono into a hot source and cache last emitted signals for further Subscriber."
+
+Ru:
+
+> "Преобразует `Mono` в hot-источник и кэширует последний сигнал для следующих подписчиков."
 
 ## 2. Когда использовать что
 
 | Сценарий | Оператор | Смысл |
-|---|---|---|
+| :-- | :-- | :-- |
 | Каждый подписчик должен запустить свою независимую операцию | cold `Mono` / cold `Flux` | Каждый `subscribe()` заново запускает источник |
 | Несколько подписчиков должны разделить один текущий запуск | `share()` | Делится только текущий живой запуск, без истории |
 | Нужно сохранить результат и отдать его поздним подписчикам | `cache()` | Следующие подписчики получают уже готовый результат |
@@ -92,6 +105,7 @@
 
 - `infra/WebClientConfig.java`
 - `dto/*`
+- `stub/DemoStubController.java`
 - `catalog/*`
 - `fraud/*`
 - `tariff/*`
@@ -99,13 +113,16 @@
 - `market/*`
 - `DemoRunner.java`
 
-Все примеры оформлены так, чтобы их можно было взять как основу для документации или demo-проекта: 
-  - `WebClient`, 
-  - `doOnSubscribe`, 
-  - `doOnNext`, 
-  - именованные бины, 
-  - минимальные `record`-DTO и 
-  - демонстрация через `CommandLineRunner`.
+Все примеры оформлены так, чтобы их можно было взять как основу для документации или demo-проекта:
+
+- `WebClient`,
+- `doOnSubscribe`,
+- `doOnNext`,
+- именованные бины,
+- минимальные `record`-DTO,
+- демонстрация через `CommandLineRunner`.
+
+... используется один локальный API на `http://localhost:8080`, который поднимается внутри самого приложения.
 
 ## 4. `@Configuration` и `WebClient`-бины
 
@@ -139,7 +156,7 @@ public class WebClientConfig {
     public WebClient catalogWebClient(WebClient.Builder builder,
                                       ExchangeFilterFunction correlationIdFilter) {
         return builder
-            .baseUrl("http://catalog-service")
+            .baseUrl("http://localhost:8080")
             .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
             .filter(correlationIdFilter)
             .build();
@@ -150,7 +167,7 @@ public class WebClientConfig {
     public WebClient fraudWebClient(WebClient.Builder builder,
                                     ExchangeFilterFunction correlationIdFilter) {
         return builder
-            .baseUrl("http://fraud-service")
+            .baseUrl("http://localhost:8080")
             .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
             .filter(correlationIdFilter)
             .build();
@@ -161,7 +178,7 @@ public class WebClientConfig {
     public WebClient tariffWebClient(WebClient.Builder builder,
                                      ExchangeFilterFunction correlationIdFilter) {
         return builder
-            .baseUrl("http://tariff-service")
+            .baseUrl("http://localhost:8080")
             .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
             .filter(correlationIdFilter)
             .build();
@@ -172,7 +189,7 @@ public class WebClientConfig {
     public WebClient orderWebClient(WebClient.Builder builder,
                                     ExchangeFilterFunction correlationIdFilter) {
         return builder
-            .baseUrl("http://order-service")
+            .baseUrl("http://localhost:8080")
             .defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
             .filter(correlationIdFilter)
             .build();
@@ -183,13 +200,14 @@ public class WebClientConfig {
     public WebClient marketWebClient(WebClient.Builder builder,
                                      ExchangeFilterFunction correlationIdFilter) {
         return builder
-            .baseUrl("http://market-data-service")
+            .baseUrl("http://localhost:8080")
             .defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
             .filter(correlationIdFilter)
             .build();
     }
 }
 ```
+
 
 ## 5. Минимальные DTO
 
@@ -245,9 +263,90 @@ public record QuoteEvent(
 ) {}
 ```
 
+
 ## 6. Клиенты и сервисы
 
 ### 6.1 `cold Mono`: каждый `subscribe()` делает новый HTTP-вызов
+
+```java
+package com.example.demo.stub;
+
+import com.example.demo.dto.FraudCheckRequest;
+import com.example.demo.dto.FraudDecision;
+import com.example.demo.dto.OrderStatusEvent;
+import com.example.demo.dto.ProductDto;
+import com.example.demo.dto.QuoteEvent;
+import com.example.demo.dto.TariffRow;
+import com.example.demo.dto.TariffTable;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+@RestController
+public class DemoStubController {
+
+    @GetMapping("/products/{id}")
+    public Mono<ProductDto> getProduct(@PathVariable String id) {
+        return Mono.just(new ProductDto(
+                id,
+                "Demo product " + id,
+                new BigDecimal("99.90")
+            ))
+            .delayElement(Duration.ofMillis(300));
+    }
+
+    @PostMapping("/fraud/check")
+    public Mono<FraudDecision> checkFraud(@RequestBody FraudCheckRequest request) {
+        return Mono.just(new FraudDecision(
+                request.orderId(),
+                "ALLOW",
+                "stub-approved"
+            ))
+            .delayElement(Duration.ofMillis(400));
+    }
+
+    @GetMapping("/tariffs")
+    public Mono<TariffTable> getTariffs() {
+        return Mono.just(new TariffTable(
+                "v1-local",
+                List.of(
+                    new TariffRow("BY", new BigDecimal("10.50")),
+                    new TariffRow("PL", new BigDecimal("14.90")),
+                    new TariffRow("DE", new BigDecimal("19.00"))
+                )
+            ))
+            .delayElement(Duration.ofMillis(300));
+    }
+
+    @GetMapping(value = "/orders/{id}/statuses/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<OrderStatusEvent> streamStatuses(@PathVariable String id) {
+        return Flux.just(
+                new OrderStatusEvent(id, "CREATED", Instant.now()),
+                new OrderStatusEvent(id, "PAID", Instant.now().plusSeconds(1)),
+                new OrderStatusEvent(id, "PACKED", Instant.now().plusSeconds(2)),
+                new OrderStatusEvent(id, "SHIPPED", Instant.now().plusSeconds(3))
+            )
+            .delayElements(Duration.ofMillis(700));
+    }
+
+    @GetMapping(value = "/quotes/{symbol}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<QuoteEvent> streamQuotes(@PathVariable String symbol) {
+        return Flux.interval(Duration.ofMillis(500))
+            .map(i -> {
+                BigDecimal bid = new BigDecimal("1.1000")
+                    .add(new BigDecimal("0.0001").multiply(BigDecimal.valueOf(i)));
+                BigDecimal ask = bid.add(new BigDecimal("0.0002"));
+                return new QuoteEvent(symbol, bid, ask, Instant.now());
+            })
+            .take(20);
+    }
+}
+```
 
 ```java
 package com.example.demo.catalog;
@@ -305,6 +404,7 @@ public class ProductWidgetFacade {
     }
 }
 ```
+
 
 ### 6.2 `Mono.share()`: один текущий anti-fraud вызов делится между текущими подписчиками
 
@@ -399,6 +499,7 @@ class ResponseMapper {
 }
 ```
 
+
 ### 6.3 `Mono.cache()`: тарифы сохраняются и отдаются поздним подписчикам
 
 ```java
@@ -440,6 +541,7 @@ public class TariffDirectoryClient {
     }
 }
 ```
+
 
 ### 6.4 `Flux.share()`: поздний подписчик видит только live-хвост
 
@@ -490,6 +592,7 @@ public class OrderStatusStreamClient {
 }
 ```
 
+
 ### 6.5 `publish().refCount(2)`: дорогой market stream открывается только при двух подписчиках
 
 ```java
@@ -527,6 +630,7 @@ public class MarketDataClient {
     }
 }
 ```
+
 
 ## 7. `DemoRunner`
 
@@ -636,6 +740,7 @@ public class DemoRunner implements CommandLineRunner {
 }
 ```
 
+
 ## 8. Что должно быть видно в логах
 
 **Cold `Mono`**
@@ -645,8 +750,10 @@ public class DemoRunner implements CommandLineRunner {
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
 > "Think of an HTTP request: Each new subscriber triggers an HTTP call..."
->
-> Ru: "Представь HTTP-запрос: каждый новый подписчик запускает HTTP-вызов..."
+
+Ru:
+
+> "Представь HTTP-запрос: каждый новый подписчик запускает HTTP-вызов..."
 
 **`Mono.share()`**
 
@@ -654,19 +761,23 @@ public class DemoRunner implements CommandLineRunner {
 
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
-> "...`share()` ... can be used to turn a cold publisher into a hot one..."
->
-> Ru: "...`share()` можно использовать, чтобы превратить cold-источник в hot-источник..."
+> "...`share()` and `replay(…​)` can be used to turn a cold publisher into a hot one..."
+
+Ru:
+
+> "`share()` и `replay(...)` можно использовать, чтобы превратить cold-источник в hot-источник."
 
 **`Mono.cache()`**
 
 Ожидание: `tariff -> GET /tariffs` выполнится один раз, а следующие подписчики получат уже сохранённый результат.
 
-**Источник:** https://www.javacodegeeks.com/using-reactor-mono-cache-for-memoization-in-spring.html
+**Источник:** https://projectreactor.io/docs/core/3.4.8/api/reactor/core/publisher/Mono.html
 
-> "The Mono.cache() operator in Project Reactor allows you to cache the result of a Mono and replay it to subsequent subscribers."
->
-> Ru: "Оператор `Mono.cache()` в Project Reactor позволяет закэшировать результат `Mono` и переигрывать его последующим подписчикам."
+> "Turn this Mono into a hot source and cache last emitted signals for further Subscriber."
+
+Ru:
+
+> "Преобразует `Mono` в hot-источник и кэширует последний сигнал для следующих подписчиков."
 
 **`Flux.share()`**
 
@@ -675,25 +786,33 @@ public class DemoRunner implements CommandLineRunner {
 **Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
 
 > "...the subscriber would see only new elements emitted after it subscribed."
->
-> Ru: "...подписчик увидит только новые элементы, которые были отправлены после того, как он подписался."
+
+Ru:
+
+> "...подписчик увидит только новые элементы, которые были отправлены после того, как он подписался."
 
 **`replay(1)`**
 
 Ожидание: поздний подписчик сразу получит последний сохранённый статус, а потом продолжит получать live-события.
 
-**Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/reactor-hotCold.html
+**Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/advanced-broadcast-multiple-subscribers-connectableflux.html
 
-> "On the opposite, `share()` and `replay(…​)` can be used to turn a cold publisher into a hot one..."
->
-> Ru: "Напротив, `share()` и `replay(...)` можно использовать, чтобы превратить cold-источник в hot-источник..."
+> "replay buffers data seen through the first subscription, up to configurable limits (in time and buffer size), and replays it to subsequent subscribers."
+
+Ru:
+
+> "`replay` буферизует данные и затем повторно отдаёт их последующим подписчикам."
 
 **`publish().refCount(2)`**
 
 Ожидание: подключение к дорогому stream API откроется только после второго подписчика.
 
-**Источник:** https://stackoverflow.com/questions/56922389/why-project-reactors-mono-doesnt-have-a-share-operator
+**Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/advanced-broadcast-multiple-subscribers-connectableflux.html
 
-> "`share()` is equivalent to you calling `publish().refcount()` on your Flux."
->
-> Ru: "`share()` эквивалентен вызову `publish().refCount()` на `Flux`."
+> "`refCount(n)` not only automatically tracks incoming subscriptions but also detects when these subscriptions are cancelled."
+
+Ru:
+
+> "`refCount(n)` автоматически отслеживает входящие подписки и их отмену."
+
+

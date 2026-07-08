@@ -1,0 +1,65 @@
+# Порты модулей репозитория: app=8080, reactive-demo=8081, reactor-cold-hot-publisher=8082
+server:
+  port: ${demo.application.port}
+
+spring:
+  application:
+    name: reactor-cold-hot-publisher
+  profiles:
+    active: demo
+
+demo:
+  application:
+    port: 8082
+  stub-api:
+    scheme: http
+    host: localhost
+  stub-timing:
+    product-delay-ms: 300
+    fraud-delay-ms: 400
+    tariff-delay-ms: 300
+    status-element-delay-ms: 700
+    status-step-seconds: 1
+    quote-interval-ms: 500
+  stub-data:
+    product-name-prefix: "Demo product "
+    product-price: 99.90
+    fraud-status: ALLOW
+    fraud-reason: stub-approved
+    tariff-version: v1-local
+    tariff-rows:
+      - zone: BY
+        price: 10.50
+      - zone: PL
+        price: 14.90
+      - zone: DE
+        price: 19.00
+    order-statuses:
+      - CREATED
+      - PAID
+      - PACKED
+      - SHIPPED
+    quote-base-bid: 1.1000
+    quote-bid-step: 0.0001
+    quote-ask-spread: 0.0002
+    quote-max-events: 20
+  cache:
+    tariff-ttl-minutes: 10
+  runner:
+    product-id: p-100
+    fraud-order-id: ord-500
+    shared-flux-order-id: ord-700
+    replay-flux-order-id: ord-701
+    quote-symbol: EURUSD
+    cold-mono-wait-ms: 1500
+    shared-mono-wait-ms: 1500
+    cached-mono-between-requests-ms: 800
+    cached-mono-wait-ms: 1200
+    flux-late-subscriber-delay-ms: 2500
+    flux-wait-ms: 5000
+    ref-count-second-subscriber-delay-ms: 1500
+    ref-count-wait-ms: 5000
+
+logging:
+  pattern:
+    console: '%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n'

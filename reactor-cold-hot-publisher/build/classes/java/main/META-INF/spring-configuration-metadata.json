@@ -1,0 +1,283 @@
+{
+  "groups": [
+    {
+      "name": "demo",
+      "type": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties"
+    },
+    {
+      "name": "demo.application",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$Application",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getApplication()"
+    },
+    {
+      "name": "demo.cache",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$Cache",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getCache()"
+    },
+    {
+      "name": "demo.runner",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getRunner()"
+    },
+    {
+      "name": "demo.stub-api",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$StubApi",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getStubApi()"
+    },
+    {
+      "name": "demo.stub-data",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getStubData()"
+    },
+    {
+      "name": "demo.stub-timing",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getStubTiming()"
+    }
+  ],
+  "properties": [
+    {
+      "name": "demo.application.port",
+      "type": "java.lang.Integer",
+      "description": "Порт Netty; по умолчанию 8082, чтобы не пересечься с app (8080) и reactive-demo (8081).",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Application",
+      "defaultValue": 8082
+    },
+    {
+      "name": "demo.cache.tariff-ttl-minutes",
+      "type": "java.lang.Long",
+      "description": "Время жизни {@code Mono.cache()} для тарифов (минуты). YAML: {@code demo.cache.tariff-ttl-minutes}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Cache",
+      "defaultValue": 10
+    },
+    {
+      "name": "demo.runner.cached-mono-between-requests-ms",
+      "type": "java.lang.Long",
+      "description": "Пауза между двумя подписчиками cached mono.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 800
+    },
+    {
+      "name": "demo.runner.cached-mono-wait-ms",
+      "type": "java.lang.Long",
+      "description": "Пауза в конце сценария cached mono.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1200
+    },
+    {
+      "name": "demo.runner.cold-mono-wait-ms",
+      "type": "java.lang.Long",
+      "description": "Пауза после cold mono.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1500
+    },
+    {
+      "name": "demo.runner.flux-late-subscriber-delay-ms",
+      "type": "java.lang.Long",
+      "description": "Задержка «позднего» подписчика в flux-сценариях (share \/ replay).",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 2500
+    },
+    {
+      "name": "demo.runner.flux-wait-ms",
+      "type": "java.lang.Long",
+      "description": "Ожидание завершения flux-сценария.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 5000
+    },
+    {
+      "name": "demo.runner.fraud-order-id",
+      "type": "java.lang.String",
+      "description": "Id заказа для {@code Mono.share()} — {@link com.example.coldhotpublisher.DemoRunner#sharedMono}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "ord-500"
+    },
+    {
+      "name": "demo.runner.product-id",
+      "type": "java.lang.String",
+      "description": "Id товара для cold {@code Mono} — {@link com.example.coldhotpublisher.DemoRunner#coldMono}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "p-100"
+    },
+    {
+      "name": "demo.runner.quote-symbol",
+      "type": "java.lang.String",
+      "description": "Символ котировок для {@code refCount(2)} — {@link com.example.coldhotpublisher.DemoRunner#refCountFlux}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "EURUSD"
+    },
+    {
+      "name": "demo.runner.ref-count-second-subscriber-delay-ms",
+      "type": "java.lang.Long",
+      "description": "Задержка перед вторым подписчиком refCount.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1500
+    },
+    {
+      "name": "demo.runner.ref-count-wait-ms",
+      "type": "java.lang.Long",
+      "description": "Ожидание завершения refCount-сценария.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 5000
+    },
+    {
+      "name": "demo.runner.replay-flux-order-id",
+      "type": "java.lang.String",
+      "description": "Id заказа для {@code replay(1)} — {@link com.example.coldhotpublisher.DemoRunner#replayFlux}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "ord-701"
+    },
+    {
+      "name": "demo.runner.shared-flux-order-id",
+      "type": "java.lang.String",
+      "description": "Id заказа для {@code Flux.share()} — {@link com.example.coldhotpublisher.DemoRunner#sharedFlux}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "ord-700"
+    },
+    {
+      "name": "demo.runner.shared-mono-wait-ms",
+      "type": "java.lang.Long",
+      "description": "Пауза после shared mono.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1500
+    },
+    {
+      "name": "demo.stub-api.host",
+      "type": "java.lang.String",
+      "description": "Хост заглушек, YAML: {@code demo.stub-api.host}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubApi",
+      "defaultValue": "localhost"
+    },
+    {
+      "name": "demo.stub-api.scheme",
+      "type": "java.lang.String",
+      "description": "Схема URL, YAML: {@code demo.stub-api.scheme}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubApi",
+      "defaultValue": "http"
+    },
+    {
+      "name": "demo.stub-data.fraud-reason",
+      "type": "java.lang.String",
+      "description": "Текст причины fraud — {@code checkFraud}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "stub-approved"
+    },
+    {
+      "name": "demo.stub-data.fraud-status",
+      "type": "java.lang.String",
+      "description": "Статус anti-fraud — {@code checkFraud}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "ALLOW"
+    },
+    {
+      "name": "demo.stub-data.order-statuses",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Последовательность статусов заказа в SSE — {@code streamStatuses}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.product-name-prefix",
+      "type": "java.lang.String",
+      "description": "Имя товара: префикс + id — {@code getProduct}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "Demo product "
+    },
+    {
+      "name": "demo.stub-data.product-price",
+      "type": "java.math.BigDecimal",
+      "description": "Цена в ответе каталога — {@code getProduct}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-ask-spread",
+      "type": "java.math.BigDecimal",
+      "description": "Спред ask − bid — {@code streamQuotes}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-base-bid",
+      "type": "java.math.BigDecimal",
+      "description": "Начальный bid котировки — {@code streamQuotes}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-bid-step",
+      "type": "java.math.BigDecimal",
+      "description": "Приращение bid на тик — {@code streamQuotes}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-max-events",
+      "type": "java.lang.Integer",
+      "description": "Число событий в потоке котировок — {@code streamQuotes}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": 20
+    },
+    {
+      "name": "demo.stub-data.tariff-rows",
+      "type": "java.util.List<com.example.coldhotpublisher.config.DemoProperties$TariffRowData>",
+      "description": "Строки тарифов — {@code getTariffs}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.tariff-version",
+      "type": "java.lang.String",
+      "description": "Версия тарифной таблицы — {@code getTariffs}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "v1-local"
+    },
+    {
+      "name": "demo.stub-timing.fraud-delay-ms",
+      "type": "java.lang.Long",
+      "description": "{@code POST \/fraud\/check} — {@link com.example.coldhotpublisher.stub.DemoStubController#checkFraud}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 400
+    },
+    {
+      "name": "demo.stub-timing.product-delay-ms",
+      "type": "java.lang.Long",
+      "description": "{@code GET \/products\/{id}} — {@link com.example.coldhotpublisher.stub.DemoStubController#getProduct}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 300
+    },
+    {
+      "name": "demo.stub-timing.quote-interval-ms",
+      "type": "java.lang.Long",
+      "description": "Интервал тиков котировок — {@code streamQuotes}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 500
+    },
+    {
+      "name": "demo.stub-timing.status-element-delay-ms",
+      "type": "java.lang.Long",
+      "description": "Пауза между SSE-событиями статусов — {@code streamStatuses}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 700
+    },
+    {
+      "name": "demo.stub-timing.status-step-seconds",
+      "type": "java.lang.Long",
+      "description": "Шаг {@code createdAt} между статусами в потоке — {@code streamStatuses}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 1
+    },
+    {
+      "name": "demo.stub-timing.tariff-delay-ms",
+      "type": "java.lang.Long",
+      "description": "{@code GET \/tariffs} — {@link com.example.coldhotpublisher.stub.DemoStubController#getTariffs}.",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 300
+    }
+  ],
+  "hints": [],
+  "ignored": {
+    "properties": []
+  }
+}

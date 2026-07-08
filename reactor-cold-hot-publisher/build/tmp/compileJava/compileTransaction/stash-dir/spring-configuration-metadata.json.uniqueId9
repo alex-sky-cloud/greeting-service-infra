@@ -1,0 +1,249 @@
+{
+  "groups": [
+    {
+      "name": "demo",
+      "type": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties"
+    },
+    {
+      "name": "demo.application",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$Application",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getApplication()"
+    },
+    {
+      "name": "demo.cache",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$Cache",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getCache()"
+    },
+    {
+      "name": "demo.runner",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getRunner()"
+    },
+    {
+      "name": "demo.stub-api",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$StubApi",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getStubApi()"
+    },
+    {
+      "name": "demo.stub-data",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getStubData()"
+    },
+    {
+      "name": "demo.stub-timing",
+      "type": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties",
+      "sourceMethod": "getStubTiming()"
+    }
+  ],
+  "properties": [
+    {
+      "name": "demo.application.port",
+      "type": "java.lang.Integer",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Application",
+      "defaultValue": 8082
+    },
+    {
+      "name": "demo.cache.tariff-ttl-minutes",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Cache",
+      "defaultValue": 10
+    },
+    {
+      "name": "demo.runner.cached-mono-between-requests-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 800
+    },
+    {
+      "name": "demo.runner.cached-mono-wait-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1200
+    },
+    {
+      "name": "demo.runner.cold-mono-wait-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1500
+    },
+    {
+      "name": "demo.runner.flux-late-subscriber-delay-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 2500
+    },
+    {
+      "name": "demo.runner.flux-wait-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 5000
+    },
+    {
+      "name": "demo.runner.fraud-order-id",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "ord-500"
+    },
+    {
+      "name": "demo.runner.product-id",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "p-100"
+    },
+    {
+      "name": "demo.runner.quote-symbol",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "EURUSD"
+    },
+    {
+      "name": "demo.runner.ref-count-second-subscriber-delay-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1500
+    },
+    {
+      "name": "demo.runner.ref-count-wait-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 5000
+    },
+    {
+      "name": "demo.runner.replay-flux-order-id",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "ord-701"
+    },
+    {
+      "name": "demo.runner.shared-flux-order-id",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": "ord-700"
+    },
+    {
+      "name": "demo.runner.shared-mono-wait-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Runner",
+      "defaultValue": 1500
+    },
+    {
+      "name": "demo.stub-api.host",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubApi",
+      "defaultValue": "localhost"
+    },
+    {
+      "name": "demo.stub-api.scheme",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubApi",
+      "defaultValue": "http"
+    },
+    {
+      "name": "demo.stub-data.fraud-reason",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "stub-approved"
+    },
+    {
+      "name": "demo.stub-data.fraud-status",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "ALLOW"
+    },
+    {
+      "name": "demo.stub-data.order-statuses",
+      "type": "java.util.List<java.lang.String>",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.product-name-prefix",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "Demo product "
+    },
+    {
+      "name": "demo.stub-data.product-price",
+      "type": "java.math.BigDecimal",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-ask-spread",
+      "type": "java.math.BigDecimal",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-base-bid",
+      "type": "java.math.BigDecimal",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-bid-step",
+      "type": "java.math.BigDecimal",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.quote-max-events",
+      "type": "java.lang.Integer",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": 20
+    },
+    {
+      "name": "demo.stub-data.tariff-rows",
+      "type": "java.util.List<com.example.coldhotpublisher.config.DemoProperties$TariffRowData>",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
+    },
+    {
+      "name": "demo.stub-data.tariff-version",
+      "type": "java.lang.String",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
+      "defaultValue": "v1-local"
+    },
+    {
+      "name": "demo.stub-timing.fraud-delay-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 400
+    },
+    {
+      "name": "demo.stub-timing.product-delay-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 300
+    },
+    {
+      "name": "demo.stub-timing.quote-interval-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 500
+    },
+    {
+      "name": "demo.stub-timing.status-element-delay-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 700
+    },
+    {
+      "name": "demo.stub-timing.status-step-seconds",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 1
+    },
+    {
+      "name": "demo.stub-timing.tariff-delay-ms",
+      "type": "java.lang.Long",
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
+      "defaultValue": 300
+    }
+  ],
+  "hints": [],
+  "ignored": {
+    "properties": []
+  }
+}
