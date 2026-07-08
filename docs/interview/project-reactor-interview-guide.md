@@ -860,35 +860,6 @@ Flux.just("a", "b", "c")
 
 ---
 
-### `Mono.flatMap` — исходник
-
-```java
-
-// Mono.java
-/**
- * Transform the item emitted by this Mono asynchronously, returning the value
- * emitted by another Mono (possibly changing the value type).
- */
-public final <R> Mono<R> flatMap(
-        Function<? super T, ? extends Mono<? extends R>> transformer) {
-    return onAssembly(new MonoFlatMap<>(this, transformer));
-}
-```
-
-**Пояснение:** лямбда возвращает **`Mono<R>`** — Reactor **подписывается** на inner-Mono и «разворачивает» результат (`MonoFlatMap`).
-
-**Пример:**
-
-```java
-
-Mono.just(1L)
-    .flatMap(id -> userRepository.findById(id))  // Long → Mono<User>
-    .map(User::email);
-// Mono<String>
-```
-
----
-
 ### `Flux.flatMap` — исходник
 
 ```java
@@ -896,6 +867,7 @@ Mono.just(1L)
 // Flux.java
 /**
  * Transform elements into Publishers, then flatten through merging (interleaved).
+ * (Преобразовывает элементы в Publishers, затем выравнивают (flatten) их путем слияния (чередования).)
  */
 public final <R> Flux<R> flatMap(
         Function<? super T, ? extends Publisher<? extends R>> mapper) {
@@ -909,7 +881,9 @@ public final <R> Flux<R> flatMap(
 }
 ```
 
-**Пояснение:** `Publisher` = `Mono` или `Flux`. Inner-потоки **могут идти параллельно** и **переплетаться** (`FluxFlatMap`).
+**Пояснение:** 
+  - В исходном коде видно, что тип `Publisher` может принять контейнер как `Mono`, так и `Flux`. 
+  - Inner-потоки **могут идти параллельно** и **переплетаться** (`FluxFlatMap`).
 
 **Пример:**
 
@@ -921,9 +895,24 @@ Flux.just(1L, 2L)
 // Flux<UserResponse>
 ```
 
+
+**Пояснение:** 
+ - лямбда возвращает **`Mono<R>`** — Reactor **подписывается** на **inner-Mono** и «разворачивает» результат (`MonoFlatMap`), 
+  - то есть распаковывается результат из контейнера Mono.
+
+**Пример:**
+
+```java
+
+Mono.just(1L)
+    .flatMap(id -> userRepository.findById(id))  // Long → Mono<User>
+    .map(User::email);
+// Mono<String>
+```
+
 ## flatMap — inner-потоки и их «переплетение»
 
-Когда используется `flatMap`, каждый элемент исходного потока превращается во **внутренний Publisher** (inner publisher) — то есть в новый поток данных, порождённый функцией-преобразователем для конкретного элемента.
+ - Когда используется `flatMap`, каждый элемент исходного потока превращается во **внутренний Publisher** (inner publisher) — то есть в новый поток данных, порождённый функцией-преобразователем для конкретного элемента.
 
 **Пример** (реальная задача — получить заказы нескольких активных пользователей):
 
@@ -944,10 +933,112 @@ Flux<Order> orders = userIds
     - Поэтому элементы разных внутренних потоков могут «переплетаться» в итоговом Flux:
         - сначала часть заказов пользователя 1,
         - затем пользователя 2,
-        - затем снова пользователя 1 и так далее — **порядок** исходных id **не сохраняется**.
+        - затем снова пользователя 1 и так далее — **порядок** исходных id **не сохраняется**.**
 
 ![flatMap](./images/flatMap.png)
 ***
+
+## flatMap — inner-потоки и их «переплетение»
+
+ Когда используется `flatMap`, каждый элемент исходного потока превращается во **внутренний Publisher** (inner publisher) — то есть в новый поток данных, порождённый **функцией-преобразователем** для конкретного элемента.
+
+**Пример** (реальная задача — получить заказы нескольких активных пользователей):
+
+```java
+Flux<UserId> userIds = userService.activeUserIds();
+
+Flux<Order> orders = userIds
+    .flatMap(id -> orderRepository.findByUserId(id)); // каждый вызов возвращает Flux<Order>
+```
+
+Здесь `userIds` — внешний `Flux`,
+
+- а каждый вызов `orderRepository.findByUserId(id)` — это **inner** _Flux_, порождённый для конкретного `id`.
+
+Источник: [https://stackoverflow.com/questions/64072896/how-does-backpressure-work-in-flatmap-operator-of-project-reactor](https://stackoverflow.com/questions/64072896/how-does-backpressure-work-in-flatmap-operator-of-project-reactor)
+
+Официальная механика:
+
+- `flatMap` может подписываться сразу на несколько **inner Publisher** и **обрабатывать** их **одновременно** (параллельно, в терминах _**порядка прихода данных**_), количество одновременных **inner-подписок** ограничивается параметром `concurrency`.
+    - Поэтому элементы разных внутренних потоков могут «переплетаться» в итоговом Flux:
+        - сначала часть заказов пользователя 1,
+        - затем пользователя 2,
+        - затем снова пользователя 1 и так далее — **порядок** исходных id **не сохраняется**.
+
+
+```java
+
+Flux<SystemMetric> metrics = metricsCollector.stream(); // тикает каждые 100 мс
+
+metrics
+    .onBackpressureDrop(dropped -> log.warn("Metric dropped: {}", dropped))
+    .flatMap(metric -> dashboardClient.push(metric), 5)  // максимум 5 параллельных отправок
+    .subscribe();
+```
+
+ 
+ - Второй параметр `flatMap(mapper, N)` задаёт именно максимальное число одновременно открытых **inner-подписок** (в вашем HTTP-примере это соответствует N ожидающим сокетам/callback'ам). 
+   - Если это число не указывать явно, **_Reactor_** всё равно ограничивает параллелизм — но значением по умолчанию, а не "бесконечностью".
+
+## Что происходит, если concurrency не указан
+
+Если вызвать `flatMap(mapper)` без второго аргумента, то внутри **reactor-core** этот вызов явно делегируется в перегруженный метод с параметрами по умолчанию:
+
+```java
+public final <R> Flux<R> flatMap(Function<? super T, ? extends Publisher<? extends R>> mapper) {
+    return flatMap(mapper, Queues.SMALL_BUFFER_SIZE, Queues.XS_BUFFER_SIZE);
+}
+```
+
+Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxFlatMap.java
+
+То есть `concurrency` по умолчанию равен константе `Queues.SMALL_BUFFER_SIZE`, а `prefetch` — константе `Queues.XS_BUFFER_SIZE`. Их значения зафиксированы в классе `Queues`:
+
+- `Queues.SMALL_BUFFER_SIZE` = 256 — это и есть дефолтный лимит одновременных inner-подписок.
+- `Queues.XS_BUFFER_SIZE` = 32 — это дефолтный prefetch (сколько элементов запрашивается у каждого inner-Publisher заранее).
+
+Тот же принцип подтверждает автор курса по Project Reactor, разбирая параметр concurrency:
+
+> "The concurrency argument controls how many inner publishers can be subscribed to and merged in parallel. For example, with a Flux of four elements, a concurrency of 2 means that flatMap subscribes to the first two inner publishers immediately."
+
+ **Ru**:
+> "Аргумент **concurrency** определяет, сколько внутренних publisher'ов может быть подписано и объединено параллельно. Например, для Flux из четырёх элементов concurrency равное 2 означает, что flatMap немедленно подписывается на первые два внутренних publisher'а."
+
+Источник: https://eherrera.net/project-reactor-course/03-working-with-map-and-flatmap/flatmap.html
+
+ - Так что без явного указания вы получаете **не безлимитное** количество **открытых сокетов**, 
+   - а до 256 одновременных inner-подписок — и это тоже считается "**параллельной регистрацией**" в том же смысле, что и explicit `concurrency`: до 256 callback'ов могут одновременно висеть в ожидании ответа от ОС.
+
+## Важный нюанс — это не автоматическая многопоточность
+
+Отдельный **важный момент**, который стоит уточнить: 
+  - сам параметр **concurrency** (в том числе дефолтные **256**) **не создаёт** _потоки_ и не гарантирует выполнение на разных ядрах CPU. 
+  - Он лишь **ограничивает** число открытых **Subscription** — то есть, регистрируемых callback'ов. 
+  - Разработчики на StackOverflow отдельно подчёркивают эту путаницу:
+
+      > "Flatmap does not exhibit any concurrency out-of-the-box. You have to switch schedulers if you want concurrency... The concurrency argument allows to control how many Publisher can be subscribed to and merged in parallel."
+
+  **Ru**:
+   > "**Flatmap** _не даёт_ **параллелизм** "из коробки". 
+   > Если вам нужен параллелизм (в смысле использования нескольких потоков CPU), 
+   > нужно переключать Scheduler... 
+   > 
+   > Аргумент **concurrency** позволяет **контролировать**, сколько Publisher'ов может быть подписано и объединено параллельно."
+
+Источник: https://stackoverflow.com/questions/61676716/how-to-control-parallelism-of-flux-flatmap-mono
+
+Иными словами: 
+  - если ваши inner-Publisher'ы **асинхронны** сами по себе (как HTTP-вызов через Netty, который регистрирует сокет в epoll/kqueue), то _concurrency_ **ограничивает** число "в полёте" сетевых операций, и это происходит на одном event-loop потоке без блокировки. 
+  - Но если inner-Publisher содержит **блокирующий код** (например, `Вызов в удаленную систему по REST API`), то **concurrency** без явного `publishOn(Schedulers.parallel())` не даст реального параллелизма на нескольких потоках — все "слоты" будут просто последовательно **блокировать** один и тот же поток.
+
+## А что с Mono.flatMap (то есть когда получаем объект в контейнере Mono и вызываем flatMap, для распаковки)
+
+Здесь вопрос **параллелизма** вообще **не возникает**: 
+ - `Mono` по определению испускает максимум **один элемент**, поэтому у `Mono.flatMap` нет и не может быть параметра **concurrency** — Reactor всегда подписывается ровно на один inner-Mono и ждёт его единственный результат (или его отсутствие).
+
+Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html
+
+Так что понятие "количество открытых сокетов на один оператор" применимо именно к `Flux.flatMap`, а не к `Mono.flatMap`, где всегда ровно один "слот".
 
 ---
 
@@ -967,6 +1058,38 @@ public final <R> Flux<R> concatMap(
 ```
 
 **Пояснение:** inner-потоки **строго по очереди** — id=1 полностью, потом id=2. Подробнее §20.
+
+---
+Речь именно о _сохранении_ **исходного порядка** элементов, а **не о какой-либо сортировке** по признаку.
+
+## Что именно означает "сохранение порядка"
+
+`concatMap` (как и его аналог в Reactor `Flux.concatMap`) обрабатывает inner-Publisher'ы строго последовательно: 
+  - он полностью **завершает обработку** одного inner-потока, **прежде чем** _подписаться_ на следующий, и только после этого переходит к элементу, который пришёл следующим от источника.
+
+> "concatMap — последний оператор высшего порядка. Ключевое отличие заключается в том, что concatMap поддерживает порядок выполнения. Он дождется завершения одного внутреннего потока, прежде чем перейдет к следующему."
+
+Источник: https://habr.com/ru/articles/757202/
+
+То есть здесь **нет пересортировки** уже обработанных данных по какому-то критерию (как, например, делает `sorted()`) — просто элементы **обрабатываются** _в том же порядке_, в котором пришли от исходного Publisher'а, и результаты выходят в этом же порядке, потому что второй inner-поток просто не начинает выполняться, пока не закончится первый.
+
+## Чем это отличается от flatMap/mergeMap
+
+`flatMap` (в RxJS его аналог — `mergeMap`) подписывается на несколько inner-потоков одновременно, и тот из них, что завершится быстрее, попадёт в итоговый поток первым — независимо от исходного порядка элементов:
+
+> "mergeMap — оператор, который объединяет все внутренние потоки в один выходной поток. 
+> Это значит, что **внутренние потоки** могут завершаться в любом порядке, и их результаты будут объединены вместе."
+
+Источник: https://habr.com/ru/articles/757202/
+
+Наглядно эта разница описана и в статье про RxJS-операторы:
+
+> "Но mergeMap не гарантирует сохранение порядка... И раз мы получаем 4 независимых друг от друга потока, которые выполняются параллельно — исходный порядок идентификаторов может быть нарушен."
+> "Этот оператор [concatMap] работает так же, как mergeMap с ограничением в 1 параллельно выполняемый поток. То есть из всех элементов потока создается очередь, и concatMap последовательно выполняется для каждого из них. Соответственно, в этом случае исходный порядок будет сохранен."
+
+Источник: https://habr.com/ru/sandbox/195514/
+
+Так что итог такой: `concatMap` — это фактически `flatMap` с concurrency, зафиксированным равным 1, из-за чего очередь inner-Publisher'ов выполняется строго один за другим, в том порядке, в котором пришли исходные элементы — а не переупорядочивание результатов по какому-либо признаку.
 
 ---
 
@@ -1030,6 +1153,7 @@ ids.concatMap(id -> userRepository.findById(id))
 ### Пример 1: `map` — данные уже есть, только преобразуем
 
 `findById` уже вернул `User`. Дальше — поля в памяти:
+
 ```java
 
 // UserService.java
@@ -1037,9 +1161,11 @@ return userRepository.findById(id)
     .map(User::email)
     .map(String::toUpperCase);
 ```
-![Sequence: map после findById](../Images-docs/reactor-seq-map-email.png)
+![Sequence: map после findById](images/reactor-seq-map-email.png)
 
-**На диаграмме:** один SQL → User в памяти → два `map` → JSON. БД больше не вызывается.
+**На диаграмме:** 
+   - Выполняется запрос в базу данных (SQL)
+   - Получаем User в памяти → два `map` → JSON. БД больше не вызывается.
 
 **Проверка:** `curl http://localhost:8081/api/users/1/email-upper` → `"ANN@EXAMPLE.COM"`
 
@@ -1113,6 +1239,103 @@ return Flux.fromIterable(ids)
 curl "http://localhost:8081/api/demo/reactor/compare?ids=1,2"
 curl "http://localhost:8081/api/demo/reactor/users?ids=1,2"
 ```
+
+ - Вот пример:
+
+```java
+    public Flux<Mono<User>> loadUsersWithMapWrong(List<Long> ids) {
+
+        Flux<User> allById = userRepository.findAllById(ids);
+        //map() используется, чтобы открыть контейнер у каждого
+       // элемента текущего потока пользователей и получить строку в которой email
+      // а так как здесь не нужно доставать значение из Mono<...> или Flux<...>
+       // поэтмоу уместен map()
+        Flux<String> map = allById.map(user -> user.email());  
+
+        Mono<User> byId = userRepository.findById(1L); // сначала получаем пользователя
+        Mono<User> userM = byId
+                .map(userM -> userM.email()) 
+                // но так как userRepository.findByEmail(email) - возвращает Mono<User>
+                // используем flatMap, чтобы распаковать из контейнера Mono результат и передать
+                // подписчику
+                .flatMap(email -> userRepository.findByEmail(email));
+
+
+        return Flux.fromIterable(ids)
+                // не правильно использование map(), потому что получим  Flux<Mono<User>>
+                .map(userRepository::findById); 
+        
+        
+        
+        //корректно вот так
+
+        Flux<User> userFlux = Flux.fromIterable(ids)
+            .flatMap(userRepository::findById);
+    }
+
+```
+
+## Общее правило: чем определяется выбор
+
+Ключевой критерий — не "синхронно/асинхронно" сам по себе, а то, **что возвращает функция-маппер**:
+
+> "map converts from one to N number of values... to another Publisher with the same number of elements... Whereas Flux's flatMap works with a one-to-many relationship, since each element can generate a Flux of any number of elements."
+
+**Ru**:
+> "**map** преобразует один или N значений в другой Publisher с тем же количеством элементов... 
+> 
+> Тогда как flatMap у Flux работает по принципу один-ко-многим, поскольку каждый элемент может породить Flux с произвольным количеством элементов."
+
+Источник: https://eherrera.net/project-reactor-course/03-working-with-map-and-flatmap/using-map-flatmap.html
+
+Практическое правило звучит так: 
+  - если функция возвращает обычное значение (`String`, `Long`, POJO) — используйте `map()`; 
+  - если функция возвращает `Mono<...>` или `Flux<...>` (то есть `Publisher`) — используйте `flatMap()`, чтобы Reactor "развернул" (распаковал) внутренний **Publisher**, а не завернул его в дополнительный слой.
+
+Источник: https://stackoverflow.com/questions/49115135/map-vs-flatmap-in-reactor
+
+## Разбор первого фрагмента — корректно
+
+```java
+Flux<String> map = allById.map(user -> user.email());
+```
+
+- Здесь `user.email()` возвращает обычную строку, а не `Mono<String>` — значит, `map()` уместен, как и написано в вашем комментарии. 
+- Никакой "распаковки контейнера" тут не требуется, потому что контейнера и нет — есть просто синхронное превращение одного объекта в другой без изменения структуры потока (Baeldung называет это "one-to-one transformation").
+
+Источник: https://www.baeldung.com/java-reactor-map-flatmap
+
+## Разбор второго фрагмента — корректно, но комментарий чуть сбивает с толку
+
+```java
+Mono<User> userM = byId
+        .map(userM -> userM.email())
+        .flatMap(email -> userRepository.findByEmail(email));
+```
+
+ - Сама логика верна: `.map()` синхронно достаёт `email` из уже полученного `User` (без Publisher — обычный `map`), 
+ - а `.flatMap()` нужен, потому что `findByEmail(email)` возвращает `Mono<User>`, и без `flatMap` вы получили бы `Mono<Mono<User>>`. 
+   -  `byId` уже издает `User`, а `.map()` тут не "получает пользователя", а извлекает из него **email**; 
+   - сам пользователь был получен раньше, при вызове `userRepository.findById(1L)`.
+
+## Разбор третьего фрагмента — это демонстрация ошибки
+
+```java
+return Flux.fromIterable(ids)
+        .map(userRepository::findById);
+```
+
+Название метода `loadUsersWithMapWrong` явно указывает: это анти-пример. Здесь `userRepository::findById` возвращает `Mono<User>`, а не обычное значение — значит, маппер возвращает Publisher, и по правилу выше здесь нужен `flatMap`, а не `map`. Если использовать `map`, вы получите `Flux<Mono<User>>` — то есть поток "непереваренных" контейнеров `Mono`, на которые никто не подписался и внутри которых лежит нераскрытый результат, вместо ожидаемого `Flux<User>`. Именно поэтому сигнатура метода в коде и объявлена как `Flux<Mono<User>>` — это не опечатка, а прямое следствие неправильного выбора оператора.
+
+## Итоговая формулировка правила
+
+ - основной критерий — это не столько ... "нужно ли распаковывать Mono/Flux", а нужно понимать более широко — "что возвращает лямбда-функция":
+
+  - `map()` — когда функция возвращает обычный объект/значение (синхронное 1-к-1 преобразование, без изменения структуры потока).
+  - `flatMap()` — когда функция возвращает `Mono<...>` или `Flux<...>` (Publisher), и его нужно "развернуть", слив его элементы в общий поток, а не вложить как объект внутри объекта.
+
+Источник: https://afkoffer.com/interview/java/java-reactor-flatmap-vs-map
+
 ---
 
 ### Пример 4: WebClient — тот же принцип
@@ -1143,7 +1366,7 @@ Flux.fromIterable(ids)
 Flux.fromIterable(ids)
     .concatMap(userRepository::findById);
 ```
-![Sequence: flatMap vs concatMap](../Images-docs/reactor-seq-flatmap-vs-concatmap.png)
+![Sequence: flatMap vs concatMap](images/reactor-seq-flatmap-vs-concatmap.png)
 
 **Проверка в reactive-demo:**
 
@@ -1244,74 +1467,234 @@ Flux<Order> orders = userIdMono
 
 > **Аналогия из жизни:** **`subscribeOn`** — **в каком цехе включают конвейер** (у источника). **`publishOn`** — **на какой ленте работают следующие станки** после развилки. Один заказ может начаться на складе, а упаковка — в другом зале.
 
-![§7 subscribeOn / publishOn](../Images-docs/reactor-concept-07.png)
+![§7 subscribeOn / publishOn](images/subscribeOn-publishOn.png)
 
+## 7. `subscribeOn` и `publishOn`
 
-**Ответ:** оба переносят код на другой **Scheduler**, но в **разное место** цепочки.
+> **Аналогия из жизни:** `subscribeOn` — в каком цехе запускают конвейер у источника данных. `publishOn` — на какую линию переводят следующие станки после точки переключения.
 
----
+**Ответ:**
+- оба оператора переключают выполнение на другой `Scheduler`, но делают это в разных местах цепочки:
+    - `subscribeOn` влияет на подписку и источник,
+    - а `publishOn` — на операторы, расположенные **ниже по цепочке**.
+
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+> "`subscribeOn` applies to the subscription process."
+
+**Ru**:
+> "`subscribeOn` относится к процессу подписки."
+>
+
+> "`publishOn` applies in the same way as any other operator, in the middle of the subscriber chain."
+
+**Ru**:
+> "`publishOn` применяется так же, как любой другой оператор, в середине цепочки подписчиков."
+
+***
 
 ### `subscribeOn` — исходник
 
 ```java
-
-// Mono.java — подписка к источнику на указанном Scheduler
 public final Mono<T> subscribeOn(Scheduler scheduler) {
     return onAssembly(new MonoSubscribeOn<>(this, scheduler));
 }
 ```
 
-**Пояснение:** **где выполняется подписка** к upstream (часто — блокирующий источник на `boundedElastic`).
+**Пояснение:**
+- `subscribeOn` используют там, где нужно вынести **блокирующий** источник из **event loop**, например JDBC, файловый API или legacy SDK.
 
-**Пример:**
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+> "This is a better choice for I/O blocking work."
+
+**Ru**:
+> "Это лучший выбор для блокирующей I/O-работы."
+
+**Источник:** https://github.com/netty/netty/discussions/15021
+
+> "All blocking operations should be avoided in the event loop"
+
+Ru:
+> "Всех блокирующих операций в event loop нужно избегать."
+
+**Бизнес-кейс:**
+- HTTP-запрос на оформление заказа приходит в WebFlux, но для проверки кредитного лимита клиента нужно обратиться к старой billing-базе через блокирующий JDBC-драйвер.
 
 ```java
-
-Mono.fromCallable(() -> slowJdbcQuery())
+Mono.fromCallable(() -> billingJdbcRepository.findCustomerLimit(customerId))
     .subscribeOn(Schedulers.boundedElastic())
-    .map(this::toDto);
+    .map(this::toLimitDto);
 ```
 
----
+**Пояснение:**
+- в этом примере блокирующий **JDBC-вызов** уходит на `boundedElastic`, а **не выполняется** на Netty **event loop**.
+
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+> "`subscribeOn` applies to the subscription process."
+
+Ru:
+> "`subscribeOn` относится к процессу подписки."
+
+***
+
+![publishOn-subscribeOn](images/publishOn-subscribeOn.png)
+
+## Роль `BossGroup` и `WorkerGroup`
+
+**Пояснение:**
+- `BossGroup` нужен для принятия нового TCP-соединения.
+- После этого созданный `Channel` регистрируется на конкретном `EventLoop`, и дальнейшая обработка идёт уже через `Channel` и его `ChannelPipeline`, без повторного участия `BossGroup` в обработке каждого запроса или ответа.
+
+**Источник:** https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html
+
+> "A `Channel` was registered to its `EventLoop`."
+
+Ru:
+> "`Channel` был зарегистрирован в своём `EventLoop`."
+
+> "Each channel has its own pipeline"
+
+Ru:
+> "У каждого канала свой собственный pipeline."
+
+**Ключевой момент:**
+- даже если часть бизнес-логики временно выполняется на `boundedElastic` или `parallel`, сам `Channel` остаётся связанным со своим `EventLoop`.
+
+**Источник:** https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html
+
+> "A `Channel` was registered to its `EventLoop`."
+
+Ru:
+> "`Channel` был зарегистрирован в своём `EventLoop`."
+
+**Как ответ возвращается клиенту:**
+- когда формируется HTTP-ответ, outbound-событие проходит через outbound-часть `ChannelPipeline` и обрабатывается I/O-потоком, связанным с этим `Channel`.
+
+**Источник:** https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html
+
+> "An outbound event is handled by an I/O thread associated with the `Channel`."
+
+Ru:
+> "Outbound-событие обрабатывается I/O-потоком, связанным с данным `Channel`."
+
+***
+
+## Что происходит дальше:
+- `subscribeOn()` меняет поток обработки
+
+**Пояснение:**
+- когда во время обработки запроса встречается блокирующая операция, например JDBC-запрос, её выносят с **event loop** на отдельный пул потоков, обычно `boundedElastic`.
+
+**Источник:** https://github.com/netty/netty/discussions/15021
+
+> "All blocking operations should be avoided in the event loop"
+
+Ru:
+> "Всех блокирующих операций в event loop нужно избегать."
+
+**Важно:**
+- `subscribeOn` задаёт **контекст** для подписки и источника, но не отменяет последующие переключения через `publishOn`.
+
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+> "However, this does not affect the behavior of subsequent calls to `publishOn` — they still switch the execution context for the part of the chain after them."
+
+**Ru**:
+> "Однако это **не влияет** на поведение последующих вызовов `publishOn` — они всё равно **переключают контекст** выполнения для части цепочки после себя."
+
+***
 
 ### `publishOn` — исходник
 
 ```java
-
-// Mono.java — всё НИЖЕ по цепочке на указанном Scheduler
 public final Mono<T> publishOn(Scheduler scheduler) {
     return onAssembly(new MonoPublishOn<>(this, scheduler));
 }
 
-// Flux.java — с prefetch
 public final Flux<T> publishOn(Scheduler scheduler, int prefetch) {
     return onAssembly(new FluxPublishOn<>(this, scheduler, true, prefetch));
 }
 ```
 
-**Пояснение:** **переключает поток** для операторов **после** `publishOn` (позиция важна).
+**Пояснение:**
+- `publishOn` **переключает** поток выполнения для операторов, стоящих **ниже по цепочке**, поэтому его позиция в цепочке имеет значение.
 
-**Пример:**
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+> "`publishOn` applies in the same way as any other operator, in the middle of the subscriber chain."
+
+**Ru**:
+> "`publishOn` применяется так же, как любой другой оператор, **в середине цепочки** подписчиков."
+
+> "Consequently, it affects where the subsequent operators execute (until another `publishOn` is chained in)..."
+
+**Ru**:
+> "Следовательно, он влияет на то, где выполняются последующие операторы, пока в цепочку не будет добавлен другой `publishOn`."
+
+**Бизнес-кейс:**
+- заказ загружается из старой **ERP** через блокирующий драйвер, после чего нужно выполнить CPU-нагруженный antifraud scoring и расчёт промо-правил.
 
 ```java
-
-Flux.just(1)
-    .map(x -> x + 1)                              // поток A
-    .publishOn(Schedulers.parallel())             // дальше — поток B
-    .map(x -> x * 2)                              // поток B
-    .subscribeOn(Schedulers.boundedElastic())     // источник — elastic
-    .subscribe();
+Mono.fromCallable(() -> legacyOrderRepository.findById(orderId))
+    .subscribeOn(Schedulers.boundedElastic())
+    .publishOn(Schedulers.parallel())
+    .map(order -> fraudScoringService.score(order))
+    .map(scored -> pricingService.applyPromotions(scored));
 ```
 
-**Вопрос:** *What is the difference between subscribeOn and publishOn?*
+**Пояснение:**
+- здесь источник выполняется на `boundedElastic`, а всё, что стоит после `publishOn`, выполняется уже на `parallel`.
 
-**Источник:** [Reactor — Schedulers](https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html)
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
 
-> **EN:** «publishOn applies in the middle of the subscriber chain … subscribeOn applies to the subscription process.»
+> "Consequently, it affects where the subsequent operators execute (until another `publishOn` is chained in)..."
 
-> **RU:** «publishOn — в середине цепочки … subscribeOn — к процессу подписки.»
+Ru:
+> "Следовательно, он влияет на то, где выполняются последующие операторы, пока в цепочку не будет добавлен другой `publishOn`."
 
----
+***
+
+## Пример 2: `subscribeOn` + `publishOn` вместе
+
+```java
+orderRepository.findById(id)
+    .publishOn(Schedulers.parallel())
+    .flatMap(order -> paymentClient.charge(order))
+    .subscribeOn(Schedulers.boundedElastic());
+```
+
+**Пояснение:**
+- здесь `findById` выполняется на `boundedElastic`, потому что `subscribeOn` влияет на процесс подписки и источник. Но как только сигнал доходит до `publishOn`, дальнейшая часть цепочки переключается на `parallel`, и `flatMap(order -> paymentClient.charge(order))` уже выполняется там.
+
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+> "Both take a `Scheduler` and let you switch the execution context to that scheduler. But the placement of `publishOn` in the chain matters, while the placement of `subscribeOn` does not."
+
+Ru:
+> "Оба принимают `Scheduler` и позволяют переключить контекст выполнения на него.
+> Но расположение `publishOn` в цепочке имеет значение, тогда как расположение `subscribeOn` — нет."
+
+**Итог:**
+- блокирующую работу выносят с event loop через `subscribeOn(Schedulers.boundedElastic())`,
+- последующую CPU-обработку при необходимости переносят через `publishOn(...)`,
+- а запись ответа уходит через `ChannelPipeline` и I/O-поток, связанный с конкретным `Channel`, без повторного участия `BossGroup`.
+
+**Источник:** https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+> "However, this does not affect the behavior of subsequent calls to `publishOn` — they still switch the execution context for the part of the chain after them."
+
+**Ru**:
+> "Однако это не влияет на поведение последующих вызовов `publishOn` — они всё равно переключают контекст выполнения для части цепочки после себя."
+
+**Источник:** https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html
+
+> "An outbound event is handled by an I/O thread associated with the `Channel`."
+
+Ru:
+> "Outbound-событие обрабатывается I/O-потоком, связанным с данным `Channel`."
+
 
 ## 8. Schedulers — какие бывают и зачем
 

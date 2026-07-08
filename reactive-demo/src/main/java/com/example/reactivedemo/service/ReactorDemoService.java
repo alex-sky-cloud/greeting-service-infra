@@ -50,6 +50,17 @@ public class ReactorDemoService {
      * @return поток объектов {@link Mono}, а не пользователей
      */
     public Flux<Mono<User>> loadUsersWithMapWrong(List<Long> ids) {
+
+        Flux<User> allById = userRepository.findAllById(ids);
+        Flux<String> map = allById.map(
+                user -> user.email());
+
+        Mono<User> byId = userRepository.findById(1L);
+
+        Mono<User> user = byId.map(user_v2 -> user_v2.email())
+                .flatMap(email -> userRepository.findByEmail(email));
+
+
         return Flux.fromIterable(ids)
                 .map(userRepository::findById);
     }
