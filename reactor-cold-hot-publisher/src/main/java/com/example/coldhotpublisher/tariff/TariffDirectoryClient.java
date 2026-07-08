@@ -9,6 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+/**
+ * <p>Справочник тарифов, который дорого или редко меняется.</p>
+ * <p>{@code Mono.defer(...).cache()} превращает cold HTTP в hot-источник с памятью:
+ * повторные читатели не бьют в сеть, пока жив TTL.</p>
+ */
 @Slf4j
 @Service
 public class TariffDirectoryClient {
@@ -23,10 +28,12 @@ public class TariffDirectoryClient {
             .cache(Duration.ofMinutes(demoProperties.getCache().getTariffTtlMinutes()));
     }
 
+    /** Всегда один и тот же закэшированный publisher — точка входа для потребителей. */
     public Mono<TariffTable> getTariffs() {
         return cachedTariffs;
     }
 
+    /** Реальный HTTP-вызов; срабатывает только при первом subscribe после истечения кэша. */
     private Mono<TariffTable> loadTariffs() {
         return tariffWebClient.get()
             .uri("/tariffs")

@@ -7,6 +7,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+/**
+ * <p>Тонкая обёртка над HTTP каталога.</p>
+ * <p>Намеренно <em>не</em> делает {@code share()}/{@code cache()} — чтобы показать,
+ * что обычный WebClient {@code Mono} ведёт себя как cold-источник.</p>
+ */
 @Slf4j
 @Service
 public class ProductCatalogClient {
@@ -17,6 +22,10 @@ public class ProductCatalogClient {
         this.catalogWebClient = catalogWebClient;
     }
 
+    /**
+     * <p>Каждый {@code subscribe()} на возвращённый {@code Mono} приведёт к новому GET.</p>
+     * <p>Лог {@code catalog -> GET} — маркер реального сетевого side-effect.</p>
+     */
     public Mono<ProductDto> getProduct(String productId) {
         return catalogWebClient.get()
             .uri("/products/{id}", productId)

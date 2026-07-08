@@ -12,6 +12,11 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+/**
+ * <p>При profile {@code demo} после старта Spring по очереди воспроизводит шесть учебных ситуаций.</p>
+ * <p>Цель — не бизнес-логика, а <em>читаемые логи</em>: по ним видно, сколько реальных HTTP/SSE
+ * запусков произошло и что получил подписчик, подключившийся с опозданием.</p>
+ */
 @Slf4j
 @Component
 @Profile("demo")
@@ -35,6 +40,10 @@ public class DemoRunner implements CommandLineRunner {
         refCountFlux();
     }
 
+    /**
+     * <p>Проверяем cold-поведение HTTP: подписка — это новый запрос.</p>
+     * <p>В логах должны быть <b>две</b> строки {@code catalog -> GET}.</p>
+     */
     private void coldMono() throws InterruptedException {
         var runner = demoProperties.getRunner();
         log.info("=== cold mono ===");
@@ -42,6 +51,10 @@ public class DemoRunner implements CommandLineRunner {
         Thread.sleep(runner.getColdMonoWaitMs());
     }
 
+    /**
+     * <p>Проверяем, что {@code share()} не дублирует дорогой вызов между audit/metrics/response.</p>
+     * <p>В логах — <b>одна</b> строка {@code fraud -> POST}.</p>
+     */
     private void sharedMono() throws InterruptedException {
         var runner = demoProperties.getRunner();
         log.info("=== shared mono ===");
@@ -49,6 +62,10 @@ public class DemoRunner implements CommandLineRunner {
         Thread.sleep(runner.getSharedMonoWaitMs());
     }
 
+    /**
+     * <p>Проверяем, что {@code cache()} отдаёт готовый результат второму подписчику.</p>
+     * <p>В логах — <b>одна</b> строка {@code tariff -> GET}, два {@code request-N <-}.</p>
+     */
     private void cachedMono() throws InterruptedException {
         var runner = demoProperties.getRunner();
         log.info("=== cached mono ===");
@@ -64,6 +81,10 @@ public class DemoRunner implements CommandLineRunner {
         Thread.sleep(runner.getCachedMonoWaitMs());
     }
 
+    /**
+     * <p>Проверяем {@code Flux.share()}: UI подключается позже audit и не видит старые статусы.</p>
+     * <p>Сравните набор {@code ui-late <-} с прогоном {@link #replayFlux()}.</p>
+     */
     private void sharedFlux() throws InterruptedException {
         var runner = demoProperties.getRunner();
         log.info("=== shared flux ===");
@@ -79,6 +100,10 @@ public class DemoRunner implements CommandLineRunner {
         Thread.sleep(runner.getFluxWaitMs());
     }
 
+    /**
+     * <p>Проверяем {@code replay(1)}: опоздавший UI сразу получает последний известный статус.</p>
+     * <p>Отличие от {@link #sharedFlux()} — в логах у {@code ui-late} будет не пустой старт.</p>
+     */
     private void replayFlux() throws InterruptedException {
         var runner = demoProperties.getRunner();
         log.info("=== replay flux ===");
@@ -94,6 +119,10 @@ public class DemoRunner implements CommandLineRunner {
         Thread.sleep(runner.getFluxWaitMs());
     }
 
+    /**
+     * <p>Проверяем {@code refCount(2)}: пока один подписчик — SSE не открывается.</p>
+     * <p>{@code quotes -> OPEN} появится только после второго {@code subscribe()}.</p>
+     */
     private void refCountFlux() throws InterruptedException {
         var runner = demoProperties.getRunner();
         log.info("=== refCount(2) flux ===");

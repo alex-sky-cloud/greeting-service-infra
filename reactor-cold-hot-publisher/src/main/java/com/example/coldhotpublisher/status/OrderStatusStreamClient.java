@@ -8,6 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
+/**
+ * <p>Подписка на live-статусы заказа через SSE.</p>
+ * <p>Два метода показывают разный ответ на один вопрос: «что увидит опоздавший UI?»</p>
+ */
 @Slf4j
 @Service
 public class OrderStatusStreamClient {
@@ -18,6 +22,10 @@ public class OrderStatusStreamClient {
         this.orderWebClient = orderWebClient;
     }
 
+    /**
+     * <p>Общий поток без истории: опоздавший видит только будущие статусы.</p>
+     * <p>Подходит, когда прошлые события не нужны (только live-лента).</p>
+     */
     public Flux<OrderStatusEvent> liveStatusesShared(String orderId) {
         return orderWebClient.get()
             .uri("/orders/{id}/statuses/stream", orderId)
@@ -30,6 +38,10 @@ public class OrderStatusStreamClient {
             .share();
     }
 
+    /**
+     * <p>Буфер на один элемент: UI, подключившийся позже, сразу получает последний статус.</p>
+     * <p>Нужно, когда экран должен показать текущее состояние, а не ждать следующего тика.</p>
+     */
     public Flux<OrderStatusEvent> liveStatusesReplayLast(String orderId) {
         return orderWebClient.get()
             .uri("/orders/{id}/statuses/stream", orderId)

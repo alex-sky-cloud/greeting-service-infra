@@ -8,188 +8,98 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Типизированная конфигурация демо-модуля cold/hot Publisher.
- *
- * <p>Префикс в {@code application.yml}: {@code demo.*}. Описание всех ключей —
- * {@code src/main/resources/application.md}.</p>
- *
- * <p>Потребители:</p>
- * <ul>
- *   <li>{@link com.example.coldhotpublisher.infra.WebClientConfig} — {@link #stubBaseUrl()};</li>
- *   <li>{@link com.example.coldhotpublisher.stub.DemoStubController} — {@link #stubTiming}, {@link #stubData};</li>
- *   <li>{@link com.example.coldhotpublisher.tariff.TariffDirectoryClient} — {@link #cache};</li>
- *   <li>{@link com.example.coldhotpublisher.DemoRunner} — {@link #runner}.</li>
- * </ul>
- *
- * @see DemoPropertiesConfig
+ * <p>Настраивает учебный стенд из {@code application.yml}: куда слушает приложение,
+ * что отвечают заглушки и как быстро идёт сценарий в {@link com.example.coldhotpublisher.DemoRunner}.</p>
+ * <p>Перечень ключей — {@code application.md}.</p>
  */
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "demo")
 public class DemoProperties {
 
-    /**
-     * HTTP-порт этого модуля. Единственный источник порта: {@code demo.application.port}.
-     *
-     * <p>Также задаёт {@code server.port} через {@code ${demo.application.port}} в YAML.
-     * Порты соседних модулей: {@code app}=8080, {@code reactive-demo}=8081,
-     * этот модуль по умолчанию 8082.</p>
-     */
     private Application application = new Application();
-
-    /**
-     * Схема и хост локальных заглушек. Порт подставляется из {@link #application}.
-     *
-     * @see com.example.coldhotpublisher.infra.WebClientConfig
-     */
     private StubApi stubApi = new StubApi();
-
-    /**
-     * Искусственные задержки ответов заглушек (мс/с).
-     *
-     * @see com.example.coldhotpublisher.stub.DemoStubController
-     */
     private StubTiming stubTiming = new StubTiming();
-
-    /**
-     * Тестовые данные, возвращаемые заглушками REST API.
-     *
-     * @see com.example.coldhotpublisher.stub.DemoStubController
-     */
     private StubData stubData = new StubData();
-
-    /**
-     * Параметры кэширования reactive-источников.
-     *
-     * @see com.example.coldhotpublisher.tariff.TariffDirectoryClient
-     */
     private Cache cache = new Cache();
-
-    /**
-     * Идентификаторы и таймауты сценариев {@link com.example.coldhotpublisher.DemoRunner}.
-     */
     private Runner runner = new Runner();
 
     /**
-     * Собирает {@code baseUrl} для всех {@link org.springframework.web.reactive.function.client.WebClient}:
-     * {@code {stubApi.scheme}://{stubApi.host}:{application.port}}.
-     *
-     * @return URL локальных заглушек в этом же процессе
-     * @see com.example.coldhotpublisher.infra.WebClientConfig
+     * <p>Склеивает адрес, на котором WebClient находит заглушки в этом же процессе.</p>
      */
     public String stubBaseUrl() {
         return stubApi.baseUrl(application.getPort());
     }
 
     /**
-     * Параметры HTTP-сервера модуля.
-     *
-     * <p>YAML: {@code demo.application.port}. Связан с {@code server.port}.</p>
+     * <p>Задаёт HTTP-порт <em>только этого</em> модуля.</p>
+     * <p>Один номер порта прописывается и в {@code server.port}, и в URL для WebClient —
+     * иначе клиенты могли бы стучаться не туда или пересечься с {@code app} (8080)
+     * и {@code reactive-demo} (8081).</p>
      */
     @Getter
     @Setter
     public static class Application {
 
-        /** Порт Netty; по умолчанию 8082, чтобы не пересечься с app (8080) и reactive-demo (8081). */
         private int port = 8082;
     }
 
     /**
-     * Хост и схема stub API. Порт передаётся отдельно из {@link Application#getPort()}.
-     *
-     * @see com.example.coldhotpublisher.infra.WebClientConfig
+     * <p>Хост и схема для исходящих вызовов WebClient.</p>
+     * <p>Порт подставляется из {@link Application}: заглушки и клиенты должны
+     * смотреть на один Netty внутри JVM.</p>
      */
     @Getter
     @Setter
     public static class StubApi {
 
-        /** Схема URL, YAML: {@code demo.stub-api.scheme}. */
         private String scheme = "http";
-
-        /** Хост заглушек, YAML: {@code demo.stub-api.host}. */
         private String host = "localhost";
 
-        /**
-         * @param port HTTP-порт приложения ({@link Application#port})
-         * @return полный base URL для WebClient
-         */
         public String baseUrl(int port) {
             return scheme + "://" + host + ":" + port;
         }
     }
 
     /**
-     * Задержки stub-эндпоинтов. YAML: {@code demo.stub-timing.*}.
-     *
-     * @see com.example.coldhotpublisher.stub.DemoStubController
+     * <p>Растягивает ответы заглушек во времени.</p>
+     * <p>Без пауз в логах трудно отличить «второй подписчик дождался первого запроса»
+     * от «второй подписчик запустил свой запрос» — задержки делают хронологию читаемой.</p>
      */
     @Getter
     @Setter
     public static class StubTiming {
 
-        /** {@code GET /products/{id}} — {@link com.example.coldhotpublisher.stub.DemoStubController#getProduct}. */
         private long productDelayMs = 300;
-
-        /** {@code POST /fraud/check} — {@link com.example.coldhotpublisher.stub.DemoStubController#checkFraud}. */
         private long fraudDelayMs = 400;
-
-        /** {@code GET /tariffs} — {@link com.example.coldhotpublisher.stub.DemoStubController#getTariffs}. */
         private long tariffDelayMs = 300;
-
-        /** Пауза между SSE-событиями статусов — {@code streamStatuses}. */
         private long statusElementDelayMs = 700;
-
-        /** Шаг {@code createdAt} между статусами в потоке — {@code streamStatuses}. */
         private long statusStepSeconds = 1;
-
-        /** Интервал тиков котировок — {@code streamQuotes}. */
         private long quoteIntervalMs = 500;
     }
 
     /**
-     * Данные заглушек. YAML: {@code demo.stub-data.*}.
-     *
-     * @see com.example.coldhotpublisher.stub.DemoStubController
+     * <p>Что именно возвращают фиктивные REST/SSE-эндпоинты.</p>
+     * <p>Меняется сценарий (цена, статусы заказа, длина потока котировок)
+     * без правки Java-классов заглушек.</p>
      */
     @Getter
     @Setter
     public static class StubData {
 
-        /** Имя товара: префикс + id — {@code getProduct}. */
         private String productNamePrefix = "Demo product ";
-
-        /** Цена в ответе каталога — {@code getProduct}. */
         private BigDecimal productPrice = new BigDecimal("99.90");
-
-        /** Статус anti-fraud — {@code checkFraud}. */
         private String fraudStatus = "ALLOW";
-
-        /** Текст причины fraud — {@code checkFraud}. */
         private String fraudReason = "stub-approved";
-
-        /** Версия тарифной таблицы — {@code getTariffs}. */
         private String tariffVersion = "v1-local";
-
-        /** Строки тарифов — {@code getTariffs}. */
         private List<TariffRowData> tariffRows = defaultTariffRows();
-
-        /** Последовательность статусов заказа в SSE — {@code streamStatuses}. */
         private List<String> orderStatuses = List.of("CREATED", "PAID", "PACKED", "SHIPPED");
-
-        /** Начальный bid котировки — {@code streamQuotes}. */
         private BigDecimal quoteBaseBid = new BigDecimal("1.1000");
-
-        /** Приращение bid на тик — {@code streamQuotes}. */
         private BigDecimal quoteBidStep = new BigDecimal("0.0001");
-
-        /** Спред ask − bid — {@code streamQuotes}. */
         private BigDecimal quoteAskSpread = new BigDecimal("0.0002");
-
-        /** Число событий в потоке котировок — {@code streamQuotes}. */
         private int quoteMaxEvents = 20;
     }
 
-    /** Одна строка тарифа ({@code zone}, {@code price}) в {@link StubData#tariffRows}. */
     @Getter
     @Setter
     public static class TariffRowData {
@@ -199,67 +109,40 @@ public class DemoProperties {
     }
 
     /**
-     * TTL и прочие настройки cache/replay.
-     *
-     * @see com.example.coldhotpublisher.tariff.TariffDirectoryClient#getTariffs()
+     * <p>Сколько минут {@code Mono.cache()} помнит тарифы после первой успешной загрузки.</p>
+     * <p>Пока TTL не истёк, новые подписчики не инициируют повторный HTTP к {@code /tariffs}.</p>
      */
     @Getter
     @Setter
     public static class Cache {
 
-        /**
-         * Время жизни {@code Mono.cache()} для тарифов (минуты).
-         * YAML: {@code demo.cache.tariff-ttl-minutes}.
-         */
         private long tariffTtlMinutes = 10;
     }
 
     /**
-     * Параметры автозапуска демо-сценариев (profile {@code demo}).
-     *
-     * @see com.example.coldhotpublisher.DemoRunner
+     * <p>Управляет синхронным сценарием в {@link com.example.coldhotpublisher.DemoRunner}.</p>
+     * <p>Reactor исполняется асинхронно, а раннер — обычный Java-код с {@code Thread.sleep}.
+     * Паузы нужны, чтобы: (1) дать потоку время выдать события до следующего шага;
+     * (2) подключить «опоздавшего» подписчика уже после старта SSE — и увидеть разницу
+     * между {@code share()} и {@code replay(1)}.</p>
+     * <p>Разные id заказов и товаров разводят логи соседних прогонов.</p>
      */
     @Getter
     @Setter
     public static class Runner {
 
-        /** Id товара для cold {@code Mono} — {@link com.example.coldhotpublisher.DemoRunner#coldMono}. */
         private String productId = "p-100";
-
-        /** Id заказа для {@code Mono.share()} — {@link com.example.coldhotpublisher.DemoRunner#sharedMono}. */
         private String fraudOrderId = "ord-500";
-
-        /** Id заказа для {@code Flux.share()} — {@link com.example.coldhotpublisher.DemoRunner#sharedFlux}. */
         private String sharedFluxOrderId = "ord-700";
-
-        /** Id заказа для {@code replay(1)} — {@link com.example.coldhotpublisher.DemoRunner#replayFlux}. */
         private String replayFluxOrderId = "ord-701";
-
-        /** Символ котировок для {@code refCount(2)} — {@link com.example.coldhotpublisher.DemoRunner#refCountFlux}. */
         private String quoteSymbol = "EURUSD";
-
-        /** Пауза после cold mono. */
         private long coldMonoWaitMs = 1500;
-
-        /** Пауза после shared mono. */
         private long sharedMonoWaitMs = 1500;
-
-        /** Пауза между двумя подписчиками cached mono. */
         private long cachedMonoBetweenRequestsMs = 800;
-
-        /** Пауза в конце сценария cached mono. */
         private long cachedMonoWaitMs = 1200;
-
-        /** Задержка «позднего» подписчика в flux-сценариях (share / replay). */
         private long fluxLateSubscriberDelayMs = 2500;
-
-        /** Ожидание завершения flux-сценария. */
         private long fluxWaitMs = 5000;
-
-        /** Задержка перед вторым подписчиком refCount. */
         private long refCountSecondSubscriberDelayMs = 1500;
-
-        /** Ожидание завершения refCount-сценария. */
         private long refCountWaitMs = 5000;
     }
 

@@ -12,6 +12,11 @@ import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 
+/**
+ * <p>Собирает отдельные WebClient под каждый учебный сценарий.</p>
+ * <p>Разные бины — как в реальном сервисе (свой клиент на каталог, fraud, SSE),
+ * но все бьют в локальные заглушки по {@link DemoProperties#stubBaseUrl()}.</p>
+ */
 @Configuration
 @RequiredArgsConstructor
 public class WebClientConfig {

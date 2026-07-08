@@ -8,6 +8,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+/**
+ * <p>Вызывает внешнюю (здесь — заглушку) проверку заказа.</p>
+ * <p>Возвращает «сырой» cold {@code Mono}; разделение одного запроса между подписчиками
+ * делает уже {@link OrderFraudOrchestrator}.</p>
+ */
 @Slf4j
 @Service
 public class FraudClient {

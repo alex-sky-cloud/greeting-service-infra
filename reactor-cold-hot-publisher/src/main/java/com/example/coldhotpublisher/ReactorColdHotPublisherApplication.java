@@ -4,9 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * Demo-приложение: cold/hot Publisher, share/cache/replay/refCount с WebClient.
- *
- * @see docs/interview/Hot Publisher и Cold Publisher - примеры.md
+ * <p>Запускает учебный стенд: в одном процессе живут HTTP-заглушки и WebClient-клиенты,
+ * которые демонстрируют cold/hot Publisher в стиле production WebFlux.</p>
  */
 @SpringBootApplication
 public class ReactorColdHotPublisherApplication {

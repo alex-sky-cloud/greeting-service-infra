@@ -8,6 +8,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+/**
+ * <p>Один заказ — одна проверка fraud, но несколько последствий: аудит, метрики, ответ API.</p>
+ * <p>{@code share()} нужен, чтобы не слать три одинаковых POST при трёх подписчиках.</p>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -18,6 +22,10 @@ public class OrderFraudOrchestrator {
     private final MetricsService metricsService;
     private final ResponseMapper responseMapper;
 
+    /**
+     * <p>Запускает цепочку side-effect'ов на общем hot-запуске проверки.</p>
+     * <p>Считайте строки {@code fraud -> POST}: их должна быть ровно одна.</p>
+     */
     public void processOrder(String orderId) {
         Mono<FraudDecision> sharedCheck =
             fraudClient.check(orderId)
@@ -33,6 +41,7 @@ public class OrderFraudOrchestrator {
 @Slf4j
 @Service
 class AuditService {
+
     public void save(String orderId, FraudDecision decision) {
         log.info("audit <- orderId={}, status={}", orderId, decision.status());
     }
@@ -41,6 +50,7 @@ class AuditService {
 @Slf4j
 @Service
 class MetricsService {
+
     public void incrementFraudStatus(String status) {
         log.info("metrics <- fraud_status={}", status);
     }
@@ -48,6 +58,7 @@ class MetricsService {
 
 @Component
 class ResponseMapper {
+
     public FraudResponseDto toDto(FraudDecision decision) {
         return new FraudResponseDto(decision.orderId(), decision.status());
     }

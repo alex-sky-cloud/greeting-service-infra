@@ -22,12 +22,18 @@ import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * <p>Подменяет внешние микросервисы простыми эндпоинтами внутри того же приложения.</p>
+ * <p>Каждый метод — <em>cold</em> источник: без подписчика работа не начинается,
+ * с новой подпиской cold-клиент снова инициирует HTTP/SSE.</p>
+ */
 @RestController
 @RequiredArgsConstructor
 public class DemoStubController {
 
     private final DemoProperties demoProperties;
 
+    /** Отдаёт карточку товара; используется в сценарии «два виджета — два GET». */
     @GetMapping("/products/{id}")
     public Mono<ProductDto> getProduct(@PathVariable String id) {
         var stubData = demoProperties.getStubData();
@@ -41,6 +47,7 @@ public class DemoStubController {
             .delayElement(Duration.ofMillis(stubTiming.getProductDelayMs()));
     }
 
+    /** Имитирует синхронную проверку заказа; один вызов на один запуск upstream при {@code share()}. */
     @PostMapping("/fraud/check")
     public Mono<FraudDecision> checkFraud(@RequestBody FraudCheckRequest request) {
         var stubData = demoProperties.getStubData();
@@ -54,6 +61,7 @@ public class DemoStubController {
             .delayElement(Duration.ofMillis(stubTiming.getFraudDelayMs()));
     }
 
+    /** Отдаёт справочник тарифов; на клиенте результат кэшируется через {@code Mono.cache()}. */
     @GetMapping("/tariffs")
     public Mono<TariffTable> getTariffs() {
         var stubData = demoProperties.getStubData();
@@ -67,6 +75,11 @@ public class DemoStubController {
             .delayElement(Duration.ofMillis(stubTiming.getTariffDelayMs()));
     }
 
+    /**
+     * <p>Генерирует конечный поток статусов заказа.</p>
+     * <p>Нужен, чтобы наглядно сравнить {@code share()} (без прошлого) и {@code replay(1)}
+     * (последний статус доступен опоздавшему).</p>
+     */
     @GetMapping(value = "/orders/{id}/statuses/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<OrderStatusEvent> streamStatuses(@PathVariable String id) {
         var stubData = demoProperties.getStubData();
@@ -84,6 +97,10 @@ public class DemoStubController {
         return events.delayElements(Duration.ofMillis(stubTiming.getStatusElementDelayMs()));
     }
 
+    /**
+     * <p>Долгий SSE-поток котировок — «дорогой» upstream для {@code refCount(2)}.</p>
+     * <p>Пока подписчик один, соединение не должно открываться.</p>
+     */
     @GetMapping(value = "/quotes/{symbol}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<QuoteEvent> streamQuotes(@PathVariable String symbol) {
         var stubData = demoProperties.getStubData();

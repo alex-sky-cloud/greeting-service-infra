@@ -8,6 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
+/**
+ * <p>Котировки как «дорогой» SSE: открывать соединение имеет смысл только когда
+ * есть минимум два реальных потребителя (UI и риск-модуль).</p>
+ */
 @Slf4j
 @Service
 public class MarketDataClient {
@@ -18,6 +22,10 @@ public class MarketDataClient {
         this.marketWebClient = marketWebClient;
     }
 
+    /**
+     * <p>{@code refCount(2)} откладывает подключение к upstream до второго подписчика.</p>
+     * <p>Следите за {@code quotes -> OPEN}: он не должен появиться после первого alone subscribe.</p>
+     */
     public Flux<QuoteEvent> sharedQuotes(String symbol) {
         return marketWebClient.get()
             .uri("/quotes/{symbol}/stream", symbol)
