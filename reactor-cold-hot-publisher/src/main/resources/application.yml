@@ -5,15 +5,10 @@ server:
 spring:
   application:
     name: reactor-cold-hot-publisher
-  profiles:
-    active: demo
 
 demo:
   application:
     port: 8082
-  stub-api:
-    scheme: http
-    host: localhost
   stub-timing:
     product-delay-ms: 300
     fraud-delay-ms: 400
@@ -45,20 +40,6 @@ demo:
     quote-max-events: 20
   cache:
     tariff-ttl-minutes: 10
-  runner:
-    product-id: p-100
-    fraud-order-id: ord-500
-    shared-flux-order-id: ord-700
-    replay-flux-order-id: ord-701
-    quote-symbol: EURUSD
-    cold-mono-wait-ms: 1500
-    shared-mono-wait-ms: 1500
-    cached-mono-between-requests-ms: 800
-    cached-mono-wait-ms: 1200
-    flux-late-subscriber-delay-ms: 2500
-    flux-wait-ms: 5000
-    ref-count-second-subscriber-delay-ms: 1500
-    ref-count-wait-ms: 5000
 
 logging:
   pattern:

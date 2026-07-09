@@ -3,7 +3,7 @@ package com.example.coldhotpublisher.config;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-/** Регистрирует {@link DemoProperties} как Spring-бин из YAML. */
+/** Подключает настройки учебного стенда из {@code application.yml} к Spring-контексту. */
 @Configuration
 @EnableConfigurationProperties(DemoProperties.class)
 public class DemoPropertiesConfig {

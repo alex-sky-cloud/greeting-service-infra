@@ -22,9 +22,9 @@
 
 | Ключ | Значение по умолчанию | Назначение |
 |------|----------------------|------------|
-| `server.port` | `${demo.application.port}` | Порт встроенного HTTP-сервера Spring Boot (заглушки и WebClient в одном процессе). |
+| `server.port` | `${demo.application.port}` | Порт HTTP API магазина (`/api/shop/...`). |
 
-**Где используется:** Spring Boot (Netty). Не дублируйте порт вручную — задайте `demo.application.port`.
+**Где используется:** Spring Boot (Netty). Внешние системы в учебном стенде **не** публикуются как отдельные HTTP-endpoint'ы.
 
 ---
 
@@ -32,56 +32,61 @@
 
 | Ключ | По умолчанию | Назначение | Где используется |
 |------|--------------|------------|------------------|
-| `demo.application.port` | `8082` | Единый HTTP-порт модуля | `server.port`; `DemoProperties#stubBaseUrl()` → `WebClientConfig` |
+| `demo.application.port` | `8082` | HTTP-порт API магазина | `server.port` |
 
 ---
 
-## `demo.stub-api`
+## Исходящие WebClient (registry)
 
-Базовый URL для `WebClient`, который вызывает локальные заглушки (`DemoStubController`).
-Порт **не** задаётся отдельно — берётся из `demo.application.port`.
+Несколько каналов к внешним системам — **не** через `@Qualifier`, а по паттерну из
+`docs/interview/Архитурный подход к выбору реализации в Spring без Qualifier, Primary, Profile.md`:
 
-| Ключ | По умолчанию | Назначение | Где используется |
-|------|--------------|------------|------------------|
-| `demo.stub-api.scheme` | `http` | Схема URL | `WebClientConfig` (все именованные `WebClient`-бины) |
-| `demo.stub-api.host` | `localhost` | Хост заглушек | `WebClientConfig` |
+| Класс | Роль |
+|-------|------|
+| `ApiClientKind` | доменный ключ (CATALOG, FRAUD, …) |
+| `ExternalApiClient` | контракт + `getKind()` |
+| `*ExternalApiClient` | self-describing реализации (`@Component`) |
+| `ExternalApiClientConfiguration` | `List<ExternalApiClient>` → `Map` → registry |
+| `ExternalApiClientRegistry` | выбор по `ApiClientKind` в сервисах |
+| `ExternalSystemStubExchange` | подмена сети в `WebClient` (учебный стенд) |
+| `ExternalSystemStubResponses` | данные и задержки ответов «внешних» систем |
 
-Итоговый URL: `http://localhost:8082` (при дефолтах).
+В проде вместо `ExternalSystemStubExchange` — обычный HTTP-коннектор с реальным `baseUrl`.
 
 ---
 
 ## `demo.stub-timing`
 
-Искусственные задержки заглушек, чтобы в логах было видно cold/hot-поведение.
+Искусственные задержки ответов «внешних» систем, чтобы в логах было видно cold/hot-поведение.
 
 | Ключ | По умолчанию | Назначение | Где используется |
 |------|--------------|------------|------------------|
-| `product-delay-ms` | `300` | Задержка ответа `GET /products/{id}` | `DemoStubController#getProduct` |
-| `fraud-delay-ms` | `400` | Задержка `POST /fraud/check` | `DemoStubController#checkFraud` |
-| `tariff-delay-ms` | `300` | Задержка `GET /tariffs` | `DemoStubController#getTariffs` |
-| `status-element-delay-ms` | `700` | Пауза между событиями SSE статусов заказа | `DemoStubController#streamStatuses` |
-| `status-step-seconds` | `1` | Шаг `createdAt` между статусами в потоке | `DemoStubController#streamStatuses` |
-| `quote-interval-ms` | `500` | Интервал котировок в SSE | `DemoStubController#streamQuotes` |
+| `product-delay-ms` | `300` | Задержка `GET /products/{id}` | `ExternalSystemStubResponses#product` |
+| `fraud-delay-ms` | `400` | Задержка `POST /fraud/check/{orderId}` | `ExternalSystemStubResponses#fraudDecision` |
+| `tariff-delay-ms` | `300` | Задержка `GET /tariffs` | `ExternalSystemStubResponses#tariffs` |
+| `status-element-delay-ms` | `700` | Пауза между событиями SSE статусов заказа | `ExternalSystemStubResponses#orderStatusStream` |
+| `status-step-seconds` | `1` | Шаг `createdAt` между статусами в потоке | `ExternalSystemStubResponses#orderStatusStream` |
+| `quote-interval-ms` | `500` | Интервал котировок в SSE | `ExternalSystemStubResponses#quoteStream` |
 
 ---
 
 ## `demo.stub-data`
 
-Тестовые данные, которые отдают заглушки.
+Тестовые данные, которые подставляет `ExternalSystemStubResponses`.
 
 | Ключ | По умолчанию | Назначение | Где используется |
 |------|--------------|------------|------------------|
-| `product-name-prefix` | `"Demo product "` | Префикс имени товара | `DemoStubController#getProduct` |
-| `product-price` | `99.90` | Цена товара | `DemoStubController#getProduct` |
-| `fraud-status` | `ALLOW` | Результат anti-fraud | `DemoStubController#checkFraud` |
-| `fraud-reason` | `stub-approved` | Причина решения fraud | `DemoStubController#checkFraud` |
-| `tariff-version` | `v1-local` | Версия тарифной таблицы | `DemoStubController#getTariffs` |
-| `tariff-rows` | BY/PL/DE | Строки тарифов (`zone`, `price`) | `DemoStubController#getTariffs` |
-| `order-statuses` | CREATED → SHIPPED | Последовательность статусов заказа | `DemoStubController#streamStatuses` |
-| `quote-base-bid` | `1.1000` | Начальный bid | `DemoStubController#streamQuotes` |
-| `quote-bid-step` | `0.0001` | Приращение bid на каждом тике | `DemoStubController#streamQuotes` |
-| `quote-ask-spread` | `0.0002` | Спред ask относительно bid | `DemoStubController#streamQuotes` |
-| `quote-max-events` | `20` | Число котировок в потоке | `DemoStubController#streamQuotes` |
+| `product-name-prefix` | `"Demo product "` | Префикс имени товара | `ExternalSystemStubResponses#product` |
+| `product-price` | `99.90` | Цена товара | `ExternalSystemStubResponses#product` |
+| `fraud-status` | `ALLOW` | Результат anti-fraud | `ExternalSystemStubResponses#fraudDecision` |
+| `fraud-reason` | `stub-approved` | Причина решения fraud | `ExternalSystemStubResponses#fraudDecision` |
+| `tariff-version` | `v1-local` | Версия тарифной таблицы | `ExternalSystemStubResponses#tariffs` |
+| `tariff-rows` | BY/PL/DE | Строки тарифов (`zone`, `price`) | `ExternalSystemStubResponses#tariffs` |
+| `order-statuses` | CREATED → SHIPPED | Последовательность статусов заказа | `ExternalSystemStubResponses#orderStatusStream` |
+| `quote-base-bid` | `1.1000` | Начальный bid | `ExternalSystemStubResponses#quoteStream` |
+| `quote-bid-step` | `0.0001` | Приращение bid на каждом тике | `ExternalSystemStubResponses#quoteStream` |
+| `quote-ask-spread` | `0.0002` | Спред ask относительно bid | `ExternalSystemStubResponses#quoteStream` |
+| `quote-max-events` | `20` | Число котировок в потоке | `ExternalSystemStubResponses#quoteStream` |
 
 ---
 
@@ -93,26 +98,11 @@
 
 ---
 
-## `demo.runner`
+## Учебные HTTP-вызовы
 
-Параметры `CommandLineRunner` (`DemoRunner`, profile `demo`): идентификаторы сценариев и паузы
-`Thread.sleep`, чтобы успеть подписаться «поздним» подписчиком.
+Готовые запросы — [`docs/shop-demo.http`](../docs/shop-demo.http) (идентификаторы `p-100`, `ord-500`, … в URL).
 
-| Ключ | По умолчанию | Сценарий | Где используется |
-|------|--------------|----------|------------------|
-| `product-id` | `p-100` | Cold `Mono` — два `subscribe()` | `DemoRunner#coldMono` → `ProductWidgetFacade` |
-| `fraud-order-id` | `ord-500` | `Mono.share()` | `DemoRunner#sharedMono` |
-| `shared-flux-order-id` | `ord-700` | `Flux.share()` | `DemoRunner#sharedFlux` |
-| `replay-flux-order-id` | `ord-701` | `replay(1)` | `DemoRunner#replayFlux` |
-| `quote-symbol` | `EURUSD` | `publish().refCount(2)` | `DemoRunner#refCountFlux` |
-| `cold-mono-wait-ms` | `1500` | Ожидание после cold mono | `DemoRunner#coldMono` |
-| `shared-mono-wait-ms` | `1500` | Ожидание после shared mono | `DemoRunner#sharedMono` |
-| `cached-mono-between-requests-ms` | `800` | Пауза между двумя подписчиками cache | `DemoRunner#cachedMono` |
-| `cached-mono-wait-ms` | `1200` | Завершение сценария cache | `DemoRunner#cachedMono` |
-| `flux-late-subscriber-delay-ms` | `2500` | Задержка «позднего» подписчика flux | `DemoRunner#sharedFlux`, `#replayFlux` |
-| `flux-wait-ms` | `5000` | Завершение сценария flux | `DemoRunner#sharedFlux`, `#replayFlux` |
-| `ref-count-second-subscriber-delay-ms` | `1500` | Задержка второго подписчика refCount | `DemoRunner#refCountFlux` |
-| `ref-count-wait-ms` | `5000` | Завершение сценария refCount | `DemoRunner#refCountFlux` |
+Паузы между «опоздавшими» подписчиками SSE задаёт сам клиент (второй запрос через 2–3 с).
 
 ---
 
@@ -121,7 +111,6 @@
 | Секция | Назначение |
 |--------|------------|
 | `spring.application.name` | Имя приложения в логах и метриках |
-| `spring.profiles.active: demo` | Включает `DemoRunner` при старте |
 | `logging.pattern.console` | Формат строк лога |
 
 ---
@@ -132,9 +121,10 @@
 |-------|------|
 | `DemoProperties` | Типизированный доступ к `demo.*` |
 | `DemoPropertiesConfig` | `@EnableConfigurationProperties` |
-| `WebClientConfig` | `WebClient` → `stubBaseUrl()` |
-| `DemoStubController` | HTTP-заглушки |
-| `TariffDirectoryClient` | `Mono.cache()` |
-| `DemoRunner` | Демонстрация сценариев при старте |
+| `WebClientConfig` | общий `correlationIdFilter` |
+| `ExternalApiClientRegistry` | выбор клиента по `ApiClientKind` |
+| `ExternalSystemStubExchange` | учебная подмена HTTP в `WebClient` |
+| `ShopProductController` и др. | HTTP API магазина (`/api/shop/...`) |
+| `TariffDirectoryClient` | `service.tariff` — `Mono.cache()` |
 
 Теория и ожидаемые логи: `docs/interview/Hot Publisher и Cold Publisher - примеры.md`.

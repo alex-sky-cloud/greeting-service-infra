@@ -9,10 +9,10 @@
 - [1. Базовые понятия](#1-%D0%B1%D0%B0%D0%B7%D0%BE%D0%B2%D1%8B%D0%B5-%D0%BF%D0%BE%D0%BD%D1%8F%D1%82%D0%B8%D1%8F)
 - [2. Когда использовать что](#2-%D0%BA%D0%BE%D0%B3%D0%B4%D0%B0-%D0%B8%D1%81%D0%BF%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D1%8C-%D1%87%D1%82%D0%BE)
 - [3. Структура примера](#3-%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D0%B0-%D0%BF%D1%80%D0%B8%D0%BC%D0%B5%D1%80%D0%B0)
-- [4. `@Configuration` и `WebClient`-бины](#4-configuration-%D0%B8-webclient-%D0%B1%D0%B8%D0%BD%D1%8B)
-- [5. Минимальные DTO](#5-%D0%BC%D0%B8%D0%BD%D0%B8%D0%BC%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B5-dto)
+- [4. `WebClient` и registry stub-клиентов](#4-webclient-и-registry-stub-клиентов)
+- [5. Минимальные model-типы](#5-минимальные-model-типы)
 - [6. Клиенты и сервисы](#6-%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D1%8B-%D0%B8-%D1%81%D0%B5%D1%80%D0%B2%D0%B8%D1%81%D1%8B)
-- [7. `DemoRunner`](#7-demorunner)
+- [7. Учебные сценарии (HTTP-клиент)](#7-учебные-сценарии-http-клиент)
 - [8. Что должно быть видно в логах](#8-%D1%87%D1%82%D0%BE-%D0%B4%D0%BE%D0%BB%D0%B6%D0%BD%D0%BE-%D0%B1%D1%8B%D1%82%D1%8C-%D0%B2%D0%B8%D0%B4%D0%BD%D0%BE-%D0%B2-%D0%BB%D0%BE%D0%B3%D0%B0%D1%85)
 
 
@@ -101,43 +101,65 @@ Ru:
 
 ## 3. Структура примера
 
-Ниже собран единый **demo-набор** в стиле Spring Boot:
+Модуль **`reactor-cold-hot-publisher`** (`com.example.coldhotpublisher`). Верхний уровень пакетов — **слой приложения**:
 
-- `infra/WebClientConfig.java`
-- `dto/*`
-- `stub/DemoStubController.java`
-- `catalog/*`
-- `fraud/*`
-- `tariff/*`
-- `status/*`
-- `market/*`
-- `DemoRunner.java`
+```
+com.example.coldhotpublisher/
+  controller/
+    shop/              ShopProductController, ShopOrderController, …
+  service/
+    catalog/           ProductCatalog, ProductCatalogClient
+    fraud/             OrderFraudOrchestrator
+      checker/         FraudChecker, WebClientFraudChecker
+      audit/           FraudAuditService, LoggingFraudAuditService
+      metrics/         FraudMetricsService, LoggingFraudMetricsService
+      response/        FraudResponseMapper, DefaultFraudResponseMapper
+    tariff/            TariffDirectory, TariffDirectoryClient
+    status/            OrderStatusStream, OrderStatusStreamClient
+    market/            MarketDataStream, MarketDataClient
+    demo/              (удалён — сценарии через HTTP)
+  model/               record-DTO (ProductDto, FraudDecision, …)
+  config/              DemoProperties, DemoPropertiesConfig
+  infra/
+    WebClientConfig
+    webclient/         ExternalApiClient, ExternalApiClientRegistry, *ExternalApiClient
+      stub/            ExternalSystemStubExchange, ExternalSystemStubResponses
+```
+
+Принципы:
+
+- один top-level тип на файл;
+- зависимости через **интерфейсы** (`ProductCatalog`, `FraudChecker`, …), не конкретные клиенты;
+- выбор исходящего `WebClient` — **registry** по `ApiClientKind`, без `@Qualifier`
+  (см. `docs/interview/Архитурный подход к выбору реализации в Spring без Qualifier, Primary, Profile.md`).
+
+Порт по умолчанию **8082** (`demo.application.port`) — только API магазина (`/api/shop/...`).
+
+Внешние системы в учебном стенде **не** публикуются как REST-контроллер: ответ подставляет `ExternalSystemStubExchange` внутри `WebClient`.
 
 Все примеры оформлены так, чтобы их можно было взять как основу для документации или demo-проекта:
 
 - `WebClient`,
 - `doOnSubscribe`,
 - `doOnNext`,
-- именованные бины,
-- минимальные `record`-DTO,
-- демонстрация через `CommandLineRunner`.
+- `@ConfigurationProperties`,
+- минимальные `record` в `model/`,
+- демонстрация через HTTP-клиента ([`shop-demo.http`](../../reactor-cold-hot-publisher/docs/shop-demo.http)).
 
-... используется один локальный API на `http://localhost:8080`, который поднимается внутри самого приложения.
+## 4. `WebClient`, registry и учебная подмена сети
 
-## 4. `@Configuration` и `WebClient`-бины
+Вместо пяти `@Qualifier`-бинов — **self-describing strategy + registry**.
+
+`WebClientConfig` — только общая инфраструктура:
 
 ```java
-package com.example.demo.infra;
+package com.example.coldhotpublisher.infra;
 
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
-import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
 public class WebClientConfig {
@@ -150,79 +172,110 @@ public class WebClientConfig {
                 .build()
         );
     }
+}
+```
 
-    @Bean
-    @Qualifier("catalogWebClient")
-    public WebClient catalogWebClient(WebClient.Builder builder,
-                                      ExchangeFilterFunction correlationIdFilter) {
-        return builder
-            .baseUrl("http://localhost:8080")
-            .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-            .filter(correlationIdFilter)
-            .build();
-    }
+Контракт и одна из реализаций:
 
-    @Bean
-    @Qualifier("fraudWebClient")
-    public WebClient fraudWebClient(WebClient.Builder builder,
+```java
+package com.example.coldhotpublisher.infra.webclient;
+
+import org.springframework.web.reactive.function.client.WebClient;
+
+public interface ExternalApiClient {
+
+    ApiClientKind getKind();
+
+    WebClient webClient();
+}
+```
+
+```java
+package com.example.coldhotpublisher.infra.webclient;
+
+import com.example.coldhotpublisher.config.DemoProperties;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
+import org.springframework.web.reactive.function.client.WebClient;
+
+@Component
+public class CatalogExternalApiClient implements ExternalApiClient {
+
+    private final WebClient webClient;
+
+    public CatalogExternalApiClient(WebClient.Builder builder,
+                                    ExternalSystemStubExchange stubExchange,
                                     ExchangeFilterFunction correlationIdFilter) {
-        return builder
-            .baseUrl("http://localhost:8080")
-            .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-            .filter(correlationIdFilter)
-            .build();
+        this.webClient = ExternalApiClientFactory.jsonClient(builder, stubExchange, correlationIdFilter);
     }
 
-    @Bean
-    @Qualifier("tariffWebClient")
-    public WebClient tariffWebClient(WebClient.Builder builder,
-                                     ExchangeFilterFunction correlationIdFilter) {
-        return builder
-            .baseUrl("http://localhost:8080")
-            .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-            .filter(correlationIdFilter)
-            .build();
+    @Override
+    public ApiClientKind getKind() {
+        return ApiClientKind.CATALOG;
     }
 
-    @Bean
-    @Qualifier("orderWebClient")
-    public WebClient orderWebClient(WebClient.Builder builder,
-                                    ExchangeFilterFunction correlationIdFilter) {
-        return builder
-            .baseUrl("http://localhost:8080")
-            .defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
-            .filter(correlationIdFilter)
-            .build();
-    }
-
-    @Bean
-    @Qualifier("marketWebClient")
-    public WebClient marketWebClient(WebClient.Builder builder,
-                                     ExchangeFilterFunction correlationIdFilter) {
-        return builder
-            .baseUrl("http://localhost:8080")
-            .defaultHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
-            .filter(correlationIdFilter)
-            .build();
+    @Override
+    public WebClient webClient() {
+        return webClient;
     }
 }
 ```
 
-
-## 5. Минимальные DTO
+Реестр собирается из `List<ExternalApiClient>` при старте:
 
 ```java
-package com.example.demo.dto;
+package com.example.coldhotpublisher.infra.webclient;
+
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class ExternalApiClientConfiguration {
+
+    @Bean
+    public Map<ApiClientKind, ExternalApiClient> externalApiClientMap(List<ExternalApiClient> clients) {
+        return clients.stream()
+            .collect(Collectors.toUnmodifiableMap(ExternalApiClient::getKind, Function.identity()));
+    }
+
+    @Bean
+    public ExternalApiClientRegistry externalApiClientRegistry(Map<ApiClientKind, ExternalApiClient> externalApiClientMap) {
+        return new ExternalApiClientRegistry(externalApiClientMap);
+    }
+}
+```
+
+Сервисы получают клиент по доменному ключу:
+
+```java
+public ProductCatalogClient(ExternalApiClientRegistry externalApiClients) {
+    this.catalogWebClient = externalApiClients.webClient(ApiClientKind.CATALOG);
+}
+```
+
+
+## 5. Минимальные model-типы
+
+Каждый `record` — отдельный файл в `model/`:
+
+```java
+package com.example.coldhotpublisher.model;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.List;
 
 public record ProductDto(
     String id,
     String name,
     BigDecimal price
 ) {}
+```
+
+```java
+package com.example.coldhotpublisher.model;
 
 public record FraudCheckRequest(
     String orderId
@@ -238,6 +291,13 @@ public record FraudResponseDto(
     String orderId,
     String status
 ) {}
+```
+
+```java
+package com.example.coldhotpublisher.model;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 public record TariffTable(
     String version,
@@ -248,6 +308,13 @@ public record TariffRow(
     String zone,
     BigDecimal price
 ) {}
+```
+
+```java
+package com.example.coldhotpublisher.model;
+
+import java.math.BigDecimal;
+import java.time.Instant;
 
 public record OrderStatusEvent(
     String orderId,
@@ -266,138 +333,81 @@ public record QuoteEvent(
 
 ## 6. Клиенты и сервисы
 
-### 6.1 `cold Mono`: каждый `subscribe()` делает новый HTTP-вызов
+### 6.1 `cold Mono`: каждый HTTP-запрос клиента — новый вызов `WebClient`
+
+Учебная подмена внешнего каталога — `ExternalSystemStubExchange` (не REST-контроллер):
 
 ```java
-package com.example.demo.stub;
+package com.example.coldhotpublisher.infra.webclient.stub;
 
-import com.example.demo.dto.FraudCheckRequest;
-import com.example.demo.dto.FraudDecision;
-import com.example.demo.dto.OrderStatusEvent;
-import com.example.demo.dto.ProductDto;
-import com.example.demo.dto.QuoteEvent;
-import com.example.demo.dto.TariffRow;
-import com.example.demo.dto.TariffTable;
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeFunction;
 import reactor.core.publisher.Mono;
 
-@RestController
-public class DemoStubController {
+@Component
+public class ExternalSystemStubExchange implements ExchangeFunction {
 
-    @GetMapping("/products/{id}")
-    public Mono<ProductDto> getProduct(@PathVariable String id) {
-        return Mono.just(new ProductDto(
-                id,
-                "Demo product " + id,
-                new BigDecimal("99.90")
-            ))
-            .delayElement(Duration.ofMillis(300));
-    }
-
-    @PostMapping("/fraud/check")
-    public Mono<FraudDecision> checkFraud(@RequestBody FraudCheckRequest request) {
-        return Mono.just(new FraudDecision(
-                request.orderId(),
-                "ALLOW",
-                "stub-approved"
-            ))
-            .delayElement(Duration.ofMillis(400));
-    }
-
-    @GetMapping("/tariffs")
-    public Mono<TariffTable> getTariffs() {
-        return Mono.just(new TariffTable(
-                "v1-local",
-                List.of(
-                    new TariffRow("BY", new BigDecimal("10.50")),
-                    new TariffRow("PL", new BigDecimal("14.90")),
-                    new TariffRow("DE", new BigDecimal("19.00"))
-                )
-            ))
-            .delayElement(Duration.ofMillis(300));
-    }
-
-    @GetMapping(value = "/orders/{id}/statuses/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<OrderStatusEvent> streamStatuses(@PathVariable String id) {
-        return Flux.just(
-                new OrderStatusEvent(id, "CREATED", Instant.now()),
-                new OrderStatusEvent(id, "PAID", Instant.now().plusSeconds(1)),
-                new OrderStatusEvent(id, "PACKED", Instant.now().plusSeconds(2)),
-                new OrderStatusEvent(id, "SHIPPED", Instant.now().plusSeconds(3))
-            )
-            .delayElements(Duration.ofMillis(700));
-    }
-
-    @GetMapping(value = "/quotes/{symbol}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<QuoteEvent> streamQuotes(@PathVariable String symbol) {
-        return Flux.interval(Duration.ofMillis(500))
-            .map(i -> {
-                BigDecimal bid = new BigDecimal("1.1000")
-                    .add(new BigDecimal("0.0001").multiply(BigDecimal.valueOf(i)));
-                BigDecimal ask = bid.add(new BigDecimal("0.0002"));
-                return new QuoteEvent(symbol, bid, ask, Instant.now());
-            })
-            .take(20);
-    }
+  @Override
+  public Mono<ClientResponse> exchange(ClientRequest request) {
+    // GET /products/{id} → ExternalSystemStubResponses#product
+    // … fraud, tariffs, SSE streams
+  }
 }
 ```
 
-```java
-package com.example.demo.catalog;
+Вход для покупателя — `ShopProductController` (`GET /api/shop/products/{id}`).
 
-import com.example.demo.dto.ProductDto;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+```java
+package com.example.coldhotpublisher.service.catalog;
+
+import com.example.coldhotpublisher.model.ProductDto;
+import com.example.coldhotpublisher.infra.webclient.ApiClientKind;
+import com.example.coldhotpublisher.infra.webclient.ExternalApiClientRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-@Slf4j
+public interface ProductCatalog {
+    Mono<ProductDto> getProduct(String productId);
+}
+
 @Service
-public class ProductCatalogClient {
+public class ProductCatalogClient implements ProductCatalog {
 
     private final WebClient catalogWebClient;
 
-    public ProductCatalogClient(@Qualifier("catalogWebClient") WebClient catalogWebClient) {
-        this.catalogWebClient = catalogWebClient;
+    public ProductCatalogClient(ExternalApiClientRegistry externalApiClients) {
+        this.catalogWebClient = externalApiClients.webClient(ApiClientKind.CATALOG);
     }
 
+    @Override
     public Mono<ProductDto> getProduct(String productId) {
         return catalogWebClient.get()
             .uri("/products/{id}", productId)
             .retrieve()
             .bodyToMono(ProductDto.class)
             .doOnSubscribe(s -> log.info("catalog -> GET /products/{}", productId))
-            .doOnNext(p -> log.info("catalog <- id={}, price={}", p.id(), p.price()))
-            .doOnError(e -> log.error("catalog !! failed productId={}", productId, e));
+            .doOnNext(p -> log.info("catalog <- id={}, price={}", p.id(), p.price()));
     }
 }
 ```
 
 ```java
-package com.example.demo.catalog;
+package com.example.coldhotpublisher.service.catalog;
 
-import com.example.demo.dto.ProductDto;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import com.example.coldhotpublisher.model.ProductDto;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductWidgetFacade {
 
-    private final ProductCatalogClient productCatalogClient;
+    private final ProductCatalog productCatalog;
 
     public void coldMonoDemo(String productId) {
-        Mono<ProductDto> productMono = productCatalogClient.getProduct(productId);
+        Mono<ProductDto> productMono = productCatalog.getProduct(productId);
 
         productMono.subscribe(p -> log.info("widget-1 <- {}", p));
         productMono.subscribe(p -> log.info("widget-2 <- {}", p));
@@ -408,93 +418,104 @@ public class ProductWidgetFacade {
 
 ### 6.2 `Mono.share()`: один текущий anti-fraud вызов делится между текущими подписчиками
 
-```java
-package com.example.demo.fraud;
+Каждая роль — отдельный класс в своём подпакете `service.fraud.*`:
 
-import com.example.demo.dto.FraudCheckRequest;
-import com.example.demo.dto.FraudDecision;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+```java
+package com.example.coldhotpublisher.service.fraud.checker;
+
+import com.example.coldhotpublisher.model.FraudCheckRequest;
+import com.example.coldhotpublisher.model.FraudDecision;
+import com.example.coldhotpublisher.infra.webclient.ApiClientKind;
+import com.example.coldhotpublisher.infra.webclient.ExternalApiClientRegistry;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-@Slf4j
+public interface FraudChecker {
+    Mono<FraudDecision> check(String orderId);
+}
+
 @Service
-public class FraudClient {
+public class WebClientFraudChecker implements FraudChecker {
 
     private final WebClient fraudWebClient;
 
-    public FraudClient(@Qualifier("fraudWebClient") WebClient fraudWebClient) {
-        this.fraudWebClient = fraudWebClient;
+    public WebClientFraudChecker(ExternalApiClientRegistry externalApiClients) {
+        this.fraudWebClient = externalApiClients.webClient(ApiClientKind.FRAUD);
     }
 
+    @Override
     public Mono<FraudDecision> check(String orderId) {
         return fraudWebClient.post()
             .uri("/fraud/check")
             .bodyValue(new FraudCheckRequest(orderId))
             .retrieve()
             .bodyToMono(FraudDecision.class)
-            .doOnSubscribe(s -> log.info("fraud -> POST /fraud/check orderId={}", orderId))
-            .doOnNext(d -> log.info("fraud <- orderId={}, status={}", d.orderId(), d.status()))
-            .doOnError(e -> log.error("fraud !! failed orderId={}", orderId, e));
+            .doOnSubscribe(s -> log.info("fraud -> POST /fraud/check orderId={}", orderId));
     }
 }
 ```
 
 ```java
-package com.example.demo.fraud;
+package com.example.coldhotpublisher.service.fraud.audit;
 
-import com.example.demo.dto.FraudDecision;
-import com.example.demo.dto.FraudResponseDto;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+public interface FraudAuditService {
+    void save(String orderId, FraudDecision decision);
+}
+
+@Service
+public class LoggingFraudAuditService implements FraudAuditService { /* log */ }
+```
+
+```java
+package com.example.coldhotpublisher.service.fraud.metrics;
+
+public interface FraudMetricsService {
+    void incrementFraudStatus(String status);
+}
+
+@Service
+public class LoggingFraudMetricsService implements FraudMetricsService { /* log */ }
+```
+
+```java
+package com.example.coldhotpublisher.service.fraud.response;
+
+public interface FraudResponseMapper {
+    FraudResponseDto toDto(FraudDecision decision);
+}
+
+@Component
+public class DefaultFraudResponseMapper implements FraudResponseMapper { /* map */ }
+```
+
+Оркестратор зависит только от интерфейсов:
+
+```java
+package com.example.coldhotpublisher.service.fraud;
+
+import com.example.coldhotpublisher.service.fraud.audit.FraudAuditService;
+import com.example.coldhotpublisher.service.fraud.checker.FraudChecker;
+import com.example.coldhotpublisher.service.fraud.metrics.FraudMetricsService;
+import com.example.coldhotpublisher.service.fraud.response.FraudResponseMapper;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderFraudOrchestrator {
 
-    private final FraudClient fraudClient;
-    private final AuditService auditService;
-    private final MetricsService metricsService;
-    private final ResponseMapper responseMapper;
+    private final FraudChecker fraudChecker;
+    private final FraudAuditService fraudAuditService;
+    private final FraudMetricsService fraudMetricsService;
+    private final FraudResponseMapper fraudResponseMapper;
 
     public void processOrder(String orderId) {
-        Mono<FraudDecision> sharedCheck =
-            fraudClient.check(orderId)
-                .share();
+        Mono<FraudDecision> sharedCheck = fraudChecker.check(orderId).share();
 
-        sharedCheck.subscribe(d -> auditService.save(orderId, d));
-        sharedCheck.subscribe(d -> metricsService.incrementFraudStatus(d.status()));
-        sharedCheck.map(responseMapper::toDto)
+        sharedCheck.subscribe(d -> fraudAuditService.save(orderId, d));
+        sharedCheck.subscribe(d -> fraudMetricsService.incrementFraudStatus(d.status()));
+        sharedCheck.map(fraudResponseMapper::toDto)
             .subscribe(dto -> log.info("response <- {}", dto));
-    }
-}
-
-@Slf4j
-@Service
-class AuditService {
-    public void save(String orderId, FraudDecision decision) {
-        log.info("audit <- orderId={}, status={}", orderId, decision.status());
-    }
-}
-
-@Slf4j
-@Service
-class MetricsService {
-    public void incrementFraudStatus(String status) {
-        log.info("metrics <- fraud_status={}", status);
-    }
-}
-
-@Component
-class ResponseMapper {
-    public FraudResponseDto toDto(FraudDecision decision) {
-        return new FraudResponseDto(decision.orderId(), decision.status());
     }
 }
 ```
@@ -503,29 +524,34 @@ class ResponseMapper {
 ### 6.3 `Mono.cache()`: тарифы сохраняются и отдаются поздним подписчикам
 
 ```java
-package com.example.demo.tariff;
+package com.example.coldhotpublisher.service.tariff;
 
-import com.example.demo.dto.TariffTable;
+import com.example.coldhotpublisher.config.DemoProperties;
+import com.example.coldhotpublisher.model.TariffTable;
+import com.example.coldhotpublisher.infra.webclient.ApiClientKind;
+import com.example.coldhotpublisher.infra.webclient.ExternalApiClientRegistry;
 import java.time.Duration;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-@Slf4j
+public interface TariffDirectory {
+    Mono<TariffTable> getTariffs();
+}
+
 @Service
-public class TariffDirectoryClient {
+public class TariffDirectoryClient implements TariffDirectory {
 
     private final WebClient tariffWebClient;
     private final Mono<TariffTable> cachedTariffs;
 
-    public TariffDirectoryClient(@Qualifier("tariffWebClient") WebClient tariffWebClient) {
-        this.tariffWebClient = tariffWebClient;
+    public TariffDirectoryClient(ExternalApiClientRegistry externalApiClients,
+                                 DemoProperties demoProperties) {
+        this.tariffWebClient = externalApiClients.webClient(ApiClientKind.TARIFF);
         this.cachedTariffs = Mono.defer(this::loadTariffs)
-            .cache(Duration.ofMinutes(10));
+            .cache(Duration.ofMinutes(demoProperties.getCache().getTariffTtlMinutes()));
     }
 
+    @Override
     public Mono<TariffTable> getTariffs() {
         return cachedTariffs;
     }
@@ -535,9 +561,7 @@ public class TariffDirectoryClient {
             .uri("/tariffs")
             .retrieve()
             .bodyToMono(TariffTable.class)
-            .doOnSubscribe(s -> log.info("tariff -> GET /tariffs"))
-            .doOnNext(t -> log.info("tariff <- version={}", t.version()))
-            .doOnError(e -> log.error("tariff !! failed", e));
+            .doOnSubscribe(s -> log.info("tariff -> GET /tariffs"));
     }
 }
 ```
@@ -546,26 +570,29 @@ public class TariffDirectoryClient {
 ### 6.4 `Flux.share()`: поздний подписчик видит только live-хвост
 
 ```java
-package com.example.demo.status;
+package com.example.coldhotpublisher.service.status;
 
-import com.example.demo.dto.OrderStatusEvent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.MediaType;
+import com.example.coldhotpublisher.model.OrderStatusEvent;
+import com.example.coldhotpublisher.infra.webclient.ApiClientKind;
+import com.example.coldhotpublisher.infra.webclient.ExternalApiClientRegistry;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
-@Slf4j
+public interface OrderStatusStream {
+    Flux<OrderStatusEvent> liveStatusesShared(String orderId);
+    Flux<OrderStatusEvent> liveStatusesReplayLast(String orderId);
+}
+
 @Service
-public class OrderStatusStreamClient {
+public class OrderStatusStreamClient implements OrderStatusStream {
 
     private final WebClient orderWebClient;
 
-    public OrderStatusStreamClient(@Qualifier("orderWebClient") WebClient orderWebClient) {
-        this.orderWebClient = orderWebClient;
+    public OrderStatusStreamClient(ExternalApiClientRegistry externalApiClients) {
+        this.orderWebClient = externalApiClients.webClient(ApiClientKind.ORDER_STATUS);
     }
 
+    @Override
     public Flux<OrderStatusEvent> liveStatusesShared(String orderId) {
         return orderWebClient.get()
             .uri("/orders/{id}/statuses/stream", orderId)
@@ -573,19 +600,16 @@ public class OrderStatusStreamClient {
             .retrieve()
             .bodyToFlux(OrderStatusEvent.class)
             .doOnSubscribe(s -> log.info("status -> OPEN /orders/{}/statuses/stream", orderId))
-            .doOnNext(e -> log.info("status <- orderId={}, status={}", e.orderId(), e.status()))
-            .doOnError(e -> log.error("status !! failed orderId={}", orderId, e))
             .share();
     }
 
+    @Override
     public Flux<OrderStatusEvent> liveStatusesReplayLast(String orderId) {
         return orderWebClient.get()
             .uri("/orders/{id}/statuses/stream", orderId)
             .accept(MediaType.TEXT_EVENT_STREAM)
             .retrieve()
             .bodyToFlux(OrderStatusEvent.class)
-            .doOnSubscribe(s -> log.info("status(replay) -> OPEN /orders/{}/statuses/stream", orderId))
-            .doOnNext(e -> log.info("status(replay) <- orderId={}, status={}", e.orderId(), e.status()))
             .replay(1)
             .autoConnect(1);
     }
@@ -596,26 +620,28 @@ public class OrderStatusStreamClient {
 ### 6.5 `publish().refCount(2)`: дорогой market stream открывается только при двух подписчиках
 
 ```java
-package com.example.demo.market;
+package com.example.coldhotpublisher.service.market;
 
-import com.example.demo.dto.QuoteEvent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.MediaType;
+import com.example.coldhotpublisher.model.QuoteEvent;
+import com.example.coldhotpublisher.infra.webclient.ApiClientKind;
+import com.example.coldhotpublisher.infra.webclient.ExternalApiClientRegistry;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
-@Slf4j
+public interface MarketDataStream {
+    Flux<QuoteEvent> sharedQuotes(String symbol);
+}
+
 @Service
-public class MarketDataClient {
+public class MarketDataClient implements MarketDataStream {
 
     private final WebClient marketWebClient;
 
-    public MarketDataClient(@Qualifier("marketWebClient") WebClient marketWebClient) {
-        this.marketWebClient = marketWebClient;
+    public MarketDataClient(ExternalApiClientRegistry externalApiClients) {
+        this.marketWebClient = externalApiClients.webClient(ApiClientKind.MARKET);
     }
 
+    @Override
     public Flux<QuoteEvent> sharedQuotes(String symbol) {
         return marketWebClient.get()
             .uri("/quotes/{symbol}/stream", symbol)
@@ -623,7 +649,6 @@ public class MarketDataClient {
             .retrieve()
             .bodyToFlux(QuoteEvent.class)
             .doOnSubscribe(s -> log.info("quotes -> OPEN /quotes/{}/stream", symbol))
-            .doOnNext(q -> log.info("quotes <- symbol={}, bid={}, ask={}", q.symbol(), q.bid(), q.ask()))
             .doFinally(signal -> log.info("quotes xx CLOSE symbol={}, signal={}", symbol, signal))
             .publish()
             .refCount(2);
@@ -632,113 +657,20 @@ public class MarketDataClient {
 ```
 
 
-## 7. `DemoRunner`
+## 7. Учебные сценарии (HTTP-клиент)
 
-```java
-package com.example.demo;
+Сценарии **не запускаются при старте** приложения. После `./gradlew bootRun` вызывайте API магазина из `reactor-cold-hot-publisher/docs/shop-demo.http` (или curl).
 
-import com.example.demo.catalog.ProductWidgetFacade;
-import com.example.demo.fraud.OrderFraudOrchestrator;
-import com.example.demo.market.MarketDataClient;
-import com.example.demo.status.OrderStatusStreamClient;
-import com.example.demo.tariff.TariffDirectoryClient;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Component;
+| Вызов | Что демонстрирует |
+|-------|-------------------|
+| `GET /api/shop/products/p-100` ×2 | Cold `Mono` — два похода в каталог |
+| `POST /api/shop/orders/ord-500/process` | `Mono.share()` — одна проверка fraud |
+| `GET /api/shop/tariffs` ×2 | `Mono.cache()` — второй ответ из кэша |
+| `GET .../statuses/stream?mode=shared` ×2 | `Flux.share()` — опоздавший без прошлого |
+| `GET .../statuses/stream?mode=replay` ×2 | `replay(1)` — сразу последний статус |
+| `GET /api/shop/quotes/EURUSD/stream` ×2 | `refCount(2)` — поток после двух подписчиков |
 
-@Slf4j
-@Component
-@Profile("demo")
-@RequiredArgsConstructor
-public class DemoRunner implements CommandLineRunner {
-
-    private final ProductWidgetFacade productWidgetFacade;
-    private final OrderFraudOrchestrator orderFraudOrchestrator;
-    private final TariffDirectoryClient tariffDirectoryClient;
-    private final OrderStatusStreamClient orderStatusStreamClient;
-    private final MarketDataClient marketDataClient;
-
-    @Override
-    public void run(String... args) throws Exception {
-        coldMono();
-        sharedMono();
-        cachedMono();
-        sharedFlux();
-        replayFlux();
-        refCountFlux();
-    }
-
-    private void coldMono() throws InterruptedException {
-        log.info("=== cold mono ===");
-        productWidgetFacade.coldMonoDemo("p-100");
-        Thread.sleep(1500);
-    }
-
-    private void sharedMono() throws InterruptedException {
-        log.info("=== shared mono ===");
-        orderFraudOrchestrator.processOrder("ord-500");
-        Thread.sleep(1500);
-    }
-
-    private void cachedMono() throws InterruptedException {
-        log.info("=== cached mono ===");
-
-        tariffDirectoryClient.getTariffs()
-            .subscribe(t -> log.info("request-1 <- version={}", t.version()));
-
-        Thread.sleep(800);
-
-        tariffDirectoryClient.getTariffs()
-            .subscribe(t -> log.info("request-2 <- version={}", t.version()));
-
-        Thread.sleep(1200);
-    }
-
-    private void sharedFlux() throws InterruptedException {
-        log.info("=== shared flux ===");
-
-        var shared = orderStatusStreamClient.liveStatusesShared("ord-700");
-
-        shared.subscribe(e -> log.info("audit <- {}", e.status()));
-
-        Thread.sleep(2500);
-
-        shared.subscribe(e -> log.info("ui-late <- {}", e.status()));
-
-        Thread.sleep(5000);
-    }
-
-    private void replayFlux() throws InterruptedException {
-        log.info("=== replay flux ===");
-
-        var replayed = orderStatusStreamClient.liveStatusesReplayLast("ord-701");
-
-        replayed.subscribe(e -> log.info("audit <- {}", e.status()));
-
-        Thread.sleep(2500);
-
-        replayed.subscribe(e -> log.info("ui-late <- {}", e.status()));
-
-        Thread.sleep(5000);
-    }
-
-    private void refCountFlux() throws InterruptedException {
-        log.info("=== refCount(2) flux ===");
-
-        var quotes = marketDataClient.sharedQuotes("EURUSD");
-
-        quotes.subscribe(q -> log.info("ui <- {}", q));
-
-        Thread.sleep(1500);
-
-        quotes.subscribe(q -> log.info("audit <- {}", q));
-
-        Thread.sleep(5000);
-    }
-}
-```
+`ExternalSystemStubExchange` подставляет ответы на виртуальные URI (`/products`, `/fraud/check/{orderId}`, …) внутри `WebClient`. Публичных endpoint'ов внешних систем нет.
 
 
 ## 8. Что должно быть видно в логах

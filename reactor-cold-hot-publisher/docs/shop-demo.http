@@ -1,0 +1,37 @@
+# Учебные сценарии — вызывать вручную после ./gradlew bootRun (порт 8082).
+# Внешние системы не имеют публичных HTTP-endpoint'ов: ответы подставляет WebClient (ExternalSystemStubExchange).
+
+@baseUrl = http://localhost:8082
+
+### 5. Cold Mono — два виджета = два GET (два похода в каталог)
+GET {{baseUrl}}/api/shop/products/p-100
+
+###
+GET {{baseUrl}}/api/shop/products/p-100
+
+### 6. Shared Mono — один POST, одна проверка fraud
+POST {{baseUrl}}/api/shop/orders/ord-500/process
+
+### 7. Cached Mono — два GET тарифов подряд (второй из кэша)
+GET {{baseUrl}}/api/shop/tariffs
+
+###
+GET {{baseUrl}}/api/shop/tariffs
+
+### 8a. Shared Flux — первый подписчик (audit), открыть и подождать ~2.5 с, затем 8b
+GET {{baseUrl}}/api/shop/orders/ord-700/statuses/stream?mode=shared
+
+### 8b. Shared Flux — опоздавший UI (только новые этапы)
+GET {{baseUrl}}/api/shop/orders/ord-700/statuses/stream?mode=shared
+
+### 8c. Replay Flux — первый подписчик
+GET {{baseUrl}}/api/shop/orders/ord-701/statuses/stream?mode=replay
+
+### 8d. Replay Flux — опоздавший UI (сразу последний статус)
+GET {{baseUrl}}/api/shop/orders/ord-701/statuses/stream?mode=replay
+
+### 9. RefCount — два SSE на котировки (открыть оба, второй с задержкой ~1.5 с)
+GET {{baseUrl}}/api/shop/quotes/EURUSD/stream
+
+###
+GET {{baseUrl}}/api/shop/quotes/EURUSD/stream
