@@ -65,6 +65,12 @@ public class ReactorDemoService {
                 .map(userRepository::findById);
     }
 
+    public void m() {
+
+
+
+    }
+
     /**
      * <p><strong>Правильно:</strong> {@code flatMap} подписывается на {@link Mono} от репозитория
      * и передаёт дальше уже {@link User}.</p>

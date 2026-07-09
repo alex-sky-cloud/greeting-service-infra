@@ -34,26 +34,22 @@
     {
       "name": "demo.application.port",
       "type": "java.lang.Integer",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Application",
-      "defaultValue": 8082
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Application"
     },
     {
       "name": "demo.cache.tariff-ttl-minutes",
       "type": "java.lang.Long",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Cache",
-      "defaultValue": 10
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$Cache"
     },
     {
       "name": "demo.stub-data.fraud-reason",
       "type": "java.lang.String",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
-      "defaultValue": "stub-approved"
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
     },
     {
       "name": "demo.stub-data.fraud-status",
       "type": "java.lang.String",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
-      "defaultValue": "ALLOW"
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
     },
     {
       "name": "demo.stub-data.order-statuses",
@@ -63,8 +59,7 @@
     {
       "name": "demo.stub-data.product-name-prefix",
       "type": "java.lang.String",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
-      "defaultValue": "Demo product "
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
     },
     {
       "name": "demo.stub-data.product-price",
@@ -89,8 +84,7 @@
     {
       "name": "demo.stub-data.quote-max-events",
       "type": "java.lang.Integer",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
-      "defaultValue": 20
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
     },
     {
       "name": "demo.stub-data.tariff-rows",
@@ -100,44 +94,37 @@
     {
       "name": "demo.stub-data.tariff-version",
       "type": "java.lang.String",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData",
-      "defaultValue": "v1-local"
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubData"
     },
     {
       "name": "demo.stub-timing.fraud-delay-ms",
       "type": "java.lang.Long",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
-      "defaultValue": 400
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming"
     },
     {
       "name": "demo.stub-timing.product-delay-ms",
       "type": "java.lang.Long",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
-      "defaultValue": 300
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming"
     },
     {
       "name": "demo.stub-timing.quote-interval-ms",
       "type": "java.lang.Long",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
-      "defaultValue": 500
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming"
     },
     {
       "name": "demo.stub-timing.status-element-delay-ms",
       "type": "java.lang.Long",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
-      "defaultValue": 700
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming"
     },
     {
       "name": "demo.stub-timing.status-step-seconds",
       "type": "java.lang.Long",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
-      "defaultValue": 1
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming"
     },
     {
       "name": "demo.stub-timing.tariff-delay-ms",
       "type": "java.lang.Long",
-      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming",
-      "defaultValue": 300
+      "sourceType": "com.example.coldhotpublisher.config.DemoProperties$StubTiming"
     }
   ],
   "hints": [],

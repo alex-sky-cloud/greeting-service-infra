@@ -1911,7 +1911,7 @@ sharedCheck.subscribe(result -> responseMapper.toDto(result));
 **Пояснение:**
 
 - `cache()` тоже позволяет не выполнять дорогой источник повторно, но в отличие от `share()` ещё **сохраняет уже полученные данные** и отдаёт их будущим подписчикам.
-- То есть поздний подписчик может получить не только "живой хвост", а уже готовый сохранённый результат.
+- То есть поздний подписчик может получить не только "поток данных в момент подключения", а уже готовый сохранённый результат, то есть не потеряет данные, хоть и используется Hot Publisher
 
 **Бизнес-кейс:**
 
@@ -2074,13 +2074,37 @@ cachedTariffs.subscribe(t -> log.info("request-3: {}", t));  //Hot Publisher
 
 ***
 
+---
+
+
+**Сколько времени хранится:**
+
+Вариант без параметров:
+
+```java
+.cache()
+```
+
+Хранит результат **до тех пор, пока существует ссылка на этот `Mono`**.
+- Если `tariffsMono` находится в **singleton** Spring-bean, таблица тарифов может оставаться в памяти (Heap java) до остановки приложения.
+
+Чтобы ограничить время хранения, нужно указать TTL:
+
+```java
+Mono<TariffTable> tariffsMono =
+    tariffClient.loadTariffs()
+        .cache(Duration.ofMinutes(30));
+```
+
+После истечения 30 минут следующий подписчик запустит новый вызов `loadTariffs()`, а в кэш попадёт новое значение.
+---
+
 ## Flux: share, replay, refCount
 
 Для `Flux` разница уже видна по элементам потока:
-- `share()` даёт только живой хвост,
+- `share()` даёт только поток данных в тот момент, когда подписчие подключился (то есть если трансляция началась раньше, значит часть данных до момента подключения, будет потеряна для данного подписчика)
 - `replay(...)` добавляет историю, а
 - `refCount(n)` управляет моментом подключения к upstream.
-
 
 
 - Именно на `Flux` эти различия лучше всего объяснять в документации.
@@ -2301,15 +2325,32 @@ Disposable auditSub =
 ![§10 Обработка ошибок](../Images-docs/reactor-concept-10.png)
 
 
-**Ответ:** ошибка = сигнал `onError`. Пока не обработаете — цепочка **останавливается**.
 
----
+## 10. Обработка ошибок в Reactor
 
-### `onErrorReturn` — исходник
+> **Аналогия:**
+>
+> _Конвейер_ — **красная лампа** (`onError`). Пока не нажмёте «аварийный сценарий», лента **стоит**.
+>   - `onErrorReturn` — подставить **заглушку**.
+>   - `onErrorResume` — **переключить на запасной конвейер**.
+
+**Ответ:** ошибка означает сигнал `onError`. И когда такую ситуацию не обработаете — цепочка **останавливается**.
+
+**EN:**
+"In Reactive Streams, errors are terminal events. As soon as an error occurs, it stops the sequence and gets propagated down the chain of operators to the last step."
+
+**RU:**
+"В Reactive Streams ошибки — **терминальные события**.
+- Как только возникает **ошибка** — _последовательность_ **останавливается** и передаётся вниз по цепочке до последнего шага."
+
+Источник: https://projectreactor.io/docs/core/release/reference/coreFeatures/error-handling.html
+
+***
+
+### `onErrorReturn` — подставить значение по умолчанию
 
 ```java
-
-// Mono.java — подставить константу при любой ошибке
+// Mono.java
 public final Mono<T> onErrorReturn(final T fallbackValue) {
     return onAssembly(new MonoOnErrorReturn<>(this, null, fallbackValue));
 }
@@ -2318,40 +2359,38 @@ public final Mono<T> onErrorReturn(final T fallbackValue) {
 **Пример:**
 
 ```java
-
-Mono.error(new RuntimeException("fail"))
-    .onErrorReturn("default")
-    .block();   // "default"
+userRepository.findById(id)
+    .map(UserResponse::from)
+    .onErrorReturn(UserResponse.empty());   // при любой ошибке, возвращаем пустой ответ
 ```
 
----
+***
 
-### `onErrorResume` — исходник
+### `onErrorResume` — переключиться на запасной **Publisher**
 
 ```java
-
-// Mono.java — переключиться на другой Mono
+// Mono.java
 public final Mono<T> onErrorResume(
         Function<? super Throwable, ? extends Mono<? extends T>> fallback) {
     return onAssembly(new MonoOnErrorResume<>(this, fallback));
 }
 ```
 
-**Пример:**
+**Пример** (основной источник упал — идём в кэш):
 
 ```java
-
-userRepository.findById(id)
-    .map(UserResponse::from)
-    .onErrorResume(e -> Mono.just(UserResponse.empty()));
+orderService.fetchFromRemote(id)
+//при обработке ошибке, так как первый источник не доступен, 
+// поэтому в операторе обработки ошибки, вызываем данные из запасного источника
+    .onErrorResume(e -> cacheService.getOrder(id)); 
 ```
 
----
 
-### `switchIfEmpty` — исходник (404 / «не найдено»)
+***
+
+### `switchIfEmpty` — реакция на отсутствие данных (404)
 
 ```java
-
 // Mono.java
 public final Mono<T> switchIfEmpty(Mono<? extends T> alternate) {
     return onAssembly(new MonoSwitchIfEmpty<>(this, alternate));
@@ -2361,37 +2400,258 @@ public final Mono<T> switchIfEmpty(Mono<? extends T> alternate) {
 **Пример:**
 
 ```java
-
 userRepository.findById(id)
     .switchIfEmpty(Mono.error(new ResponseStatusException(NOT_FOUND)));
 ```
 
-**Вопрос:** *How do you handle errors in Project Reactor?*
 
-**Источник:** [Reactor — error handling](https://projectreactor.io/docs/core/release/reference/#error.handling)
+***
 
-> **EN:** «onErrorReturn, onErrorResume, and onErrorMap handle errors by returning a default value, switching streams, or transforming the error.»
+### ⚠️ Нюанс 1: `onErrorResume` снаружи `flatMap` — теряются остальные элементы
 
-> **RU:** «onErrorReturn, onErrorResume, onErrorMap — значение по умолчанию, другой поток или преобразование исключения.»
+```java
+// НЕПРАВИЛЬНО
+Flux.just(id1, id2, id3)
+    .flatMap(id -> orderService.process(id))
+    .onErrorResume(e -> Mono.empty());     // ← остальные id уже потеряны
+```
+
+- Когда `process(id1)` бросает ошибку — `flatMap` **отменяет всю подписку** на поток,
+- и только потом `onErrorResume` её "ловит". `id2`, `id3` потеряны.
+
+**EN:**
+"When flatMap sees this error, it cancels its subscription and then notifies the error downstream, which is then turned into completion by `.onErrorResume`."
+
+**RU:**
+- "Когда **flatMap** видит ошибку — он отменяет подписку и передаёт ошибку вниз.
+- Только тогда `onErrorResume` превращает её в завершение."
+
+Источник: https://github.com/reactor/reactor-core/issues/832
+
+**Правильно** — ловить ошибку **внутри** `flatMap`:
+
+```java
+Flux.just(id1, id2, id3)
+    .flatMap(id -> orderService.process(id)
+        .onErrorResume(e -> {
+            log.warn("skip order {}", id, e);
+            return Mono.empty();
+        }))
+    .subscribe();
+```
 
 ---
+Предположим:
+
+- `id1` обработался успешно;
+- при обработке `id2` `orderService.process(id2)` завершился ошибкой;
+- `id3` должен всё равно быть обработан.
+
+Тогда происходит следующее:
+
+1. `flatMap` создаёт отдельный внутренний `Mono` для каждого `id`.
+2. Ошибка `id2` попадает в его локальный `onErrorResume`.
+3. `onErrorResume` заменяет ошибочный `Mono` на `Mono.empty()`.
+4. `Mono.empty()` означает: **для данного `id` не будет результата, но внутренний publisher завершился нормально**.
+5. Поэтому внешний `Flux` не получает `onError` и не отменяет обработку остальных `id`.
+6. `id3` продолжает обрабатываться.
+
+Важно: `Mono.empty()` **не блокирует поток** и не делает «следующий запрос» сам по себе. Он просто немедленно завершает обработку **текущего элемента без результата**. Следующий `id` обрабатывается потому, что внешний `Flux` ещё не завершился ошибкой.
+
+---
+***
+
+### ⚠️ Нюанс 2: `switchIfEmpty` — вызов метода eager, подписка — lazy
+
+
+```java
+userRepository.findById(id)
+    .switchIfEmpty(cacheService.getUser(id));
+```
+
+Здесь происходят **2 разные вещи**:
+
+- `cacheService.getUser(id)` — **вызывается сразу**
+- `switchIfEmpty` — **переключится на его `Mono` только?, если `findById(id)` пустой**
+
+
+### Короткий ответ на ваш вопрос
+
+- Если `findById(id)` **нашёл** пользователя — `switchIfEmpty` **не берёт данные из `cacheService.getUser(id)`**
+- Если `findById(id)` **не нашёл** пользователя — `switchIfEmpty` **берёт данные из `cacheService.getUser(id)`**
+
+
+### Тогда зачем `Mono.defer()`
+
+Чтобы **сам метод `getUser(id)` не вызывался заранее**:
+
+```java
+userRepository.findById(id)
+    .switchIfEmpty(Mono.defer(() -> cacheService.getUser(id)));
+```
+
+Теперь `cacheService.getUser(id)` вызовется **только если `findById(id)` пустой**.
+
+
+**Конечный результат** `switchIfEmpty` работает корректно:
+
+- если `findById` нашёл пользователя — его данные идут дальше, `Mono` из `switchIfEmpty` никогда не подписывается и данные из кэша не попадут downstream.
+- если `findById` вернул пустой `Mono` — `switchIfEmpty` подписывается на fallback и берёт данные из `cacheService`.
+
+**Почему метод вызывается всегда** — это базовое **правило** Java:
+- **аргументы вычисляются** до передачи в метод:
+
+```java
+.switchIfEmpty(cacheService.getUser(id));
+//             ^^^^^^^^^^^^^^^^^^^^^^^
+//             Java вызывает `cacheService.getUser(id)` ПРЯМО ЗДЕСЬ —
+//             до того как findById что-то вернул
+```
+
+***
+
+```java
+public Mono<User> getUser(Long id) {
+    log.info("cache lookup");   // ← выполнится ВСЕГДА
+    metrics.increment(...);     // ← счётчик вырастет ВСЕГДА
+    return cache.get(id);       // ← то же сразу
+}
+```
+
+- без Mono.defer() метод getUser(id) вызывается сразу;
+- а вот начнёт ли реально работать cache.get(id) сразу — зависит от реализации (см. ниже почему).
+
+
+***
+
+```java
+// ПРОБЛЕМА: побочные эффекты getUser() сработают всегда
+userRepository.findById(id)
+    .switchIfEmpty(cacheService.getUser(id));
+```
+
+```java
+// ПРАВИЛЬНО: Mono.defer() откладывает вызов метода —
+// getUser(id) вызовется только когда findById вернул пустой результат
+userRepository.findById(id)
+    .switchIfEmpty(Mono.defer(() -> cacheService.getUser(id)));
+```
+
+Источник: https://www.baeldung.com/spring-reactive-switchifempty
+
+Если `cacheService.getUser(id)` — чистый метод без побочных эффектов при вызове (просто возвращает уже готовый `Mono`) — `Mono.defer()` необязателен. Он нужен только если сам **вызов метода** уже что-то делает: логирует, открывает соединение, инкрементирует счётчик метрик.
+
+---
+
+То есть точнее: **`cache.get(id)` как Java-метод тоже будет вызван сразу**. Предыдущая формулировка «данные — только при empty» относится не к вызову `cache.get(id)`, а к **подписке на `Mono`, который этот метод вернул**.
+
+```java
+Mono<User> cachedMono = cache.get(id); // вызвали сразу, получили Mono
+
+userRepository.findById(id)
+    .switchIfEmpty(cachedMono);
+```
+
+Дальше возможны два варианта реализации `cache.get(id)`.
+
+## Если `cache.get(id)` возвращает ленивый Mono
+
+```java
+Mono<User> get(Long id) {
+    return Mono.fromSupplier(() -> {
+        log.info("real cache read");
+        return storage.get(id);
+    });
+}
+```
+
+Сам метод `cache.get(id)` вызван сразу и создал `Mono`. Но код внутри `fromSupplier` выполнится **только при подписке** на этот `Mono`.
+
+А `switchIfEmpty` подпишется на fallback-`Mono` только если `findById(id)` завершился пусто. Поэтому `real cache read` будет только при empty.
+
+## Если `cache.get(id)` делает работу немедленно
+
+```java
+Mono<User> get(Long id) {
+    log.info("real cache read");
+    User user = storage.get(id); // чтение уже произошло
+    return Mono.justOrEmpty(user);
+}
+```
+
+Здесь и вызов метода, и реальное чтение кэша произойдут сразу — даже если `findById(id)` потом вернёт пользователя и fallback вообще не понадобится.
+
+## Что меняет `defer()`
+
+```java
+userRepository.findById(id)
+    .switchIfEmpty(Mono.defer(() -> cacheService.getUser(id)));
+```
+
+Теперь вызов:
+
+```java
+cacheService.getUser(id)
+```
+
+не происходит при сборке цепочки. Он произойдёт только если репозиторий завершился без значения и `switchIfEmpty` реально перешёл на fallback.
+
+То есть с `defer()` откладывается **сам вызов Java-метода** и всё, что находится в его теле:
+
+```java
+log.info("cache lookup");   // только при empty
+metrics.increment(...);     // только при empty
+cache.get(id);              // только при empty
+```
+
+Коротко:
+
+- Без `defer()` — `getUser(id)` и `cache.get(id)` вызываются сразу.
+- Но работа, спрятанная внутри возвращённого `Mono`, может быть ленивой и начаться только при `empty`.
+- С `defer()` даже вызов `getUser(id)` откладывается до `empty`.
+---
+
+### ⚠️ Нюанс 3: `onErrorContinue` — избегать
+
+```java
+// ОПАСНО
+Flux.just(id1, id2, id3)
+    .flatMap(id -> orderService.process(id))
+    .onErrorContinue((err, val) -> log.warn("skip {}", val));
+```
+
+- Выглядит как "пропустить ошибку и продолжить" — но _только_ **часть операторов** Reactor его реально **поддерживает**.
+- С несовместимыми операторами он молча не работает.
+
+**EN:** "The short answer is: probably never. `onErrorContinue()` operator is quite tricky and may cause subtle bugs."
+
+**RU:**
+"Короткий ответ: вероятно, никогда.
+- `onErrorContinue()` непредсказуем и может вызвать трудноуловимые баги."
+
+Источник: https://nurkiewicz.com/2021/08/onerrorcontinue-reactor.html
+
+**Правильно** — использовать `onErrorResume` внутри `flatMap` (см. нюанс 1).
 
 ## 11. Retry — повтор при ошибке
 
-> **Аналогия из жизни:** **`retry`** — **перезвонить**, если линия занята: не «дожимать трубку», а **набрать номер заново** (новая подписка на upstream).
+> **Аналогия из жизни:** **`retry`** — **перезвонить**, если линия занята: не «дожимать трубку», а **набрать номер заново**.
 
-![§11 Retry](../Images-docs/reactor-concept-11.png)
+**Ответ:** `retry` **выполняет новую подписку на upstream**.
+Он не продолжает упавший вызов, а запускает новую попытку с начала.
+Если это `POST` без idempotency-key — можно повторно отправить тот же запрос.
 
+**EN:** "It works by re-subscribing to the upstream Flux."
 
-**Ответ:** `retry` = **новая подписка** на upstream с нуля. Осторожно с POST без idempotency-key.
+**RU:** "retry работает через повторную подписку на upstream."
 
----
+Источник: https://projectreactor.io/docs/core/release/reference/\#error.handling
+
+***
 
 ### `retry` — исходник
 
 ```java
-
-// Mono.java — повтор при onError
 public final Mono<T> retry() {
     return retry(Long.MAX_VALUE);
 }
@@ -2405,30 +2665,75 @@ public final Mono<T> retryWhen(Retry retrySpec) {
 }
 ```
 
-**Пояснение:** `MonoRetry` заново подписывается на исходный Mono при ошибке.
+**Пояснение:**
+`retry` **заново подписывается** на исходный `Mono` или `Flux` после `onError`.
 
 **Пример:**
 
 ```java
-
-Mono.fromCallable(this::flakyCall)
-    .retry(3)
-    .block();
-
-Mono.fromCallable(this::flakyCall)
-    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1)))
-    .block();
+paymentClient.charge(orderRequest)
+    .retry(3);
 ```
 
-**Вопрос:** *How do you implement retry logic in Reactor?*
+```java
+inventoryClient.reserveItems(orderId)
+    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1)));
+```
 
-**Источник:** [Reactor — retry](https://projectreactor.io/docs/core/release/reference/#error.handling)
 
-> **EN:** «It works by re-subscribing to the upstream Flux.»
+***
 
-> **RU:** «retry работает через повторную подписку на upstream.»
+### Как именно идут повторы
 
----
+**`retry(3)`** — выполняет повторные подписки **сразу**, без паузы.
+
+**`retryWhen(Retry.backoff(...))`** — выполняет повторные подписки **через промежутки времени** по заданной стратегии.
+
+Источник: https://projectreactor.io/docs/core/release/api/reactor/util/retry/Retry.html
+Источник: https://projectreactor.io/docs/core/release/api/reactor/util/retry/RetryBackoffSpec.html
+
+***
+
+### Блокирует ли это Netty
+
+Нет. Сам `retry` и `retryWhen` **не блокируют** event loop.
+
+При `backoff` Reactor не держит Netty-поток "в режиме ожидания".
+Он просто **планирует следующую попытку на будущее** через внутренний scheduler Reactor, а текущий поток в это время свободен.
+
+То есть:
+
+- `retryWhen(backoff(...))` **не крутит sleep в event loop**
+- Netty event loop **освобождается**
+- когда время паузы прошло — Reactor делает **новую подписку** на upstream
+
+Источник: https://projectreactor.io/docs/core/release/api/reactor/util/retry/Retry.html
+
+***
+
+### Что здесь значит scheduler
+
+Здесь **scheduler** — это не "место, где выполняется весь ваш бизнес-код", а механизм Reactor, который **отсчитывает задержку до следующей попытки**.
+
+То есть при `backoff` смысл такой:
+
+- ошибка произошла сейчас
+- Reactor говорит: "новую попытку сделать через 1 секунду"
+- эта 1 секунда не блокирует Netty-поток
+- по истечении времени выполняется **новая подписка**
+
+***
+
+### Что получит подписчик, если retry не помог
+
+Если все попытки исчерпаны:
+
+- у `retry(n)` подписчик получит **`onError`** с ошибкой;
+- у `retryWhen(...)` по умолчанию вниз пойдёт **`RetryExhaustedException`** с причиной последней ошибки.
+
+Источник: https://projectreactor.io/docs/core/release/reference/\#error.handling
+Источник: https://projectreactor.io/docs/core/release/api/reactor/util/retry/RetrySpec.html
+
 
 ## 12. Как тестировать Reactor-код (StepVerifier)
 
@@ -2466,298 +2771,490 @@ StepVerifier.create(Flux.just("a", "b"))
 
 ## 13. Project Reactor и Spring WebFlux
 
-> **Аналогия из жизни:** **WebFlux** — **ресторан с одной умной кассой**: официант (контроллер) **не готовит сам**, а передаёт **заказ-цепочку** (`Mono`) на кухню (сервис → R2DBC). Касса **сама ждёт** готовность — вам не нужно стоять у плиты (`subscribe()` / `block()`).
 
-![§13 WebFlux](../Images-docs/reactor-concept-13.png)
+## Главная идея простыми словами
+
+Обычный (блокирующий) код работает как касса в магазине: 
+ - один кассир обслуживает одного покупателя от начала до конца, а остальные стоят в очереди и ждут. 
+ - WebFlux — это касса самообслуживания: 
+   - один сотрудник следит за десятками касс одновременно и подходит только туда, где реально что-то происходит (просканировали товар, ввели карту), а не стоит и ждёт, пока покупатель копается в кошельке.
+
+Технически это называется non-blocking I/O: вместо того чтобы поток исполнения "морозился" в ожидании ответа от базы или другого сервиса, он освобождается и берёт другую задачу, а когда данные готовы — приходит уведомление ("реакция" на событие, отсюда и слово "реактивный").
+
+> "The term, 'reactive,' refers to programming models that are built around reacting to change — network components reacting to I/O events, UI controllers reacting to mouse events, and others."
+
+**Ru**: 
+
+"Термин 'реактивный' относится к моделям программирования, построенным вокруг реакции на изменения — сетевые компоненты реагируют на события ввода-вывода, UI-контроллеры на события мыши и так далее." 
+
+Источник: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html
+
+## Зачем это вообще нужно (что спросят на собеседовании)
+
+Классический сервер держит по потоку на каждый запрос — если запросов тысячи и каждый ждёт медленный ответ от другого сервиса, потоки заканчиваются и сервер "захлёбывается". WebFlux решает это тем, что обходится маленьким фиксированным пулом потоков (обычно по числу ядер CPU) и никогда их не блокирует.
+
+> "The key expected benefit of reactive and non-blocking is the ability to scale with a small, fixed number of threads and less memory."
+
+**RU**: 
+
+"Ключевое ожидаемое преимущество реактивного и неблокирующего подхода — возможность масштабироваться с малым фиксированным числом потоков и меньшим объёмом памяти." 
+
+Источник: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html
+
+Это особенно заметно, когда в системе много сетевых вызовов с нестабильной задержкой — микросервисы, внешние API, стриминг. 
+
+Если же приложение просто читает/пишет в SQL-базу через блокирующий JDBC, выгоды почти нет, а сложность в проектировании сервиса растёт.
+
+## Mono и Flux — что это на пальцах
+
+Это не "данные", а обёртка-обещание вида "данные появятся позже". 
+
+`Mono` — обещание нуля или одного значения (например, найти пользователя по ID), `Flux` — обещание последовательности из 0..N значений (например, список заказов).
+
+> "Reactor... provides the Mono and Flux API types to work on data sequences of 0..1 (Mono) and 0..N (Flux) through a rich set of operators."
+
+**Ru**: 
+
+"Reactor предоставляет типы Mono и Flux для работы с последовательностями данных 0..1 (Mono) и 0..N (Flux) через богатый набор операторов." Источник: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html
+
+**Важная деталь**: 
+ - пока вы не подписались (`subscribe`) на `Mono`/`Flux`, вообще ничего не выполняется — это ленивая (lazy) конструкция, а не готовый результат.
+
+## Почему block() — это не просто "неправильно", а ломает всю модель
+
+- Если внутри реактивной цепочки вызвать `block()`, вы физически заставляете один из тех самых немногочисленных event-loop потоков остановиться и ждать. 
+- Поскольку таких потоков мало (условно 4-8 на весь сервер), пара таких блокировок может парализовать обработку всех остальных запросов — а не только текущего.
+
+> "It is strongly advised not to map Servlet filters or directly manipulate the Servlet API in the context of a WebFlux application... mixing blocking I/O and non-blocking I/O in the same context will cause runtime issues."
+
+**Ru**: 
+- "Настоятельно не рекомендуется использовать сервлетные фильтры или напрямую работать с Servlet API в контексте WebFlux-приложения... смешивание блокирующего и неблокирующего ввода-вывода в одном контексте вызовет проблемы во время выполнения." 
+- Источник: https://docs.spring.io/spring-framework/reference/web/webflux.html
+
+Это ключевой аргумент, то есть: 
+ - не "потому что так не принято", а "потому что это буквально ломает механизм масштабирования, ради которого WebFlux и существует".
+
+## Кто на самом деле подписывается
+
+Момент, который часто путают: 
+ - разработчик пишет цепочку операторов, но не он вызывает `subscribe()` — за него это делает сам Spring, когда получает `Mono`/`Flux` из контроллера.
 
 
-**Ответ:**
+| Действие | Кто выполняет | Комментарий |
+| :-- | :-- | :-- |
+| Построение цепочки map/flatMap | Разработчик | Просто описание "что делать, когда данные придут" |
+| subscribe() | Spring WebFlux | Автоматически при получении Mono/Flux из контроллера |
+| Запись ответа в HTTP | Spring WebFlux | Происходит асинхронно, по готовности данных |
 
-1. WebFlux построен на Reactor — везде `Mono`/`Flux`.
-2. Контроллер **return Mono/Flux** — `subscribe()` не вызываете.
-3. WebClient и R2DBC тоже возвращают `Mono`/`Flux` — цепочка без `block()`:
+Если объяснить это через аналогию доставки: 
+ - вы не сами идёте на склад за товаром (subscribe/block), вы оставляете заявку (возвращаете Mono), а курьерская служба (Spring) сама всё привозит и вручает клиенту.
 
-```java
+## одной фразой
 
-return userRepository.findById(id)
-    .flatMap(u -> paymentClient.getStatus(u.getPaymentId()));
-```
-4. MVC: поток на запрос, часто блокирует JDBC. WebFlux: мало потоков Netty — **если** нет `block()` в цепочке.
-5. Простой CRUD на JDBC — чаще MVC + virtual threads (Java 21+).
+- **WebFlux** — веб-слой на неблокирующем I/O, **Reactor** — движок, дающий типы Mono/Flux и операторы для этого.
+- Выгода — масштабирование малым числом потоков при большом количестве медленных вызовов, а не "магическое ускорение".
+- Блокировка внутри цепочки (block()) убивает весь смысл — потому что потоков мало и один "застрявший" тормозит остальных.
+- Подписка происходит неявно — Spring сам подписывается на возвращённый Mono/Flux и сам отдаёт результат клиенту.
 
-**Вопрос:** *How does Project Reactor integrate with Spring WebFlux?*
-
-**Источник:** [Baeldung — Reactor Core](https://www.baeldung.com/reactor-core)
-
-> **EN:** «Spring WebFlux … reactive programming in Spring Boot.»
-
-> **RU:** «Spring WebFlux … реактивное программирование в Spring Boot.»
-
----
-
-## 14. Reactor vs RxJava — кратко
-
-> **Аналогия из жизни:** Две марки **электроинструментов** с похожими насадками: **Reactor** — набор **в мастерской Spring**. **RxJava** — часто в **Android** и старых Java-проектах. Задача одна (крутить гайки), бренд и коробка разные.
-
-![§14 Reactor vs RxJava](../Images-docs/reactor-concept-14.png)
-
-
-**Ответ:**
-
-1. Обе реализуют Reactive Streams.
-2. `Mono` ≈ `Single`/`Maybe`; `Flux` ≈ `Observable`/`Flowable`.
-3. RxJava — Android, старые проекты. Reactor — **стандарт Spring** (WebFlux, R2DBC).
-4. Смешивать через адаптеры можно, но в новом Spring-коде лучше не смешивать.
-5. На собеседовании: «API похожи, для Spring Boot — Reactor».
-
-**Вопрос:** *How does Project Reactor differ from RxJava?*
-
-**Источник:** [EasyInterview — Project Reactor](https://easyinterview.me/interview-questions/project-reactor)
-
-> **EN:** «How does Project Reactor differ from RxJava?» (common interview question)
-
-> **RU:** Частый вопрос на собеседованиях.
-
----
 
 ## 15. Когда реактивный подход уместен, а когда нет
 
-> **Аналогия из жизни:** Reactive — **скоростной автобус с одной полосой** (мало потоков, много пассажиров, если никто не «застрял» в дверях). Обычный MVC + virtual threads — **такси на каждого** (проще, если поездок немного и без стриминга).
-
-![§15 Когда reactive](../Images-docs/reactor-concept-15.png)
-
+> **Аналогия из жизни:** Reactive — **скоростной автобус с одной полосой**: мало потоков, много запросов, если никто не блокирует движение.
+> Обычный MVC — ближе к модели "один запрос — один поток".
 
 **Ответ:**
 
 **Берите reactive, если:**
 
-1. Стек неблокирующий: WebFlux + R2DBC/WebClient, без `block()`.
-2. Нужна высокая конкурентность I/O или стриминг (SSE, WebSocket).
-3. Команда готова к reactive-отладке.
+1. Стек действительно неблокирующий: WebFlux + `WebClient` + reactive driver, без `block()`.
+2. Нужна высокая конкурентность I/O: много одновременных запросов, SSE, WebSocket, потоковые ответы.
+3. Важен **backpressure** — контроль скорости потока данных.
+4. Команда готова работать с reactive-цепочками и их отладкой.
 
-**Не берите, если:**
+**EN:** "The reactive-stack web framework, Spring WebFlux ... is fully non-blocking, supports Reactive Streams back pressure..."
 
-1. Основной доступ — JDBC/JPA.
-2. Простой CRUD — MVC + virtual threads часто проще.
-3. Reactive «только в контроллере», а внутри `block()` — смысла нет.
+**RU:** "Spring WebFlux — полностью неблокирующий стек и поддерживает backpressure Reactive Streams."
 
-**Вопрос:** *When should you use reactive programming?*
+Источник: https://docs.spring.io/spring-framework/reference/web/webflux.html
 
-**Источник:** [kindatechnical — Reactive Questions](https://kindatechnical.com/reactive-processing/top-30-reactive-programming-interview-questions.html)
+***
 
-> **EN:** «Virtual threads solve thread scalability for 70-80% of web code. Reactive retains advantages for streaming and backpressure.»
+**Не берите reactive, если:**
 
-> **RU:** «Виртуальные потоки решают масштабирование для большей части веб-кода. Reactive силён в стриминге и backpressure.»
+1. Основной доступ к данным — блокирующий JDBC/JPA.
+2. Приложение — обычный CRUD без стриминга и без большой I/O-конкуренции.
+3. Reactive только в контроллере, а внутри всё равно `block()` — тогда преимущества почти теряются.
+4. Нужна максимально простая модель разработки и сопровождения.
 
----
+***
+
+**Простой ориентир:**
+
+- если приложение в основном **ждёт сеть** и таких ожиданий очень много — reactive уместен;
+- если приложение в основном делает обычные запрос-ответ операции с блокирующей БД — чаще проще выбрать MVC.
+
+Reactive не "быстрее всегда".
+Он полезен там, где много неблокирующего ожидания и нужна работа с большим числом соединений при малом числе потоков.
+
+Источник: https://docs.spring.io/spring-framework/reference/web/webflux.html
+
 
 ## 16. Disposable и отмена подписки
 
-> **Аналогия из жизни:** **`Disposable`** — **пульт от будильника**: подписка тикает (`Flux.interval`), пока не нажмёте **выключить** (`dispose()`).
-
-![§16 Disposable](../Images-docs/reactor-concept-16.png)
-
+> **Аналогия из жизни:** **`Disposable`** — **кнопка "стоп"** для текущей подписки.
 
 **Ответ:**
 
-1. `subscribe()` возвращает **`Disposable`** — «ручку» подписки.
-2. `dispose()` — отмена: upstream получает cancel, ресурсы освобождаются.
-3. Нужно явно: `Flux.interval`, WebSocket, shutdown приложения.
-4. В WebFlux-контроллере Spring управляет подпиской сам.
-5. Пример:
+1. `subscribe()` возвращает **`Disposable`** — объект, через который можно отменить подписку.
+2. `dispose()` отправляет **cancel** для этой подписки.
+3. Это особенно важно для долгоживущих потоков: `Flux.interval`, стриминг, сокеты.
+4. В WebFlux-контроллере вручную управлять этим обычно не нужно — Spring сам управляет подпиской.
+5. Если `Disposable` проигнорировать, вы теряете возможность вручную отменить выполнение.
+
+**EN:** "When you ignore the Disposable returned by subscribe(), you lose the ability to cancel the execution."
+
+**RU:** "Если игнорировать Disposable, который возвращает subscribe(), вы теряете возможность отменить выполнение."
+
+Источник: https://projectreactor.io/docs/core/release/reference/coreFeatures/simple-ways-to-create-a-flux-or-mono-and-subscribe-to-it.html
+
+***
+
+### Что делает `dispose()`
+
+**Пояснение:**
+`dispose()` отменяет **именно текущую подписку**.
+После этого upstream получает сигнал отмены (`cancel`), и поток перестаёт слать элементы этому подписчику.
+
+**EN:** "`dispose()` Cancel or dispose the underlying task or resource."
+
+**RU:** "`dispose()` отменяет или освобождает связанную задачу или ресурс."
+
+Источник: https://projectreactor.io/docs/core/release/api/reactor/core/Disposable.html
+
+***
+
+### Пример
 
 ```java
+Disposable subscription = notificationService.liveOrdersStream()
+    .subscribe(order -> log.info("order: {}", order.getId()));
 
-Disposable sub = Flux.interval(Duration.ofSeconds(1))
-    .subscribe(System.out::println);
-
-sub.dispose();
+// позже, например при shutdown или disconnect:
+subscription.dispose();
 ```
-**Вопрос:** *What is a Disposable?*
 
-**Источник:** [EasyInterview — Subscription and Lifecycle](https://easyinterview.me/interview-questions/project-reactor)
 
-> **EN:** «What is a Disposable and how do you manage subscriptions?»
+***
 
-> **RU:** Стандартный вопрос по жизненному циклу подписки.
+### Когда это реально нужно
 
----
+- бесконечные или долгоживущие потоки;
+- ручной `subscribe()` вне WebFlux-контроллера;
+- фоновые подписки, которые нужно остановить при shutdown/disconnect.
+
+***
+
+### Важный нюанс
+
+`dispose()` отменяет **подписку подписчика**, а не всегда "убивает источник целиком".
+
+Для **hot source** источник может продолжать жить, даже если один подписчик отписался.
+
+Источник: https://stackoverflow.com/questions/76417540/dispose-is-not-stopping-consuming-in-spring-reactor
+
 
 ## 17. Блокирующий код внутри реактивной цепочки
 
-> **Аналогия из жизни:** Поток Netty — **единственная касса в супермаркете**. **`block()` / JDBC** — покупатель **5 минут ищет сдачу** — очередь встаёт. **`boundedElastic`** — **отдельная касса «медленные операции»**.
-
-![§17 Блокирующий код](../Images-docs/reactor-concept-17.png)
-
+> **Аналогия из жизни:** Поток Netty — **одна быстрая касса**.
+> `block()`, JDBC, `Thread.sleep()` — это клиент, который надолго занял кассу.
+> `boundedElastic` — **отдельная касса для медленных операций**.
 
 **Ответ:**
 
-1. JDBC, `Thread.sleep`, sync-код **занимают поток** — на Netty это останавливает другие запросы.
-2. Не выполняйте блокировку на `parallel()`, `single()`, потоке Netty.
-3. Legacy JDBC — оберните и перенесите:
+1. Блокирующий код **занимает поток целиком**, пока операция не закончится.
+2. Если такой код попал в **Netty event loop** — этот поток перестаёт обслуживать другие запросы.
+3. Поэтому блокирующие операции нельзя оставлять на event loop, `parallel()` или `single()`.
+4. Если блокировку нельзя убрать, её нужно **вынести в `Schedulers.boundedElastic()`**.
+5. Лучший вариант — вообще использовать неблокирующие драйверы и клиентов.
+
+**EN:** "boundedElastic is made to help with legacy blocking code if it cannot be avoided."
+
+**RU:** "`boundedElastic` предназначен для legacy-блокирующего кода, если избежать его нельзя."
+
+Источник: https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+***
+
+### Что считается блокирующим кодом
+
+Типичные примеры:
+
+- JDBC / JPA
+- `Thread.sleep(...)`
+- синхронный HTTP-клиент
+- файловый I/O через блокирующий API
+- вызов `.block()` внутри реактивной цепочки
+
+Такой код не "ожидает асинхронно", а реально **держит поток занятым**.
+
+***
+
+### Что делать правильно
+
+Если есть legacy JDBC:
 
 ```java
-
-Mono.fromCallable(() -> jdbcTemplate.queryForObject(...))
+Mono.fromCallable(() -> jdbcTemplate.queryForObject(sql, rowMapper, id))
     .subscribeOn(Schedulers.boundedElastic());
 ```
-4. Лучше: R2DBC вместо JDBC, WebClient вместо sync HTTP.
-5. `.block()` внутри `flatMap` в WebFlux — **нельзя**.
 
-**Вопрос:** *How do you handle blocking operations in reactive code?*
+Смысл такой:
 
-**Источник:** [Reactor — Schedulers](https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html)
+- `fromCallable(...)` заворачивает блокирующий вызов;
+- `subscribeOn(boundedElastic())` уводит его с event loop;
+- Netty-поток остаётся свободным.
 
-> **EN:** «boundedElastic is made to help with legacy blocking code if it cannot be avoided.»
+Источник: https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
 
-> **RU:** «boundedElastic — для legacy-блокирующего кода, если его нельзя убрать.»
+***
 
----
+### Что делать не надо
+
+```java
+userRepository.findById(id)
+    .flatMap(user -> {
+        PaymentStatus status = paymentClient.getStatus(user.getPaymentId()).block(); // плохо
+        return Mono.just(UserResponse.from(user, status));
+    });
+```
+
+Здесь `.block()` останавливает поток, на котором идёт цепочка.
+В WebFlux это ломает неблокирующую модель.
+
+***
+
+### Какой правильный ориентир
+
+- **Лучше всего**: R2DBC вместо JDBC, `WebClient` вместо sync HTTP.
+- **Если legacy неизбежен**: изолировать блокирующий вызов и переносить его на `boundedElastic`.
+- **Нельзя**: оставлять блокирующий код на Netty event loop.
+
+Источник: https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+
+
 
 ## 18. Краткая шпаргалка по операторам
 
-> **Аналогия из жизни:** Операторы — **надписи над станками на конвейере**: «перекрасить» (`map`), «открыть коробку и достать содержимое» (`flatMap`), «пропустить брак» (`filter`), «взять первые три» (`take`).
+> **Аналогия из жизни:** Операторы — это действия над потоком:
+> **преобразовать**, **отфильтровать**, **объединить**, **ограничить**, **поставить таймаут**, **подсмотреть значение для логов**.
 
-![§18 Шпаргалка операторов](../Images-docs/reactor-concept-18.png)
+**Ответ:** ниже — не просто сигнатуры, а **что оператор делает на практике**, **когда его применять**, и **маленький бизнес-пример**.
 
+**EN:** "Which operator do I need?" — в Reactor для этого есть отдельный справочник операторов.
 
-**Ответ:** ниже — **сигнатура из исходника** + **минимальный пример** для каждого оператора. `map` / `flatMap` / `concatMap` — подробно в §6.
+**RU:** В Reactor есть отдельный справочник: какой оператор для какой задачи нужен.
 
----
+Источник: https://projectreactor.io/docs/core/release/reference/\#which-operator
 
-### `filter`
+***
 
-```java
-
-// Flux.java
-public final Flux<T> filter(Predicate<? super T> p) {
-    return onAssembly(new FluxFilter<>(this, p));
-}
-```
+### `filter` — пропустить только подходящие элементы
 
 ```java
-
-Flux.just(1, 2, 3).filter(n -> n % 2 == 0).blockLast();  // 2
+public final Flux<T> filter(Predicate<? super T> p)
 ```
 
----
+**Что делает:**
+- Оставляет в потоке только те элементы, для которых условие вернуло `true`.
 
-### `take`
+**Когда нужен:**
+- Когда надо отсеять ненужные данные.
+
+**Пример:**
 
 ```java
-
-// Flux.java
-public final Flux<T> take(long n) {
-    return onAssembly(new FluxTake<>(this, n));
-}
+orderRepository.findAll()
+    .filter(order -> order.status() == OrderStatus.PAID);
 ```
+
+Здесь дальше пройдут только оплаченные заказы.
+
+***
+
+### `take` — взять только первые N элементов
 
 ```java
-
-Flux.range(1, 100).take(3).collectList().block();  // [1, 2, 3]
+public final Flux<T> take(long n)
 ```
 
----
+**Что делает:**
+- Берёт только первые `n` элементов, после чего завершает поток.
 
-### `zip`
+**Когда нужен:**
+- Когда нужен лимит: первые 10 записей, первые 100 событий и т.д.
+
+**Пример:**
 
 ```java
-
-// Flux.java — статический: ждёт элемент из КАЖДОГО источника, склеивает
-public static <T1, T2, O> Flux<O> zip(
-        Publisher<? extends T1> source1,
-        Publisher<? extends T2> source2,
-        BiFunction<? super T1, ? super T2, ? extends O> combinator) {
-    return onAssembly(new FluxZip<>(null, a -> combinator.apply(a[0], a[1]),
-        Queues.XS_BUFFER_SIZE, source1, source2));
-}
+notificationService.liveEvents()
+    .take(3);
 ```
+
+Здесь поток отдаст только первые 3 события и завершится.
+
+***
+
+### `zip` — дождаться результата от каждого источника и склеить
 
 ```java
-
-Flux.zip(
-    Flux.just("a", "b"),
-    Flux.just(1, 2),
-    (letter, num) -> letter + num
-).collectList().block();  // [a1, b2]
+public static <T1, T2, O> Flux<O> zip(...)
 ```
 
----
+**Что делает:**
+Ждёт по элементу от **каждого** источника и объединяет их в один результат.
 
-### `mergeWith` / `concatWith`
+**Когда нужен:**
+Когда надо собрать ответ из нескольких независимых источников.
+
+**Пример:**
 
 ```java
-
-// Flux.java
-public final Flux<T> mergeWith(Publisher<? extends T> other) {
-    return merge(this, other);
-}
-
-public final Flux<T> concatWith(Publisher<? extends T> other) {
-    return concat(this, other);
-}
+Mono.zip(
+    userService.getUser(userId),
+    paymentService.getPayment(userId),
+    (user, payment) -> UserPaymentResponse.from(user, payment)
+);
 ```
+
+Здесь итоговый ответ появится только когда будут готовы **оба** результата.
+
+***
+
+### `mergeWith` — объединить потоки вместе
 
 ```java
-
-Flux.just(1, 2).mergeWith(Flux.just(10, 20)).collectList().block();
-Flux.just(1, 2).concatWith(Flux.just(10, 20)).collectList().block();
+public final Flux<T> mergeWith(Publisher<? extends T> other)
 ```
 
----
+**Что делает:**
+- Сливает элементы из двух потоков **по мере поступления**.
 
-### `timeout`
+**Когда нужен:**
+- Когда порядок не важен, а важно получать данные сразу, как только они пришли.
+
+**Пример:**
 
 ```java
-
-// Flux.java
-public final Flux<T> timeout(Duration timeout) {
-    return timeout(timeout, null, Schedulers.parallel());
-}
+ordersStream.mergeWith(refundsStream);
 ```
+
+Здесь события заказов и возвратов будут идти вперемешку — как пришли, так и ушли дальше.
+
+***
+
+### `concatWith` — объединить потоки строго по очереди
 
 ```java
-
-Flux.just(1).delayElements(Duration.ofSeconds(5))
-    .timeout(Duration.ofSeconds(1))
-    .onErrorReturn(-1)
-    .blockLast();   // -1 (timeout)
+public final Flux<T> concatWith(Publisher<? extends T> other)
 ```
 
----
+**Что делает:**
+- Сначала полностью отдаёт первый поток, потом начинает второй.
 
-### `doOnNext` / `log`
+**Когда нужен:**
+- Когда порядок важен.
+
+**Пример:**
 
 ```java
-
-// Flux.java — side-effect, не меняет поток
-public final Flux<T> doOnNext(Consumer<? super T> onNext) {
-    return doOnSignal(this, null, null, onNext, null, null, null, null);
-}
-
-public final Flux<T> log() {
-    return log(null, Level.INFO);
-}
+cachedOrders.concatWith(liveOrders);
 ```
+
+Сначала отдадутся данные из кэша, и только потом — живой поток.
+
+***
+
+### `timeout` — оборвать слишком медленный источник
 
 ```java
-
-Flux.just("x")
-    .doOnNext(v -> System.out.println("before: " + v))
-    .map(String::toUpperCase)
-    .log()
-    .blockLast();
+public final Flux<T> timeout(Duration timeout)
 ```
 
-**Вопрос:** *What are the most commonly used transformation operators?*
+**Что делает:**
+Если источник не прислал сигнал вовремя — выбрасывает timeout-ошибку.
 
-**Источник:** [Reactor — which operator](https://projectreactor.io/docs/core/release/reference/#which-operator)
+**Когда нужен:**
+Когда внешний сервис или операция не должны висеть бесконечно.
 
-> **EN:** «map … flatMap … filter … zip …»
+**Пример:**
 
-> **RU:** Чаще всего спрашивают map, flatMap, filter, zip.
+```java
+paymentClient.getStatus(paymentId)
+    .timeout(Duration.ofSeconds(2));
+```
 
----
+Если статус платежа не пришёл за 2 секунды — цепочка завершится ошибкой timeout.
+
+***
+
+### `doOnNext` — выполнить побочный эффект на каждом элементе
+
+```java
+public final Flux<T> doOnNext(Consumer<? super T> onNext)
+```
+
+**Что делает:**
+Позволяет что-то сделать "по пути", не меняя сам элемент.
+
+**Когда нужен:**
+Для логирования, метрик, отладки.
+
+**Пример:**
+
+```java
+orderService.streamOrders()
+    .doOnNext(order -> log.info("order={}", order.getId()));
+```
+
+Поток остаётся тем же самым, просто на каждом элементе пишется лог.
+
+***
+
+### `log` — встроенный лог сигналов Reactor
+
+```java
+public final Flux<T> log()
+```
+
+**Что делает:**
+Логирует сигналы Reactor: `onSubscribe`, `request`, `onNext`, `onError`, `onComplete`.
+
+**Когда нужен:**
+Когда надо быстро посмотреть, как ведёт себя цепочка.
+
+**Пример:**
+
+```java
+paymentClient.getStatus(paymentId)
+    .log();
+```
+
+Это удобно для диагностики, но обычно не оставляют в production-коде надолго.
+
+***
+
+### Самый короткий ориентир
+
+- `filter` — отфильтровать
+- `take` — ограничить
+- `zip` — дождаться всех и склеить
+- `mergeWith` — объединить как пришло
+- `concatWith` — объединить по очереди
+- `timeout` — оборвать медленный вызов
+- `doOnNext` / `log` — посмотреть, что происходит внутри потока
+
+Источник: https://projectreactor.io/docs/core/release/reference/\#which-operator
+
 
 ## 19. share() и cache() — cold → hot
 

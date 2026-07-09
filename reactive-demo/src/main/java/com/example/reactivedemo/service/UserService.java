@@ -8,9 +8,12 @@ import com.example.reactivedemo.exception.UserNotFoundException;
 import com.example.reactivedemo.repository.OrderRepository;
 import com.example.reactivedemo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * <p>Бизнес-логика пользователей в <strong>реактивном</strong> стиле Spring WebFlux.</p>
@@ -29,6 +32,23 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
+
+    {
+        Mono<String> invoiceMono =
+                Mono.just("invoice-42")                         // Publisher
+                        .flatMap(
+                                id -> Mono.deferContextual( // оператор
+                                        ctx ->  Mono.just(ctx.get("traceId") + ": " + id)
+                                )
+                        )
+                        .contextWrite(
+                                ctx -> ctx.put("traceId", "T-1")
+                        );
+
+        invoiceMono.subscribe(                               // Subscriber
+                value -> System.out.println(value)
+        );
+    }
 
     /**
      * <p>Список всех пользователей.</p>
