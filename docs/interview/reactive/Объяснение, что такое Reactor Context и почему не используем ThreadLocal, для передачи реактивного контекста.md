@@ -56,6 +56,42 @@
         );
 ```
 
+- `Publisher` — это интерфейс `org.reactivestreams.Publisher`; 
+  - `Mono` и `Flux` являются его реализациями. 
+    - В примере `invoiceMono` — это объект `Mono`, то есть `Publisher`.
+    
+- `Subscriber` — интерфейс `org.reactivestreams.Subscriber`. 
+  - Вызов `subscribe(value -> ...)` создаёт конечный `Subscriber` за вас.
+  
+- `Subscription` — интерфейс `org.reactivestreams.Subscription`. 
+  - Reactor создаёт его при подписке и передаёт подписчику, через `onSubscribe(Subscription subscription)`. 
+    - Через него вызываются `request(n)` и `cancel()`.
+    
+- `CoreSubscriber` — Reactor-интерфейс, расширяющий `Subscriber`. 
+  - Именно у него есть метод `currentContext()`.
+
+`Context` физически доступен через `CoreSubscriber.currentContext()`. 
+ - Прикладной код обычно не получает этот внутренний `CoreSubscriber` напрямую, а читает контекст безопасным оператором:
+
+
+```java
+Mono.deferContextual(ctx -> {
+String traceId = ctx.get("traceId"); // ContextView
+    return Mono.just(traceId);
+});
+```
+
+ - То есть в вашем примере `ctx` внутри `deferContextual` — это представление `Context` текущего внутреннего `CoreSubscriber`.
+
+**Источник:** https://projectreactor.io/docs/core/release/api/reactor/core/CoreSubscriber.html
+
+`CoreSubscriber` — это `Subscriber`, понимающий `Context`; его метод `currentContext()` получает контекст от downstream-операторов или конечного `Subscriber`.
+
+**Источник:** https://projectreactor.io/docs/core/release/reference/advancedFeatures/context.html
+
+> Документация Reactor указывает, что `Context` связан с каждым `Subscriber` в цепочке, а данные контекста передаются по механизму `Subscription` от конечной подписки вверх по цепочке.
+
+
 ```textmate
 
 Mono.just(...) / flatMap(...) / contextWrite(...)
