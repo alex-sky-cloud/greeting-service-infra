@@ -34,20 +34,14 @@ public class UserService {
     private final OrderRepository orderRepository;
 
     {
-        Mono<String> invoiceMono =
-                Mono.just("invoice-42")                         // Publisher
-                        .flatMap(
-                                id -> Mono.deferContextual( // оператор
-                                        ctx ->  Mono.just(ctx.get("traceId") + ": " + id)
+        repository.findAll()
+                .flatMap(
+                        item -> Mono.fromCallable(
+                                        () -> remoteBlockingCall(item)
                                 )
-                        )
-                        .contextWrite(
-                                ctx -> ctx.put("traceId", "T-1")
-                        );
-
-        invoiceMono.subscribe(                               // Subscriber
-                value -> System.out.println(value)
-        );
+                                .subscribeOn(Schedulers.boundedElastic()) // блокировка уходит в правильный пул
+                )
+                .map(this::process);
     }
 
     /**
