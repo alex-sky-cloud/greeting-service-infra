@@ -34,14 +34,8 @@ public class UserService {
     private final OrderRepository orderRepository;
 
     {
-        repository.findAll()
-                .flatMap(
-                        item -> Mono.fromCallable(
-                                        () -> remoteBlockingCall(item)
-                                )
-                                .subscribeOn(Schedulers.boundedElastic()) // блокировка уходит в правильный пул
-                )
-                .map(this::process);
+
+
     }
 
     /**
