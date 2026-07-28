@@ -57,10 +57,6 @@ public class ReactorDemoService {
 
         Mono<User> byId = userRepository.findById(1L);
 
-        Mono<User> user = byId.map(user_v2 -> user_v2.email())
-                .flatMap(email -> userRepository.findByEmail(email));
-
-
         return Flux.fromIterable(ids)
                 .map(userRepository::findById);
     }
