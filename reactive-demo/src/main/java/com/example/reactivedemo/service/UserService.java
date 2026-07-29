@@ -15,6 +15,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
+
 /**
  * <p>Бизнес-логика пользователей в <strong>реактивном</strong> стиле Spring WebFlux.</p>
  *
@@ -35,7 +37,14 @@ public class UserService {
 
     {
 
-
+        // Вариант А: статическая форма
+        Flux<Order> result = Flux.concat(
+                        orderRepository.findPendingOrders()
+                                .filter(order -> order.getAmount() > 100)
+                                .map(this::enrichOrder),
+                        orderRepository.findArchivedOrders()
+                )
+                .doOnNext(this::log);
     }
 
     /**
