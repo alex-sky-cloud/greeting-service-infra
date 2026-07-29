@@ -33,6 +33,8 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun --no-daemon
 
 Проверка: http://localhost:8083/actuator/health
 
+**Лаборатория HTTP-пути:** `GET /api/orders/first-10` — см. [`docs/HTTP-REQUEST-DEBUG-BREAKPOINTS.md`](docs/HTTP-REQUEST-DEBUG-BREAKPOINTS.md).
+
 ---
 
 ## Структура модуля
