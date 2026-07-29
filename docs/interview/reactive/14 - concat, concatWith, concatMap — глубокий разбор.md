@@ -197,9 +197,11 @@ Flux<Order> result2 = orderRepository.findPendingOrders()
     .doOnNext(this::log);
 ```
 
-В обоих случаях смысл одинаковый: сначала выполняется левая цепочка, затем к ней последовательно добавляется ещё один `Publisher`. Но `concatWith` позволяет не “заворачивать” всю предыдущую цепочку в аргумент `Flux.concat(...)`, а продолжать писать её через точку.
+В обоих случаях **смысл одинаковый**: 
+ - сначала выполняется левая цепочка, затем к ней последовательно добавляется ещё один `Publisher`. 
+ - Но `concatWith` позволяет не "заворачивать" всю предыдущую цепочку в аргумент `Flux.concat(...)`, а продолжать писать её **через точку**.
 
-Именно в этом смысле `concatWith` — синтаксический сахар: не новый тип поведения, а более удобная форма записи той же операции для fluent API.
+Именно в этом смысле `concatWith` — синтаксический сахар: не новый тип поведения, а более удобная форма записи той же операции для **fluent** API.
 
 <a id="under-the-hood"></a>
 
@@ -222,17 +224,19 @@ Flux<String> result2 = left.concatWith(right);
 
 Но с точки зрения формы вызова разница есть:
 
+ - Здесь оба потока передаются как аргументы функции.
 ```java
 Flux.concat(left, right);
 ```
 
-Здесь оба потока передаются как аргументы функции.
+
+ - Здесь `left` становится текущим объектом (`this`), а `right` передаётся как дополнительный аргумент.
 
 ```java
 left.concatWith(right);
 ```
 
-Здесь `left` становится текущим объектом (`this`), а `right` передаётся как дополнительный аргумент.
+
 
 Именно поэтому `concatWith` естественно ложится в цепочку:
 
@@ -254,7 +258,7 @@ Flux<Order> step4 = step3.concatWith(repository.findArchivedOrders());
 Flux<Order> step5 = step4.doOnNext(this::log);
 ```
 
-Вот ключевая идея: каждый оператор в Reactor не “выполняет поток сразу”, а создаёт новый `Flux`, который оборачивает предыдущий. Поэтому вызов `.concatWith(other)` означает:
+Вот ключевая идея: каждый оператор в Reactor не "выполняет поток сразу", а создаёт новый `Flux`, который оборачивает предыдущий. Поэтому вызов `.concatWith(other)` означает:
 
 1. Слева уже есть построенная цепочка операторов.
 2. `concatWith` создаёт новый `Flux`, который оборачивает эту цепочку.
@@ -263,6 +267,44 @@ Flux<Order> step5 = step4.doOnNext(this::log);
 5. Поэтому `concatWith` — это не новая семантика, а новая форма подключения следующего `Publisher` к уже собранной слева цепочке.
 
 То есть природа действия `concatWith` такая: он берёт **текущий Flux как левую часть**, а переданный `Publisher` — как правую часть, и строит над ними новый последовательный оператор конкатенации.
+
+
+---
+
+`concatWith` под капотом — это не "особая магия цепочки", а обычный вызов, который в итоге сводится к `concat(this, other)`.
+
+```java
+public final Flux<T> concatWith(Publisher<? extends T> other) {
+    
+    if (this instanceof FluxConcatArray) {
+        FluxConcatArray<T> fluxConcatArray = (FluxConcatArray<T>) this;
+
+        return fluxConcatArray.concatAdditionalSourceLast(other);
+    }
+    return concat(this, other);
+}
+```
+
+- Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/Flux.java
+
+
+RU:
+
+> `concatWith(other)` проверяет частный случай `FluxConcatArray`, а в обычном случае просто вызывает `concat(this, other)`.
+
+То есть природа `concatWith` очень простая: левый поток берётся как `this`, правый приходит параметром `other`, после чего собирается новый `Flux` конкатенации.
+
+- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
+
+EN:
+
+> `Concatenate emissions of this Flux with the provided Publisher (no interleave).`
+
+RU:
+
+> Последовательно склеивает текущий `Flux` с переданным `Publisher`, без перемешивания элементов.
+
+---
 
 <a id="concatmap"></a>
 

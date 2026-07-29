@@ -1,0 +1,48 @@
+server:
+  port: 8083
+
+app:
+  env: local
+  version: unknown
+
+spring:
+  config:
+    activate:
+      on-profile: local
+  application:
+    name: reactive-study
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5434/reactive_study
+    username: app
+    password: app
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://localhost:5434/reactive_study
+    user: app
+    password: app
+    locations: classpath:db/migration
+    schemas: reactive_study
+    default-schema: reactive_study
+    create-schemas: true
+    baseline-on-migrate: true
+
+logging:
+  pattern:
+    console: '%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n'
+  level:
+    org.springframework.r2dbc: INFO
+    io.r2dbc.postgresql.QUERY: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true

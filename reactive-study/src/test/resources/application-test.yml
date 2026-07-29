@@ -1,0 +1,17 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/reactive_study
+    username: test
+    password: test
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://localhost:5432/reactive_study
+    user: test
+    password: test
+
+logging:
+  level:
+    io.r2dbc.postgresql.QUERY: WARN
