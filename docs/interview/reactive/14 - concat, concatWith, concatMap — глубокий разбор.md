@@ -336,21 +336,227 @@ https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
 
 > R: "Трансформирует элементы, эмитируемые этим Flux, асинхронно в Publisher'ы, затем разворачивает эти внутренние publisher'ы в единый Flux через слияние (merge), которое допускает их чередование."
 
+---
+
+`flatMap` действительно сначала применяет функцию `T -> Publisher<R>` к каждому элементу внешнего `Flux`, а затем объединяет сигналы полученных inner publisher’ов в единый `Flux`.
+
+Официальная документация прямо говорит: `flatMap` «flatten these inner publishers into a single Flux through merging, which allow them to interleave» — то есть разворачивает внутренние publisher’ы через **merge**, позволяя их элементам перемежаться.
+
+https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
+
+## Что означает преобразование в `Publisher`
+
+У обычного `map` функция возвращает значение:
+
+```java
+Flux<Integer> result =
+    Flux.just(1, 2, 3)
+        .map(value -> value * 10);
+```
+
+Логически это преобразование:
+
+```java
+Integer -> Integer
+```
+
+У `flatMap` функция возвращает новый реактивный источник:
+
+```java
+Flux<Integer> result =
+    Flux.just(1, 2, 3)
+        .flatMap(value -> Mono.just(value * 10));
+```
+
+Здесь сигнатура преобразования такая:
+
+```java
+Integer -> Publisher<Integer>
+```
+
+Концептуально можно представить промежуточный результат так:
+
+```java
+Flux<Mono<Integer>> inners =
+    Flux.just(1, 2, 3)
+        .map(value -> Mono.just(value * 10));
+```
+
+После этого `flatMap` подписывается на созданные `Mono`/`Flux` и объединяет все их эмиссии в один downstream-поток. В этом смысле он похож на «`map` в `Publisher` плюс merge», хотя реальная внутренняя реализация Reactor оптимизирована и не обязана буквально вызывать публичный `Flux.merge(...)`.
+
+https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
+
+## Пример merge-поведения
+
+```java
+Flux.just(1, 2, 3)
+    .flatMap(value ->
+        Mono.just(value * 10)
+            .delayElement(Duration.ofMillis((4 - value) * 100L))
+    )
+    .subscribe(System.out::println);
+```
+
+Создаются три inner publisher’а:
+
+```text
+1 -> Mono<10>, готов через 300 мс
+2 -> Mono<20>, готов через 200 мс
+3 -> Mono<30>, готов через 100 мс
+```
+
+Поскольку `flatMap` не ждёт завершения первого inner publisher перед подпиской на следующий, значения придут приблизительно в таком порядке:
+
+```text
+30
+20
+10
+```
+
+Это и означает merge: результат приходит в порядке фактического поступления сигналов от активных inner publisher’ов, поэтому исходный порядок внешнего `Flux` не сохраняется.
+
+https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
+
+## Отличие от `concatMap`
+
+| Оператор | Подписка на inner publisher | Порядок результатов | Стратегия |
+| :-- | :-- | :-- | :-- |
+| `concatMap` | Следующий — только после завершения текущего | Сохраняется | Concatenation |
+| `flatMap` | Несколько inner publisher’ов могут быть активны одновременно | Может нарушаться | Merging |
+| `flatMapSequential` | Может подписываться конкурентно | Сохраняется | Упорядоченный merge |
+
+Для `concatMap` Javadoc говорит именно о последовательном разворачивании с сохранением порядка через конкатенацию.
+
+https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#concatMap(java.util.function.Function)
+
+Для `flatMap` Javadoc явно использует термин **merging** и отдельно указывает на возможность **interleaving** — перемешивания элементов разных inner publisher’ов.
+
+https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
+
+## Исходный код
+
+В исходниках публичный `Flux.flatMap(...)` делегирует работу оператору `FluxFlatMap`. Эта реализация управляет несколькими активными inner subscription’ами, принимает их элементы и передаёт их одному downstream subscriber’у; параметр `concurrency` ограничивает число одновременно активных inner publisher’ов.
+
+https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/Flux.java
+
+Реализация самого оператора находится здесь:
+
+https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxFlatMap.java
+
+У `concatMap` отдельный оператор и иная стратегия: он не переходит к следующему inner publisher, пока текущий не завершится.
+
+https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxConcatMap.java
+
+
+---
+
 Поэтому разница такая:
 
 - `concat` / `concatWith` — соединяют уже готовые `Publisher`;
 - `concatMap` — сначала создаёт `Publisher` из каждого элемента, затем склеивает их последовательно;
 - `flatMap` — тоже создаёт `Publisher` из каждого элемента, но потом merge'ит их с возможным interleaving.
 
+---
+
+
+`Publisher` здесь обычно не «создаётся ради данных». Он представляет **асинхронную операцию**, которая позже выдаст результат:
+
+```java
+userId -> repository.findById(userId)     // Mono<User>
+order  -> paymentService.pay(order)       // Mono<Payment>
+file   -> webClient.post(...).retrieve()  // Mono<Response>
+```
+
+То есть внешний `Flux` выдаёт задания или входные значения, а `concatMap` / `flatMap` превращают каждое из них в отдельную асинхронную работу.
+
+```java
+Flux<Integer> ids = Flux.just(1, 2, 3);
+
+ids.concatMap(id -> repository.findById(id));
+```
+
+Для каждого `id` создаётся свой `Mono<User>` — запрос к БД. Затем:
+
+- `concatMap` выполняет такие запросы последовательно;
+- `flatMap` запускает несколько запросов одновременно и merge'ит ответы;
+- `flatMapSequential` может запускать одновременно, но выдаёт ответы в исходном порядке.
+
+С `Mono.just(value * 10)` пример искусственный: 
+ - он нужен лишь показать механику. 
+ - В реальном коде inner `Publisher` чаще всего оборачивает I/O, задержку, HTTP-вызов, чтение файла, отправку сообщения или другую асинхронную операцию.
+
+
+---
+
+# Когда и что использовать ?
+
+- `concatMap` нужен, когда набор inner publisher’ов **неизвестен заранее** или возникает динамически из элементов входного потока.
+
+- `concat` подходит, если источники уже есть:
+
+```java
+Flux.concat(
+    repository.findById(1),
+    repository.findById(2),
+    repository.findById(3)
+);
+```
+
+Но если `id` приходят из другого `Flux`, писать `concat` невозможно или неудобно, поэтому используем **concatMap**:
+
+```java
+Flux<Long> ids = getIds();
+
+ids.concatMap(repository::findById);
+```
+
+Это по смыслу:
+
+```java
+ids
+    .map(repository::findById) // Flux<Mono<User>>
+    .concatMap(Function.identity());
+```
+
+То есть главная выгода — **динамическое создание и последовательное выполнение операций для каждого элемента потока**: 
+ - **например**: 
+   - последовательно сохранить события, 
+   - обработать файлы или 
+   - выполнить HTTP-запросы, **cохранив их порядок**.
+
+https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#concatMap(java.util.function.Function)
+
+---
+
 <a id="summary"></a>
 
 ## Итоговая таблица различий
 
-| Аспект | concat | concatWith | concatMap |
-| :-- | :-- | :-- | :-- |
-| Тип вызова | Статический метод `Flux.concat(...)` | Метод экземпляра `flux.concatWith(...)` | Оператор-трансформация `flux.concatMap(fn)` |
-| Что объединяет | Готовые `Publisher` | Готовые `Publisher` | `Inner Publisher`, созданные из элементов |
-| Поведение | Последовательная подписка | Последовательная подписка | Последовательная подписка на inner publisher |
-| Fluent-стиль | Часто разрывает цепочку | Естественно продолжает цепочку | Естественно продолжает цепочку |
-| Interleaving | Нет | Нет | Нет |
-| Отношение к другому | Та же семантика, что у `concatWith` | Та же семантика, что у `concat` | Другая категория оператора: `map` + последовательный flatten |
+| Оператор | Когда использовать | Что делает |
+| :-- | :-- | :-- |
+| `Flux.concat(a, b)` | Publisher’ы уже известны и перечислены в коде | Подписывается на `a`, после его завершения — на `b` |
+| `a.concatWith(b)` | Нужно дописать следующий готовый Publisher к текущей цепочке | То же самое, что `concat`, но в fluent-стиле |
+| `source.concatMap(item -> operation(item))` | Каждый элемент `source` нужно обработать отдельной асинхронной операцией | Берёт первый элемент, запускает для него операцию и ждёт её окончания. Только затем берёт второй элемент и делает то же самое. |
+
+Например:
+
+```java
+Flux.just(1, 2, 3)
+    .concatMap(id -> repository.findById(id));
+```
+
+Читается так: 
+ - «получи пользователя с `id = 1`; 
+ - когда запрос завершится — получи пользователя с `id = 2`; 
+ - затем — с `id = 3`».
+
+`item -> operation(item)` — это просто запись функции: 
+ - она получает очередной элемент (`item`) и возвращает **асинхронную операцию** для него.
+
+ - Ключевая мысль об операторе `concat()`:
+
+```java
+Flux.concat(a, b, c)
+```
+
+ - это «у меня уже есть асинхронные операции `a`, `b`, `c`».
