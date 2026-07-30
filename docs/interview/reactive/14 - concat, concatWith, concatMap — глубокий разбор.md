@@ -8,46 +8,105 @@
 - [Почему concatWith — синтаксический сахар](#sugar)
 - [Как это выглядит под капотом](#under-the-hood)
 - [concatMap — трансформация в inner publisher](#concatmap)
-- [Итоговая таблица различий](#summary)
+- [Итоговая памятка различий](#summary)
 
 <a id="tldr"></a>
 
 ## Три оператора одной строкой
 
-`concat` и `concatWith` — это два способа записать одну и ту же операцию последовательного объединения уже готовых `Publisher`; `concatMap` — другой оператор: он превращает каждый элемент в `inner publisher`, а затем последовательно их объединяет.
+`concat` и `concatWith` — это два способа записать одну и ту же операцию: последовательное объединение уже готовых `Publisher`.
+
+`concatMap` — другой оператор: он берёт каждый элемент входного `Flux`, превращает его в `inner publisher` (внутренний publisher), а потом последовательно раскрывает такие inner publisher в один общий поток.
+
+Если сказать совсем коротко:
+
+- `Flux.concat(a, b)` — у меня уже есть готовые `Publisher` `a` и `b`, нужно сначала выполнить `a`, потом `b`.
+- `a.concatWith(b)` — то же самое, но в fluent-форме (в цепочке через точку).
+- `source.concatMap(item -> operation(item))` — у меня есть поток элементов, и для каждого элемента нужно создать свою асинхронную операцию и выполнить такие операции по очереди.
 
 <a id="concat"></a>
 
 ## concat — статический метод
 
 ```java
-Flux<String> flux1 = Flux.just("a", "b").delayElements(Duration.ofMillis(500));
-Flux<String> flux2 = Flux.just("c", "d").delayElements(Duration.ofMillis(500));
+Flux<String> firstLetters = Flux.just("a", "b").delayElements(Duration.ofMillis(300));
+Flux<String> secondLetters = Flux.just("c", "d").delayElements(Duration.ofMillis(300));
 
-Flux<String> result = Flux.concat(flux1, flux2); //здесь можно в качестве аргумента передавать любое количество Publishers (потоков с данными)
+Flux<String> result = Flux.concat(firstLetters, secondLetters);
+
 result.subscribe(System.out::println);
-// Вывод: a, b, c, d — flux2 не начинает работу, пока flux1 не завершится (onComplete)
+// Вывод: a, b, c, d
+// secondLetters не начнёт эмитить элементы, пока firstLetters не завершится
 ```
 
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concat(org.reactivestreams.Publisher...)
+- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concat(org.reactivestreams.Publisher...)
 
-> EN: "Concatenate all sources provided as a vararg, forwarding elements emitted by the sources downstream."
+EN:
 
-> R: "**Конкатенирует (соединяет)** все источники, переданные в качестве **vararg**, передавая элементы, эмитируемые источниками, далее вниз по потоку."
+> "Concatenate all sources provided as a vararg, forwarding elements emitted by the sources downstream."
 
-Здесь **оба источника** передаются в статический метод как аргументы. Такая форма удобна, когда вы сразу работаете с несколькими готовыми `Publisher`.
+RU:
+
+> «Последовательно соединяет все источники, переданные как vararg, и передаёт их элементы дальше downstream-подписчику.»
+
+Здесь оба `Publisher` уже существуют заранее. Мы просто говорим Reactor: сначала подпишись на первый поток, потом — на второй.
+
+### Бизнес-пример 1: сначала кэш, потом live-данные
+
+```java
+Flux<OrderEvent> cachedEvents = orderEventCacheService.readRecentEvents(orderId);
+Flux<OrderEvent> liveEvents = orderEventStreamService.subscribeLiveEvents(orderId);
+
+Flux<OrderEvent> orderTimeline = Flux.concat(cachedEvents, liveEvents);
+```
+
+Здесь сначала клиент получает уже накопленные события заказа из кэша, и только после завершения этого источника начинается живая подписка на новые события.
+
+### Бизнес-пример 2: сначала активные, потом архивные записи
+
+```java
+Flux<Order> activeOrders = orderRepository.findActiveByCustomerId(customerId);
+Flux<Order> archivedOrders = archiveOrderRepository.findArchivedByCustomerId(customerId);
+
+Flux<Order> allOrders = Flux.concat(activeOrders, archivedOrders);
+```
+
+Такой вариант удобен, когда важно сначала показать пользователю актуальные данные, а затем уже подгрузить архив.
+
+### Бизнес-пример 3: сначала локальное хранилище, потом удалённое
+
+```java
+Flux<DocumentChunk> localChunks = localDocumentStorage.readChunks(documentId);
+Flux<DocumentChunk> remoteChunks = backupDocumentStorage.readChunks(documentId);
+
+Flux<DocumentChunk> documentContent = Flux.concat(localChunks, remoteChunks);
+```
+
+Это подходит не для параллельного объединения, а именно для строгой последовательности двух уже готовых источников.
+
+### Бизнес-пример 4: сначала подтверждённые, потом отложенные уведомления
+
+```java
+Flux<Notification> confirmedNotifications = notificationRepository.findConfirmedForUser(userId);
+Flux<Notification> deferredNotifications = deferredNotificationRepository.findDeferredForUser(userId);
+
+Flux<Notification> notificationFeed = Flux.concat(confirmedNotifications, deferredNotifications);
+```
+
+Так читающий код сразу видит бизнес-правило: сначала отдать один заранее подготовленный поток, затем второй.
 
 ---
 
 ```java
-
-public static <T> Flux<T> concat(Publisher<? extends Publisher<? extends T>> sources, int prefetch) {
-  return from(sources).concatMap(identityFunction(), prefetch);
-}`
+public static <T> Flux<T> concat(
+        Publisher<? extends Publisher<? extends T>> sources,
+        int prefetch
+) {
+    return from(sources).concatMap(identityFunction(), prefetch);
+}
 ```
 
-
-- `prefetch` в этом контракте — это **не количество чисел внутри `Flux`**, а сколько **вложенных `Publisher`** взять заранее из внешнего источника.
+- `prefetch` в этом контракте — это не количество чисел внутри `Flux`, а количество вложенных `Publisher`, которые Reactor заранее запрашивает у внешнего `Publisher`.
 
 - Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
 
@@ -59,196 +118,226 @@ RU:
 
 > `prefetch` — количество `Publisher`, которые нужно заранее запросить у внешнего `Publisher`.
 
-Пример:
+Простой пример:
 
 ```java
-Flux<Flux<Integer>> sources = Flux.just(
-    Flux.just(1, 2), //1 Publisher
-    Flux.just(3, 4), //2 Publisher
-    Flux.just(5, 6) //3 Publisher
+Flux<Flux<Integer>> numberSources = Flux.just(
+    Flux.just(1, 2),
+    Flux.just(3, 4),
+    Flux.just(5, 6)
 );
 
-Flux<Integer> result = Flux.concat(sources, 2);
+int publisherPrefetch = 2;
+
+Flux<Integer> result = Flux.concat(numberSources, publisherPrefetch);
 ```
 
-Здесь `sources` — это не один поток чисел, а **внешний поток, который производит (emitting) другие потоки**.
-- Поэтому `prefetch = 2` значит:
-  - Reactor заранее попросит у внешнего `sources` **два inner publisher** в запас.
+Здесь `numberSources` — это внешний поток, который выдаёт не числа, а другие `Publisher`.
+
+Поэтому `publisherPrefetch = 2` означает: Reactor заранее запросит два inner publisher у внешнего источника и будет держать их готовыми к последовательной обработке.
 
 - Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/Flux.java
 
 EN:
 
-```java
- `public static <T> Flux<T> concat(Publisher<? extends Publisher<? extends T>> sources, int prefetch) {`
-
-    return from(sources).concatMap(identityFunction(), prefetch);`
-}
-```
-
-**RU**:
-
-> `concat(sources, prefetch)` внутри реализован через `concatMap(identityFunction(), prefetch)`.
-
-Если у тебя просто `Flux.just(1, 2, 3, ..., 100)`, то это **один publisher со 100 элементами**.
-- Тут нет "100 publisher'ов", поэтому в таком примере `prefetch` из `concat(Publisher<Publisher<T>>, prefetch)` вообще не про числа, а не про **уровень вложенных потоков**.
-
-- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
-
-EN:
-
-> `Create a Flux that emits the provided elements and then completes.`
+> `return from(sources).concatMap(identityFunction(), prefetch);`
 
 RU:
 
-> `Создаёт Flux, который эмитит переданные элементы и затем завершается.`
+> `concat(sources, prefetch)` внутри построен через `concatMap(identityFunction(), prefetch)`.
 
-Запомнить можно так:
+### Бизнес-пример с prefetch 1: поток источников заказов
 
 ```java
-Flux<Flux<Integer>> sources = Flux.just(
-        Flux.just(1, 2),
-        Flux.just(3, 4)
+Flux<Flux<Order>> orderSources = Flux.just(
+    orderRepository.findVipOrders(),
+    orderRepository.findPriorityOrders(),
+    orderRepository.findRegularOrders()
 );
 
-Flux.concat(sources, 2);
+int publisherPrefetch = 2;
+
+Flux<Order> orders = Flux.concat(orderSources, publisherPrefetch);
 ```
 
-Здесь `2` — это `prefetch`: сколько внутренних `Publisher` заранее запрашивается у внешнего `Publisher`.
+Здесь внешний `Flux` поставляет внутренние потоки заказов. `publisherPrefetch` показывает, сколько таких внутренних потоков Reactor может заранее запросить у внешнего источника.
 
-- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
+### Бизнес-пример с prefetch 2: последовательная обработка партий файлов
 
-EN:
-
-> `prefetch` - the number of Publishers to prefetch from the outer `Publisher`
-
-RU:
-
-> `prefetch` — количество `Publisher`, которые нужно заранее запросить у внешнего `Publisher`.
-
----
 ```java
+Flux<Flux<FileTask>> taskBatches = fileTaskBatchRepository.findTaskBatchesForNode(nodeId);
 
-Flux<Flux<Order>> orderSources = orderRepository.findOrderSources();
+int publisherPrefetch = 3;
 
-Flux<Order> result = Flux.concat(orderSources, 2)
-        .doOnNext(this::log);
+Flux<FileTask> tasks = Flux.concat(taskBatches, publisherPrefetch);
 ```
 
-Здесь `prefetch` регулирует количество обрабатываемых источников данных:
-- внешний `Publisher` поставляет внутренние `Publisher`, а `2` задаёт, сколько таких источников запрашивается заранее.
+Это удобно, когда внешний поток поставляет партии работ, а сами партии нужно раскрывать строго по очереди.
 
-- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
+### Бизнес-пример с prefetch 3: поток групп уведомлений
 
-EN:
+```java
+Flux<Flux<NotificationJob>> notificationGroups = notificationPlanner.findPlannedGroups(campaignId);
 
-> `prefetch` - the number of Publishers to prefetch from the outer `Publisher`
+int publisherPrefetch = 2;
 
-RU:
+Flux<NotificationJob> jobs = Flux.concat(notificationGroups, publisherPrefetch);
+```
 
-> `prefetch` — количество `Publisher`, которые нужно заранее запросить у внешнего `Publisher`.
----
+Здесь `prefetch` не про количество `NotificationJob`, а про количество заранее запрошенных групп-источников.
 
 <a id="concatwith"></a>
 
 ## concatWith — метод экземпляра
 
 ```java
-Flux<String> flux1 = Flux.just("a", "b").delayElements(Duration.ofMillis(500));
-Flux<String> flux2 = Flux.just("c", "d").delayElements(Duration.ofMillis(500));
+Flux<String> firstLetters = Flux.just("a", "b").delayElements(Duration.ofMillis(300));
+Flux<String> secondLetters = Flux.just("c", "d").delayElements(Duration.ofMillis(300));
 
-Flux<String> result = flux1.concatWith(flux2);
+Flux<String> result = firstLetters.concatWith(secondLetters);
+
 result.subscribe(System.out::println);
-// Вывод идентичен предыдущему примеру: a, b, c, d
+// Вывод тот же: a, b, c, d
 ```
 
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concatWith(org.reactivestreams.Publisher)
+- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concatWith(org.reactivestreams.Publisher)
 
-> EN: "Concatenate emissions of this Flux with the provided Publisher (no interleave)."
+EN:
 
-> R: "Конкатенирует производимые элементы данным Flux с предоставленным Publisher (без чередования)."
+> "Concatenate emissions of this Flux with the provided Publisher (no interleave)."
 
-По поведению это та же **последовательная конкатенация**:
-- сначала отрабатывает **левый поток**, затем после того, как **левый поток** сообщил сигнал `onComplete` и начинается **правый поток**. Разница не в семантике, а в форме вызова.
+RU:
+
+> «Последовательно соединяет элементы текущего Flux с переданным Publisher без перемешивания.»
+
+По поведению это тот же `concat`: сначала полностью отрабатывает левый поток, потом начинается правый.
+
+Разница только в форме записи:
+
+- `Flux.concat(a, b)` — статический вызов;
+- `a.concatWith(b)` — вызов через экземпляр.
+
+### Бизнес-пример 1: сначала данные из БД, потом догрузка из API
+
+```java
+Flux<Product> databaseProducts = productRepository.findPublishedProducts(categoryId);
+Flux<Product> externalCatalogProducts = productCatalogClient.fetchAdditionalProducts(categoryId);
+
+Flux<Product> productFeed = databaseProducts.concatWith(externalCatalogProducts);
+```
+
+Когда код уже строится цепочкой слева направо, `concatWith` читается естественнее.
+
+### Бизнес-пример 2: сначала ошибки текущего часа, потом архивные
+
+```java
+Flux<ErrorLog> currentHourErrors = logRepository.findErrorsForCurrentHour(serviceName);
+Flux<ErrorLog> archivedErrors = archiveLogRepository.findOlderErrors(serviceName);
+
+Flux<ErrorLog> allErrors = currentHourErrors.concatWith(archivedErrors);
+```
+
+Это такой же сценарий, как у `concat`: готовый левый поток плюс готовый правый поток.
+
+### Бизнес-пример 3: сначала локальные сообщения, потом резервный брокер
+
+```java
+Flux<MessageEnvelope> localBrokerMessages = localBrokerClient.consume(topicName);
+Flux<MessageEnvelope> backupBrokerMessages = backupBrokerClient.consume(topicName);
+
+Flux<MessageEnvelope> messages = localBrokerMessages.concatWith(backupBrokerMessages);
+```
+
+Если важно явно показать: «сначала один источник, потом другой», `concatWith` подходит хорошо.
+
+### Бизнес-пример 4: сначала основная цепочка, потом хвост из аудита
+
+```java
+Flux<PaymentAuditEvent> mainAuditEvents = auditRepository.findMainEvents(paymentId)
+    .filter(PaymentAuditEvent::isVisibleForSupport);
+
+Flux<PaymentAuditEvent> trailingAuditEvents = auditRepository.findTrailingTechnicalEvents(paymentId);
+
+Flux<PaymentAuditEvent> auditTimeline = mainAuditEvents.concatWith(trailingAuditEvents);
+```
+
+Здесь fluent-форма особенно читаема, потому что левая цепочка уже собрана до вызова `concatWith`.
 
 <a id="sugar"></a>
 
 ## Почему concatWith — синтаксический сахар
 
-Разница между `concat` и `concatWith` не в логике выполнения, а в том, как эта логика записывается в коде.
+Разница между `concat` и `concatWith` не в бизнес-смысле и не в порядке выполнения. Это одна и та же последовательная конкатенация, просто записанная по-разному.
 
 ```java
-// Вариант А: статическая форма
 Flux<Order> pendingOrders = orderRepository.findPendingOrders()
-                .filter(order -> order.getAmount() > 100)
-                .map(this::enrichOrder);
+    .filter(order -> order.getAmount().compareTo(BigDecimal.valueOf(100)) > 0)
+    .map(this::enrichOrder);
 
 Flux<Order> archivedOrders = orderRepository.findArchivedOrders();
 
-Flux<Order> result = Flux.concat(pendingOrders, archivedOrders)
-        .doOnNext(this::log);
+Flux<Order> result1 = Flux.concat(pendingOrders, archivedOrders);
 
-
-// Вариант Б: fluent-форма через метод экземпляра
 Flux<Order> result2 = orderRepository.findPendingOrders()
-    .filter(order -> order.getAmount() > 100)
+    .filter(order -> order.getAmount().compareTo(BigDecimal.valueOf(100)) > 0)
     .map(this::enrichOrder)
-    .concatWith(orderRepository.findArchivedOrders())
-    .doOnNext(this::log);
+    .concatWith(orderRepository.findArchivedOrders());
 ```
 
-В обоих случаях **смысл одинаковый**: 
- - сначала выполняется левая цепочка, затем к ней последовательно добавляется ещё один `Publisher`. 
- - Но `concatWith` позволяет не "заворачивать" всю предыдущую цепочку в аргумент `Flux.concat(...)`, а продолжать писать её **через точку**.
+В обоих случаях смысл одинаковый: сначала выполняется левая часть, затем к ней последовательно добавляется ещё один уже готовый `Publisher`.
 
-Именно в этом смысле `concatWith` — синтаксический сахар: не новый тип поведения, а более удобная форма записи той же операции для **fluent** API.
+### Бизнес-пример 1: почему fluent-форма бывает удобнее
+
+```java
+Flux<CustomerInvoice> invoices = invoiceRepository.findOpenInvoices(customerId)
+    .filter(CustomerInvoice::isPayable)
+    .map(this::attachCurrency)
+    .concatWith(invoiceArchiveRepository.findRecentlyClosedInvoices(customerId));
+```
+
+Если левая часть уже выражена как цепочка операторов, дописать `.concatWith(...)` проще и читаемее, чем выносить всю цепочку в аргумент `Flux.concat(...)`.
+
+### Бизнес-пример 2: тот же смысл в статической форме
+
+```java
+Flux<CustomerInvoice> openInvoices = invoiceRepository.findOpenInvoices(customerId)
+    .filter(CustomerInvoice::isPayable)
+    .map(this::attachCurrency);
+
+Flux<CustomerInvoice> recentlyClosedInvoices = invoiceArchiveRepository.findRecentlyClosedInvoices(customerId);
+
+Flux<CustomerInvoice> invoices = Flux.concat(openInvoices, recentlyClosedInvoices);
+```
+
+Этот вариант полезен, когда оба потока уже объявлены переменными и их удобно передать как готовые аргументы.
+
+### Бизнес-пример 3: выбор формы зависит от читаемости
+
+```java
+Flux<ShipmentEvent> shipmentEvents = shipmentRepository.findEvents(shipmentId)
+    .map(this::enrichShipmentEvent)
+    .concatWith(shipmentArchiveRepository.findOlderEvents(shipmentId));
+```
+
+Здесь нет новой семантики. Есть только более удобная запись той же операции.
 
 <a id="under-the-hood"></a>
 
 ## Как это выглядит под капотом
 
-Чтобы понять природу `concatWith`, полезнее проводить аналогию не с лямбдой и анонимным классом, а со **статическим вызовом** и **вызовом через экземпляр**.
+Чтобы понять природу `concatWith`, полезно смотреть на него как на обычный метод экземпляра, который в итоге приводит к той же идее: слева текущий `Flux`, справа ещё один `Publisher`, а результат — новый `Flux` последовательной конкатенации.
 
 ```java
 Flux<String> left = Flux.just("A", "B");
 Flux<String> right = Flux.just("C", "D");
 
-// Статическая форма
 Flux<String> result1 = Flux.concat(left, right);
-
-// Форма через экземпляр
 Flux<String> result2 = left.concatWith(right);
 ```
 
-С точки зрения результата это одно и то же: сначала подписка идёт на `left`, после его завершения — на `right`. Разницы в порядке эмиссии здесь нет.
+С точки зрения результата это одно и то же: сначала подписка идёт на `left`, после его завершения — на `right`.
 
-Но с точки зрения формы вызова разница есть:
-
- - Здесь оба потока передаются как аргументы функции.
-```java
-Flux.concat(left, right);
-```
-
-
- - Здесь `left` становится текущим объектом (`this`), а `right` передаётся как дополнительный аргумент.
-
-```java
-left.concatWith(right);
-```
-
-
-
-Именно поэтому `concatWith` естественно ложится в цепочку:
-
-```java
-repository.findActiveOrders()
-    .filter(Order::isValid)
-    .map(this::enrich)
-    .concatWith(repository.findArchivedOrders())
-    .doOnNext(this::log);
-```
-
-Если мысленно развернуть эту запись по шагам, получится так:
+Если развернуть fluent-цепочку по шагам, картина становится понятнее:
 
 ```java
 Flux<Order> step1 = repository.findActiveOrders();
@@ -258,27 +347,20 @@ Flux<Order> step4 = step3.concatWith(repository.findArchivedOrders());
 Flux<Order> step5 = step4.doOnNext(this::log);
 ```
 
-Вот ключевая идея: каждый оператор в Reactor не "выполняет поток сразу", а создаёт новый `Flux`, который оборачивает предыдущий. Поэтому вызов `.concatWith(other)` означает:
+Это важно понимать так:
 
-1. Слева уже есть построенная цепочка операторов.
-2. `concatWith` создаёт новый `Flux`, который оборачивает эту цепочку.
-3. При подписке он сначала подписывается на левый источник.
-4. Только после `onComplete` левого источника он подписывается на `other`.
-5. Поэтому `concatWith` — это не новая семантика, а новая форма подключения следующего `Publisher` к уже собранной слева цепочке.
+1. Каждый оператор не исполняет поток немедленно, а строит новый `Flux`.
+2. `concatWith` берёт уже собранную слева цепочку как левый источник.
+3. Переданный `Publisher` становится правым источником.
+4. При подписке сначала отрабатывает левый источник.
+5. Только после `onComplete` левого источника начинается правый.
 
-То есть природа действия `concatWith` такая: он берёт **текущий Flux как левую часть**, а переданный `Publisher` — как правую часть, и строит над ними новый последовательный оператор конкатенации.
-
-
----
-
-`concatWith` под капотом — это не "особая магия цепочки", а обычный вызов, который в итоге сводится к `concat(this, other)`.
+Под капотом `concatWith` сводится к той же базовой операции конкатенации:
 
 ```java
 public final Flux<T> concatWith(Publisher<? extends T> other) {
-    
     if (this instanceof FluxConcatArray) {
         FluxConcatArray<T> fluxConcatArray = (FluxConcatArray<T>) this;
-
         return fluxConcatArray.concatAdditionalSourceLast(other);
     }
     return concat(this, other);
@@ -287,24 +369,41 @@ public final Flux<T> concatWith(Publisher<? extends T> other) {
 
 - Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/Flux.java
 
-
-RU:
-
-> `concatWith(other)` проверяет частный случай `FluxConcatArray`, а в обычном случае просто вызывает `concat(this, other)`.
-
-То есть природа `concatWith` очень простая: левый поток берётся как `this`, правый приходит параметром `other`, после чего собирается новый `Flux` конкатенации.
-
-- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
-
 EN:
 
-> `Concatenate emissions of this Flux with the provided Publisher (no interleave).`
+> `return concat(this, other);`
 
 RU:
 
-> Последовательно склеивает текущий `Flux` с переданным `Publisher`, без перемешивания элементов.
+> В обычном случае `concatWith(other)` просто строится как `concat(this, other)`.
 
----
+### Бизнес-разбор под капотом
+
+```java
+Flux<Order> visibleOrders = orderRepository.findActiveOrders()
+    .filter(Order::isVisibleForManager)
+    .map(this::attachCustomerSegment);
+
+Flux<Order> archivedOrders = archiveOrderRepository.findArchivedOrders();
+
+Flux<Order> result = visibleOrders.concatWith(archivedOrders);
+```
+
+Здесь `visibleOrders` уже не «сырой запрос в БД», а цепочка из нескольких операторов. `concatWith` не ломает её и не выполняет отдельно каждую стадию. Он просто строит новый `Flux`, который при подписке сначала целиком выполнит левую цепочку, а затем подпишется на `archivedOrders`.
+
+### Ещё один бизнес-разбор
+
+```java
+Flux<AccountEvent> primaryEvents = accountEventRepository.findPrimaryEvents(accountId)
+    .map(this::maskSensitiveFields)
+    .filter(AccountEvent::isAllowedForSupport);
+
+Flux<AccountEvent> backupEvents = backupEventRepository.findBackupEvents(accountId);
+
+Flux<AccountEvent> accountHistory = primaryEvents.concatWith(backupEvents);
+```
+
+Мысленно это можно читать так: «возьми уже собранный слева pipeline (пайплайн) и добавь к нему ещё один готовый поток справа».
 
 <a id="concatmap"></a>
 
@@ -313,250 +412,453 @@ RU:
 ```java
 Flux<Integer> source = Flux.just(1, 2, 3);
 
-source.concatMap(value ->
-        Mono.just(value * 10).delayElement(Duration.ofMillis(100))
-    )
-    .subscribe(System.out::println);
-// Вывод: 10, 20, 30 — второй inner publisher не подписывается, пока первый не завершится
+Flux<Integer> result = source.concatMap(value ->
+    Mono.just(value * 10)
+        .delayElement(Duration.ofMillis(100))
+);
+
+result.subscribe(System.out::println);
+// Вывод: 10, 20, 30
+// второй inner publisher не начнёт эмитить данные, пока первый не завершится
 ```
 
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concatMap(java.util.function.Function)
+- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concatMap(java.util.function.Function)
 
-> EN: "Transform the elements emitted by this Flux asynchronously into Publishers, then flatten these inner publishers into a single Flux, sequentially and preserving order using concatenation."
+EN:
 
-> R: "Трансформирует элементы, эмитируемые этим Flux, асинхронно в Publisher'ы, затем разворачивает эти внутренние (inner) publisher'ы в единый Flux, последовательно и с сохранением порядка, используя конкатенацию."
+> "Transform the elements emitted by this Flux asynchronously into Publishers, then flatten these inner publishers into a single Flux, sequentially and preserving order using concatenation."
 
-Это уже не оператор “склейки двух готовых потоков”. Здесь сначала каждый элемент превращается функцией в новый `Publisher`, а затем эти внутренние publisher'ы последовательно раскрываются в один результирующий поток.
+RU:
 
-Для контраста — `flatMap` тоже делает преобразование в `Publisher`, но объединяет их через merge, поэтому допускает перемешивание результатов.
+> «Преобразует элементы этого Flux асинхронно в Publisher, затем разворачивает эти inner publisher в один Flux последовательно и с сохранением порядка через конкатенацию.»
 
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#flatMap(java.util.function.Function)
+Это уже не склейка двух готовых потоков. Здесь для каждого входного элемента создаётся своя асинхронная операция.
 
-> EN: "Transform the elements emitted by this Flux asynchronously into Publishers, then flatten these inner publishers into a single Flux through merging, which allow them to interleave."
+То есть логика такая:
 
-> R: "Трансформирует элементы, эмитируемые этим Flux, асинхронно в Publisher'ы, затем разворачивает эти внутренние publisher'ы в единый Flux через слияние (merge), которое допускает их чередование."
+- пришёл элемент `1`;
+- mapper (маппер) создал для него inner publisher;
+- Reactor дождался завершения этого inner publisher;
+- только потом взял следующий элемент `2`.
 
----
+### Что значит `item -> operation(item)`
 
-`flatMap` действительно сначала применяет функцию `T -> Publisher<R>` к каждому элементу внешнего `Flux`, а затем объединяет сигналы полученных inner publisher’ов в единый `Flux`.
+Вот запись:
 
-Официальная документация прямо говорит: `flatMap` «flatten these inner publishers into a single Flux through merging, which allow them to interleave» — то есть разворачивает внутренние publisher’ы через **merge**, позволяя их элементам перемежаться.
+```java
+source.concatMap(item -> operation(item))
+```
 
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
+нужно читать так:
+
+- `item` — очередной элемент из внешнего `Flux`;
+- `operation(item)` — асинхронная операция именно для этого элемента;
+- результат `operation(item)` — это `Publisher`, обычно `Mono<T>` или `Flux<T>`.
+
+Например:
+
+```java
+Flux<Long> userIds = Flux.just(101L, 102L, 103L);
+
+Flux<User> users = userIds.concatMap(userId -> userRepository.findById(userId));
+```
+
+Здесь для каждого `userId` создаётся отдельный `Mono<User>`, и такие запросы выполняются строго по очереди.
+
+### Бизнес-пример 1: последовательная обработка платёжных заявок
+
+```java
+Flux<PaymentRequest> paymentRequests = paymentRequestRepository.findPendingRequests();
+
+Flux<PaymentResult> paymentResults = paymentRequests.concatMap(paymentRequest ->
+    paymentGateway.charge(paymentRequest)
+        .flatMap(chargeResponse ->
+            paymentLedgerService.recordSuccessfulCharge(paymentRequest, chargeResponse)
+                .thenReturn(new PaymentResult(paymentRequest.id(), chargeResponse.transactionId(), "CHARGED"))
+        )
+);
+```
+
+Здесь `concatMap` нужен на внешнем уровне: следующая заявка на списание начнёт обрабатываться только после завершения текущей. Это полезно, когда порядок и изоляция важнее максимальной скорости.
+
+### Бизнес-пример 2: события одного агрегата по очереди
+
+```java
+Flux<DomainEvent> incomingEvents = eventInboxRepository.findEventsForAggregate(aggregateId);
+
+Flux<ProcessingResult> processingResults = incomingEvents.concatMap(event ->
+    aggregateStateRepository.loadState(aggregateId)
+        .flatMap(currentState -> domainService.applyEvent(currentState, event))
+        .flatMap(updatedState -> aggregateStateRepository.saveState(aggregateId, updatedState))
+        .thenReturn(new ProcessingResult(event.id(), "APPLIED"))
+);
+```
+
+Это классический случай: если поменять `concatMap` на `flatMap`, события одного и того же агрегата могут начать обрабатываться конкурентно и сломать порядок бизнес-изменений.
+
+### Бизнес-пример 3: последовательная обработка файлов
+
+```java
+Flux<FileImportTask> importTasks = fileImportTaskRepository.findScheduledTasks();
+
+Flux<FileImportResult> importResults = importTasks.concatMap(importTask ->
+    fileStorageClient.download(importTask.fileId())
+        .flatMap(fileContent -> fileParser.parse(fileContent, importTask.format()))
+        .flatMap(parsedRows -> importService.saveRows(importTask.batchId(), parsedRows))
+        .thenReturn(new FileImportResult(importTask.fileId(), "IMPORTED"))
+);
+```
+
+Здесь каждый элемент внешнего потока порождает свою цепочку асинхронных шагов. `concatMap` гарантирует, что задачи пойдут одна за другой.
+
+### Бизнес-пример 4: генерация отчёта по пользователям
+
+```java
+Flux<UUID> userIds = reportService.findUserIdsForMonthlyReport();
+
+Flux<UserReportRow> reportRows = userIds.concatMap(userId ->
+    userRepository.findById(userId)
+        .zipWith(orderRepository.findPaidByUserId(userId).collectList())
+        .map(tuple -> new UserReportRow(
+            tuple.getT1().getId(),
+            tuple.getT1().getEmail(),
+            tuple.getT2().size()
+        ))
+);
+```
+
+Здесь снаружи стоит `concatMap`, потому что строки отчёта по пользователям нужно строить по порядку. Но внутри одного пользователя используется `zipWith`, потому что данные пользователя и список заказов можно получать как единый набор результатов.
+
+## Где здесь `zip`, а где `concatMap`
+
+Это один из самых частых вопросов.
+
+`concatMap` и `zip` — не конкуренты и не взаимозаменяемые операторы. Они решают разные задачи.
+
+- `concatMap` отвечает за то, как обрабатываются элементы внешнего потока.
+- `zip` отвечает за то, как собрать результаты нескольких источников в один общий результат.
+
+### Когда нужен `zip`
+
+```java
+Mono<User> userMono = userRepository.findById(userId);
+Mono<List<Order>> ordersMono = orderRepository.findPaidByUserId(userId).collectList();
+Mono<LoyaltyProfile> loyaltyMono = loyaltyClient.getProfile(userId);
+
+Mono<UserDashboardDto> dashboard = Mono.zip(userMono, ordersMono, loyaltyMono)
+    .map(tuple -> new UserDashboardDto(
+        tuple.getT1(),
+        tuple.getT2(),
+        tuple.getT3()
+    ));
+```
+
+Здесь три операции независимы. Нам не нужно, чтобы одна завершилась перед стартом другой. Нам нужно дождаться результатов всех трёх и собрать один DTO.
+
+В таком сценарии заменять `zip` на `concatMap` не нужно. Это будет хуже выражать смысл задачи.
+
+### Когда `zip` не подходит вместо последовательной цепочки
+
+```java
+Mono<RefundResult> refundResult = paymentService.refund(paymentId);
+Mono<Void> inventoryReturn = inventoryService.returnReservedItems(orderId);
+Mono<RefundDocument> refundDocument = accountingService.createRefundDocument(orderId);
+```
+
+Если бизнес-правило такое:
+
+1. сначала вернуть деньги;
+2. потом вернуть товар на склад;
+3. потом создать документ возврата;
+
+то `Mono.zip(refundResult, inventoryReturn, refundDocument)` не выражает нужную зависимость шагов. Такой код подходит только тогда, когда операции независимы друг от друга и могут выполняться параллельно.
+
+Для последовательного сценария нужен другой стиль:
+
+```java
+Mono<RefundWorkflowResult> result = paymentService.refund(paymentId)
+    .flatMap(refund ->
+        inventoryService.returnReservedItems(orderId)
+            .then(accountingService.createRefundDocument(orderId, refund.refundId()))
+            .map(document -> new RefundWorkflowResult(orderId, refund.refundId(), document.documentId()))
+    );
+```
+
+Здесь уже важна именно последовательность шагов, а не просто сбор результатов.
+
+## Почему внутри `concatMap` иногда нужен `then`
+
+`concatMap` сериализует обработку разных элементов внешнего `Flux`.
+
+Но он не делает автоматически последовательными все шаги внутри одной inner-цепочки. Если внутри обработки одного элемента есть зависимость «сначала A, потом B», эту зависимость нужно выразить отдельно — через `then`, `flatMap`, иногда `zip`, в зависимости от смысла.
+
+Пример:
+
+```java
+Flux<ReturnRequest> returnRequests = returnRequestRepository.findPendingReturns();
+
+Flux<ReturnResult> results = returnRequests.concatMap(returnRequest ->
+    paymentService.refund(returnRequest.paymentId())
+        .flatMap(refundResponse ->
+            inventoryService.returnReservedItems(returnRequest.orderId())
+                .then(accountingService.createRefundDocument(
+                    returnRequest.orderId(),
+                    refundResponse.refundId()
+                ))
+                .map(document -> new ReturnResult(
+                    returnRequest.orderId(),
+                    refundResponse.refundId(),
+                    document.documentId()
+                ))
+        )
+);
+```
+
+Здесь:
+
+- внешний `concatMap` гарантирует: заявки на возврат пойдут по очереди;
+- `flatMap` нужен, чтобы использовать `refundResponse` дальше;
+- `then(...)` нужен, потому что создание документа должно начаться только после успешного завершения возврата товара на склад.
+
+То есть `concatMap` не заменяет собой всю внутреннюю бизнес-оркестрацию. Он отвечает только за последовательность между внешними элементами.
+
+## Чем `concatMap` отличается от `flatMap`
+
+`flatMap` тоже превращает каждый элемент во внутренний `Publisher`, но объединяет такие inner publisher через merge (слияние), поэтому несколько inner-операций могут быть активны одновременно.
+
+- Источник: https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#flatMap(java.util.function.Function)
+
+EN:
+
+> "Transform the elements emitted by this Flux asynchronously into Publishers, then flatten these inner publishers into a single Flux through merging, which allow them to interleave."
+
+RU:
+
+> «Преобразует элементы этого Flux в Publisher и затем объединяет их через merging, из-за чего их элементы могут перемешиваться.»
+
+Простой пример:
+
+```java
+Flux<Integer> source = Flux.just(1, 2, 3);
+
+Flux<Integer> result = source.flatMap(value ->
+    Mono.just(value * 10)
+        .delayElement(Duration.ofMillis((4 - value) * 100L))
+);
+
+result.subscribe(System.out::println);
+// Возможный вывод: 30, 20, 10
+```
+
+Здесь внутренние операции стартуют без ожидания завершения предыдущей, поэтому результаты могут прийти в другом порядке.
+
+### Бизнес-пример 1: когда `flatMap` лучше
+
+```java
+Flux<UUID> userIds = marketingSegmentService.findAudience(segmentId);
+
+Flux<EmailSendResult> results = userIds.flatMap(userId ->
+    emailTemplateService.buildOfferEmail(userId)
+        .flatMap(emailClient::send)
+);
+```
+
+Если письма независимы друг от друга и цель — пропускная способность, `flatMap` обычно лучше `concatMap`.
+
+### Бизнес-пример 2: когда `concatMap` лучше
+
+```java
+Flux<AccountCommand> accountCommands = accountCommandRepository.findPendingCommands(accountId);
+
+Flux<CommandResult> results = accountCommands.concatMap(command ->
+    accountService.applyCommand(command)
+        .flatMap(appliedState -> accountProjectionRepository.save(accountId, appliedState))
+        .thenReturn(new CommandResult(command.id(), "APPLIED"))
+);
+```
+
+Если команды одного аккаунта должны применяться строго по порядку, `flatMap` здесь опасен, а `concatMap` уместен.
+
+## Где нужен `flatMapSequential`
+
+`flatMapSequential` — это компромисс между `flatMap` и `concatMap`.
+
+- Он может запускать несколько inner-операций конкурентно.
+- Но наружу результаты выдаёт в порядке исходных элементов.
+
+То есть это выбор для сценария: «хочу ускорить I/O, но итоговый порядок должен остаться исходным».
+
+Пример без магических чисел:
+
+```java
+Flux<UUID> userIds = reportService.findUserIdsForMonthlyReport();
+
+int maxConcurrentUserRequests = 16;
+// Максимум 16 пользовательских запросов могут быть активны одновременно.
+
+int innerResultBufferSize = 32;
+// До 32 результатов inner publisher Reactor может буферизовать,
+// пока ждёт завершения более ранних userId для сохранения порядка.
+
+Flux<UserOrdersDto> userOrders = userIds.flatMapSequential(
+    userId -> orderRepository.findPaidByUserId(userId)
+        .collectList()
+        .map(orders -> new UserOrdersDto(userId, orders)),
+    maxConcurrentUserRequests,
+    innerResultBufferSize
+);
+```
+
+Этот код читается так:
+
+- `userIds` приходит потоком;
+- для каждого `userId` создаётся свой запрос в репозиторий;
+- одновременно можно держать до `maxConcurrentUserRequests` активных inner-операций;
+- но наружу `UserOrdersDto` будут выдаваться в том же порядке, в каком пришли `userId`.
+
+### Бизнес-пример 1: отчёт по пользователям
+
+```java
+Flux<UUID> userIds = reportService.findUserIdsForMonthlyReport();
+
+int maxConcurrentUserRequests = 8;
+int innerResultBufferSize = 16;
+
+Flux<UserBillingSummaryDto> summaries = userIds.flatMapSequential(
+    userId -> Mono.zip(
+            userRepository.findById(userId),
+            billingRepository.findInvoicesByUserId(userId).collectList(),
+            paymentRepository.findLastPaymentByUserId(userId)
+        )
+        .map(tuple -> new UserBillingSummaryDto(
+            tuple.getT1().getId(),
+            tuple.getT1().getEmail(),
+            tuple.getT2(),
+            tuple.getT3()
+        )),
+    maxConcurrentUserRequests,
+    innerResultBufferSize
+);
+```
+
+Здесь inner-операции могут стартовать конкурентно, но итоговый отчёт останется упорядоченным по входному списку пользователей.
+
+### Бизнес-пример 2: догрузка карточек товаров
+
+```java
+Flux<Long> productIds = recommendationService.findRecommendedProductIds(userId);
+
+int maxConcurrentProductRequests = 10;
+int innerResultBufferSize = 20;
+
+Flux<ProductCardDto> productCards = productIds.flatMapSequential(
+    productId -> Mono.zip(
+            productRepository.findById(productId),
+            pricingClient.getActualPrice(productId),
+            stockClient.getAvailableStock(productId)
+        )
+        .map(tuple -> new ProductCardDto(
+            tuple.getT1(),
+            tuple.getT2(),
+            tuple.getT3()
+        )),
+    maxConcurrentProductRequests,
+    innerResultBufferSize
+);
+```
+
+Это удобно, когда UI ожидает карточки в исходном порядке рекомендаций, но запросы хочется выполнять параллельно.
+
+### Бизнес-пример 3: выгрузка заказов для экспорта
+
+```java
+Flux<Long> orderIds = exportService.findOrderIdsForDailyExport();
+
+int maxConcurrentOrderRequests = 6;
+int innerResultBufferSize = 12;
+
+Flux<ExportOrderRow> exportRows = orderIds.flatMapSequential(
+    orderId -> Mono.zip(
+            orderRepository.findById(orderId),
+            shipmentRepository.findByOrderId(orderId),
+            paymentRepository.findByOrderId(orderId)
+        )
+        .map(tuple -> new ExportOrderRow(
+            tuple.getT1(),
+            tuple.getT2(),
+            tuple.getT3()
+        )),
+    maxConcurrentOrderRequests,
+    innerResultBufferSize
+);
+```
+
+Снаружи это выглядит как упорядоченная выгрузка, а внутри даёт более высокую скорость, чем чистый `concatMap`.
 
 ## Что означает преобразование в `Publisher`
 
-У обычного `map` функция возвращает значение:
+У обычного `map` функция возвращает обычное значение:
 
 ```java
-Flux<Integer> result =
-    Flux.just(1, 2, 3)
-        .map(value -> value * 10);
+Flux<Integer> numbers = Flux.just(1, 2, 3);
+Flux<Integer> multiplied = numbers.map(value -> value * 10);
 ```
 
-Логически это преобразование:
+Здесь преобразование такое:
 
 ```java
 Integer -> Integer
 ```
 
-У `flatMap` функция возвращает новый реактивный источник:
+У `concatMap` и `flatMap` функция возвращает новый реактивный источник:
 
 ```java
-Flux<Integer> result =
-    Flux.just(1, 2, 3)
-        .flatMap(value -> Mono.just(value * 10));
+Flux<Integer> multipliedAsync = Flux.just(1, 2, 3)
+    .flatMap(value -> Mono.just(value * 10));
 ```
 
-Здесь сигнатура преобразования такая:
+Здесь сигнатура уже такая:
 
 ```java
 Integer -> Publisher<Integer>
 ```
 
-Концептуально можно представить промежуточный результат так:
+В реальном коде это обычно не `Mono.just(...)`, а асинхронный вызов:
 
 ```java
-Flux<Mono<Integer>> inners =
-    Flux.just(1, 2, 3)
-        .map(value -> Mono.just(value * 10));
+userId -> userRepository.findById(userId)
+orderId -> paymentRepository.findByOrderId(orderId)
+fileId -> fileStorageClient.download(fileId)
 ```
 
-После этого `flatMap` подписывается на созданные `Mono`/`Flux` и объединяет все их эмиссии в один downstream-поток. В этом смысле он похож на «`map` в `Publisher` плюс merge», хотя реальная внутренняя реализация Reactor оптимизирована и не обязана буквально вызывать публичный `Flux.merge(...)`.
+То есть `Publisher` здесь — это не «обёртка ради формы», а описание асинхронной операции, которая позже даст результат.
 
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
+## Когда и что использовать
 
-## Пример merge-поведения
-
-```java
-Flux.just(1, 2, 3)
-    .flatMap(value ->
-        Mono.just(value * 10)
-            .delayElement(Duration.ofMillis((4 - value) * 100L))
-    )
-    .subscribe(System.out::println);
-```
-
-Создаются три inner publisher’а:
-
-```text
-1 -> Mono<10>, готов через 300 мс
-2 -> Mono<20>, готов через 200 мс
-3 -> Mono<30>, готов через 100 мс
-```
-
-Поскольку `flatMap` не ждёт завершения первого inner publisher перед подпиской на следующий, значения придут приблизительно в таком порядке:
-
-```text
-30
-20
-10
-```
-
-Это и означает merge: результат приходит в порядке фактического поступления сигналов от активных inner publisher’ов, поэтому исходный порядок внешнего `Flux` не сохраняется.
-
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
-
-## Отличие от `concatMap`
-
-| Оператор | Подписка на inner publisher | Порядок результатов | Стратегия |
-| :-- | :-- | :-- | :-- |
-| `concatMap` | Следующий — только после завершения текущего | Сохраняется | Concatenation |
-| `flatMap` | Несколько inner publisher’ов могут быть активны одновременно | Может нарушаться | Merging |
-| `flatMapSequential` | Может подписываться конкурентно | Сохраняется | Упорядоченный merge |
-
-Для `concatMap` Javadoc говорит именно о последовательном разворачивании с сохранением порядка через конкатенацию.
-
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#concatMap(java.util.function.Function)
-
-Для `flatMap` Javadoc явно использует термин **merging** и отдельно указывает на возможность **interleaving** — перемешивания элементов разных inner publisher’ов.
-
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#flatMap(java.util.function.Function)
-
-## Исходный код
-
-В исходниках публичный `Flux.flatMap(...)` делегирует работу оператору `FluxFlatMap`. Эта реализация управляет несколькими активными inner subscription’ами, принимает их элементы и передаёт их одному downstream subscriber’у; параметр `concurrency` ограничивает число одновременно активных inner publisher’ов.
-
-https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/Flux.java
-
-Реализация самого оператора находится здесь:
-
-https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxFlatMap.java
-
-У `concatMap` отдельный оператор и иная стратегия: он не переходит к следующему inner publisher, пока текущий не завершится.
-
-https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxConcatMap.java
-
-
----
-
-Поэтому разница такая:
-
-- `concat` / `concatWith` — соединяют уже готовые `Publisher`;
-- `concatMap` — сначала создаёт `Publisher` из каждого элемента, затем склеивает их последовательно;
-- `flatMap` — тоже создаёт `Publisher` из каждого элемента, но потом merge'ит их с возможным interleaving.
-
----
-
-
-`Publisher` здесь обычно не «создаётся ради данных». Он представляет **асинхронную операцию**, которая позже выдаст результат:
-
-```java
-userId -> repository.findById(userId)     // Mono<User>
-order  -> paymentService.pay(order)       // Mono<Payment>
-file   -> webClient.post(...).retrieve()  // Mono<Response>
-```
-
-То есть внешний `Flux` выдаёт задания или входные значения, а `concatMap` / `flatMap` превращают каждое из них в отдельную асинхронную работу.
-
-```java
-Flux<Integer> ids = Flux.just(1, 2, 3);
-
-ids.concatMap(id -> repository.findById(id));
-```
-
-Для каждого `id` создаётся свой `Mono<User>` — запрос к БД. Затем:
-
-- `concatMap` выполняет такие запросы последовательно;
-- `flatMap` запускает несколько запросов одновременно и merge'ит ответы;
-- `flatMapSequential` может запускать одновременно, но выдаёт ответы в исходном порядке.
-
-С `Mono.just(value * 10)` пример искусственный: 
- - он нужен лишь показать механику. 
- - В реальном коде inner `Publisher` чаще всего оборачивает I/O, задержку, HTTP-вызов, чтение файла, отправку сообщения или другую асинхронную операцию.
-
-
----
-
-# Когда и что использовать ?
-
-- `concatMap` нужен, когда набор inner publisher’ов **неизвестен заранее** или возникает динамически из элементов входного потока.
-
-- `concat` подходит, если источники уже есть:
-
-```java
-Flux.concat(
-    repository.findById(1),
-    repository.findById(2),
-    repository.findById(3)
-);
-```
-
-Но если `id` приходят из другого `Flux`, писать `concat` невозможно или неудобно, поэтому используем **concatMap**:
-
-```java
-Flux<Long> ids = getIds();
-
-ids.concatMap(repository::findById);
-```
-
-Это по смыслу:
-
-```java
-ids
-    .map(repository::findById) // Flux<Mono<User>>
-    .concatMap(Function.identity());
-```
-
-То есть главная выгода — **динамическое создание и последовательное выполнение операций для каждого элемента потока**: 
- - **например**: 
-   - последовательно сохранить события, 
-   - обработать файлы или 
-   - выполнить HTTP-запросы, **cохранив их порядок**.
-
-https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html\#concatMap(java.util.function.Function)
-
----
+- `Flux.concat(a, b)` — когда несколько `Publisher` уже существуют заранее.
+- `a.concatWith(b)` — когда нужно дописать ещё один готовый `Publisher` к уже собранной слева цепочке.
+- `source.concatMap(item -> operation(item))` — когда для каждого элемента входного потока нужно создать свою асинхронную операцию и выполнить такие операции строго по очереди.
+- `source.flatMap(item -> operation(item))` — когда операции независимы и важнее пропускная способность, чем порядок.
+- `source.flatMapSequential(item -> operation(item))` — когда можно стартовать конкурентно, но выдавать результат нужно в исходном порядке.
+- `Mono.zip(...)` / `Flux.zip(...)` — когда есть несколько независимых источников, и нужно дождаться результата от каждого, а затем собрать их в один общий объект.
 
 <a id="summary"></a>
 
-## Итоговая таблица различий
+## Итоговая памятка различий
 
 | Оператор | Когда использовать | Что делает |
 | :-- | :-- | :-- |
-| `Flux.concat(a, b)` | Publisher’ы уже известны и перечислены в коде | Подписывается на `a`, после его завершения — на `b` |
-| `a.concatWith(b)` | Нужно дописать следующий готовый Publisher к текущей цепочке | То же самое, что `concat`, но в fluent-стиле |
-| `source.concatMap(item -> operation(item))` | Каждый элемент `source` нужно обработать отдельной асинхронной операцией | Берёт первый элемент, запускает для него операцию и ждёт её окончания. Только затем берёт второй элемент и делает то же самое. |
+| `Flux.concat(a, b)` | Есть несколько готовых `Publisher` | Полностью выполняет `a`, затем подписывается на `b` |
+| `a.concatWith(b)` | Есть готовая левая цепочка и готовый правый `Publisher` | Делает то же, что `concat`, но в fluent-форме |
+| `source.concatMap(item -> operation(item))` | Для каждого элемента нужно создать свою асинхронную операцию; важен порядок | Создаёт inner publisher для каждого элемента и выполняет их строго последовательно |
+| `source.flatMap(item -> operation(item))` | Элементы независимы; нужна скорость | Запускает несколько inner-операций конкурентно и merge-ит результаты |
+| `source.flatMapSequential(item -> operation(item))` | Нужна конкурентность, но итоговый порядок должен сохраниться | Запускает inner-операции конкурентно, но наружу выдаёт результаты в исходном порядке |
+| `Mono.zip(a, b, c)` | Есть несколько независимых операций, и нужен общий DTO | Ждёт результат от каждого источника и затем собирает их в один объект |
 
-Например:
+Коротко запомнить можно так:
 
-```java
-Flux.just(1, 2, 3)
-    .concatMap(id -> repository.findById(id));
-```
-
-Читается так: 
- - «получи пользователя с `id = 1`; 
- - когда запрос завершится — получи пользователя с `id = 2`; 
- - затем — с `id = 3`».
-
-`item -> operation(item)` — это просто запись функции: 
- - она получает очередной элемент (`item`) и возвращает **асинхронную операцию** для него.
-
- - Ключевая мысль об операторе `concat()`:
-
-```java
-Flux.concat(a, b, c)
-```
-
- - это «у меня уже есть асинхронные операции `a`, `b`, `c`».
+- `concat` / `concatWith` — склеить уже готовые потоки;
+- `concatMap` — для каждого элемента создать свою асинхронную работу и выполнить такие работы по очереди;
+- `flatMap` — для каждого элемента создать свою асинхронную работу и выполнить такие работы конкурентно;
+- `flatMapSequential` — стартовать конкурентно, но отдавать результат по порядку;
+- `zip` — не про порядок элементов внешнего `Flux`, а про сбор нескольких независимых результатов в один.
