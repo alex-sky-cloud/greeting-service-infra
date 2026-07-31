@@ -8,6 +8,7 @@
 - [Почему concatWith — синтаксический сахар](#sugar)
 - [Как это выглядит под капотом](#under-the-hood)
 - [concatMap — трансформация в inner publisher](#concatmap)
+- [flatMapSequential: что значат `maxConcurrency` и `prefetch`](#flatmapsequential-что-значат-maxconcurrency-и-prefetch)
 - [Итоговая памятка различий](#summary)
 
 <a id="tldr"></a>
@@ -321,6 +322,20 @@ Flux<ShipmentEvent> shipmentEvents = shipmentRepository.findEvents(shipmentId)
 
 Здесь нет новой семантики. Есть только более удобная запись той же операции.
 
+---
+
+ **Семантика** — это не форма записи, а смысл поведения оператора.
+
+- `concat` / `concatWith` — есть уже готовые `Publisher`, нужно выполнить их последовательно.
+- `concatMap` — есть поток значений, и для каждого значения нужно создать свой `Publisher`, тоже выполняя их последовательно.
+
+То есть:
+- `concat` / `concatWith` — “склеить готовое”,
+- `concatMap` — “сначала построить inner publisher для каждого элемента, потом склеить по очереди”.
+
+---
+
+
 <a id="under-the-hood"></a>
 
 ## Как это выглядит под капотом
@@ -494,7 +509,16 @@ Flux<ProcessingResult> processingResults = incomingEvents.concatMap(event ->
 );
 ```
 
-Это классический случай: если поменять `concatMap` на `flatMap`, события одного и того же агрегата могут начать обрабатываться конкурентно и сломать порядок бизнес-изменений.
+- Здесь `concatMap` нужен не потому, что внутри одного `event` есть `flatMap`, а потому, что важно не допустить **одновременную обработку нескольких событий одного aggregate**.
+- Внутри обработки одного `event` шаги `loadState -> applyEvent -> saveState` и так идут последовательно.
+- Но внешний `concatMap` дополнительно гарантирует, что следующий `event` начнёт обрабатываться только после полного завершения предыдущего.
+- Если заменить внешний `concatMap` на `flatMap`, несколько событий одного aggregate смогут одновременно прочитать одно и то же старое состояние и затем конкурентно попытаться сохранить изменения.
+
+То есть:
+
+- `concatMap` здесь защищает не внутренние шаги одного `event`, а порядок обработки **между несколькими event одного aggregate**.
+Внутри одного `event` последовательность уже задаётся самой цепочкой `loadState -> applyEvent -> saveState`.
+
 
 ### Бизнес-пример 3: последовательная обработка файлов
 
@@ -509,29 +533,69 @@ Flux<FileImportResult> importResults = importTasks.concatMap(importTask ->
 );
 ```
 
-Здесь каждый элемент внешнего потока порождает свою цепочку асинхронных шагов. `concatMap` гарантирует, что задачи пойдут одна за другой.
+Здесь каждый элемент внешнего потока порождает свою цепочку **асинхронных шагов**. 
+- `concatMap` гарантирует, что задачи пойдут одна за другой.
 
 ### Бизнес-пример 4: генерация отчёта по пользователям
+
+
+- Здесь `concatMap` нужен, чтобы строить строки отчёта по пользователям в порядке входных **userId**.
+- Внутри одного пользователя, оператора `zipWith()` объединяет два независимых результата:
+  - слева — Mono<User> с данными пользователя, 
+  - справа — Mono<List<Order>> со списком его оплаченных заказов.
+
+```java
+Flux<UUID> userIds = reportService.findUserIdsForMonthlyReport();
+
+Flux<UserReportRow> reportRows = userIds.concatMap(userId ->
+        userRepository.findById(userId) // Слева: данные пользователя по userId
+                .zipWith(
+                        orderRepository.findPaidByUserId(userId).collectList() // Справа: все оплаченные заказы пользователя
+                )
+                .map(userAndOrders -> {
+                    User user = userAndOrders.getT1();
+                    List<Order> paidOrders = userAndOrders.getT2();
+
+                    return new UserReportRow(
+                            user.getId(),
+                            user.getEmail(),
+                            paidOrders.size() // Количество оплаченных заказов
+                    );
+                })
+);
+```
+
+Здесь снаружи стоит `concatMap`, потому что строки отчёта по пользователям нужно строить по порядку. 
+- Но внутри одного пользователя используется `zipWith`, потому что данные пользователя и список заказов можно получать как единый набор результатов.
+
+---
+
+### Пример выше, можно переписать без использования zip()
 
 ```java
 Flux<UUID> userIds = reportService.findUserIdsForMonthlyReport();
 
 Flux<UserReportRow> reportRows = userIds.concatMap(userId ->
     userRepository.findById(userId)
-        .zipWith(orderRepository.findPaidByUserId(userId).collectList())
-        .map(tuple -> new UserReportRow(
-            tuple.getT1().getId(),
-            tuple.getT1().getEmail(),
-            tuple.getT2().size()
-        ))
+        .flatMap(user ->
+            orderRepository.findPaidByUserId(userId)
+                .collectList()
+                .map(paidOrders -> new UserReportRow(
+                    user.getId(),
+                    user.getEmail(),
+                    paidOrders.size()
+                ))
+        )
 );
 ```
+- сначала нашли `user`, 
+- потом получили `paidOrders`, 
+- потом собрали `UserReportRow`.
 
-Здесь снаружи стоит `concatMap`, потому что строки отчёта по пользователям нужно строить по порядку. Но внутри одного пользователя используется `zipWith`, потому что данные пользователя и список заказов можно получать как единый набор результатов.
+---
 
 ## Где здесь `zip`, а где `concatMap`
 
-Это один из самых частых вопросов.
 
 `concatMap` и `zip` — не конкуренты и не взаимозаменяемые операторы. Они решают разные задачи.
 
@@ -553,7 +617,9 @@ Mono<UserDashboardDto> dashboard = Mono.zip(userMono, ordersMono, loyaltyMono)
     ));
 ```
 
-Здесь три операции независимы. Нам не нужно, чтобы одна завершилась перед стартом другой. Нам нужно дождаться результатов всех трёх и собрать один DTO.
+Здесь три операции независимы. 
+- Нам не нужно, чтобы одна завершилась перед стартом другой. 
+- Нам нужно дождаться результатов всех трёх и собрать один DTO.
 
 В таком сценарии заменять `zip` на `concatMap` не нужно. Это будет хуже выражать смысл задачи.
 
@@ -571,7 +637,8 @@ Mono<RefundDocument> refundDocument = accountingService.createRefundDocument(ord
 2. потом вернуть товар на склад;
 3. потом создать документ возврата;
 
-то `Mono.zip(refundResult, inventoryReturn, refundDocument)` не выражает нужную зависимость шагов. Такой код подходит только тогда, когда операции независимы друг от друга и могут выполняться параллельно.
+то `Mono.zip(refundResult, inventoryReturn, refundDocument)` не выражает нужную зависимость шагов. 
+- Такой код подходит только тогда, когда операции независимы друг от друга и могут выполняться параллельно.
 
 Для последовательного сценария нужен другой стиль:
 
@@ -584,13 +651,13 @@ Mono<RefundWorkflowResult> result = paymentService.refund(paymentId)
     );
 ```
 
-Здесь уже важна именно последовательность шагов, а не просто сбор результатов.
+Здесь уже важна именно **последовательность** шагов, а не просто сбор результатов.
 
 ## Почему внутри `concatMap` иногда нужен `then`
 
-`concatMap` сериализует обработку разных элементов внешнего `Flux`.
+- `concatMap` сериализует обработку разных элементов внешнего `Flux`, но не выстраивает автоматически все шаги внутри обработки **одного** элемента.
 
-Но он не делает автоматически последовательными все шаги внутри одной inner-цепочки. Если внутри обработки одного элемента есть зависимость «сначала A, потом B», эту зависимость нужно выразить отдельно — через `then`, `flatMap`, иногда `zip`, в зависимости от смысла.
+Если внутри обработки одного элемента есть зависимость `сначала A, потом B`, этот порядок нужно выразить отдельно — через операторы `then`, `flatMap`, а если шаги независимы — иногда через `zip`.
 
 Пример:
 
@@ -598,17 +665,19 @@ Mono<RefundWorkflowResult> result = paymentService.refund(paymentId)
 Flux<ReturnRequest> returnRequests = returnRequestRepository.findPendingReturns();
 
 Flux<ReturnResult> results = returnRequests.concatMap(returnRequest ->
-    paymentService.refund(returnRequest.paymentId())
-        .flatMap(refundResponse ->
-            inventoryService.returnReservedItems(returnRequest.orderId())
-                .then(accountingService.createRefundDocument(
-                    returnRequest.orderId(),
-                    refundResponse.refundId()
-                ))
+    paymentService.refund(returnRequest.paymentId()) // 1. Сначала возвращаем деньги
+        .flatMap(refundResponse ->                   // 2. Сохраняем refundResponse, он нужен дальше
+            inventoryService.returnReservedItems(returnRequest.orderId()) // 3. Потом возвращаем товар на склад
+                .then(                               // 4. Ждём завершения шага склада
+                    accountingService.createRefundDocument(
+                        returnRequest.orderId(),
+                        refundResponse.refundId()    // 5. После этого создаём документ возврата
+                    )
+                )
                 .map(document -> new ReturnResult(
                     returnRequest.orderId(),
-                    refundResponse.refundId(),
-                    document.documentId()
+                    refundResponse.refundId(),       // 6. refundId пришёл из refund
+                    document.documentId()            // 7. documentId пришёл из createRefundDocument
                 ))
         )
 );
@@ -616,11 +685,14 @@ Flux<ReturnResult> results = returnRequests.concatMap(returnRequest ->
 
 Здесь:
 
-- внешний `concatMap` гарантирует: заявки на возврат пойдут по очереди;
-- `flatMap` нужен, чтобы использовать `refundResponse` дальше;
-- `then(...)` нужен, потому что создание документа должно начаться только после успешного завершения возврата товара на склад.
+- `concatMap` отвечает за порядок **между заявками**;
+- `flatMap` нужен, чтобы передать `refundResponse` дальше;
+- `then(...)` нужен, потому что после возврата товара на склад нам важен не результат этого шага, а сам факт его завершения.
 
-То есть `concatMap` не заменяет собой всю внутреннюю бизнес-оркестрацию. Он отвечает только за последовательность между внешними элементами.
+То есть:
+
+- `concatMap` — последовательность **между заявками**;
+- `then` — последовательность **между шагами одной заявки**.
 
 ## Чем `concatMap` отличается от `flatMap`
 
@@ -652,14 +724,135 @@ result.subscribe(System.out::println);
 
 Здесь внутренние операции стартуют без ожидания завершения предыдущей, поэтому результаты могут прийти в другом порядке.
 
+
+# flatMapSequential: что значат `maxConcurrency` и `prefetch`
+
+
+## Оглавление
+
+- [Короткая суть](#short)
+- [Что делает `maxConcurrency`](#maxConcurrency)
+- [Что делает `prefetch`](#prefetch)
+- [Почему формулировка про “буфер результатов” путает](#buffer)
+- [Исправленные примеры](#examples)
+- [Практическое правило](#rules)
+
+<a id="short"></a>
+
+## Короткая суть
+
+У `flatMapSequential(mapper, maxConcurrency, prefetch)` два разных параметра:
+
+- `maxConcurrency` — сколько inner publisher можно держать запущенными одновременно.
+- `prefetch` — сколько элементов Reactor может заранее запросить у каждого inner publisher.
+
+Источник: https://projectreactor.io/docs/core/3.6.2/api/reactor/core/publisher/Flux.html
+
+EN:
+
+> "prefetch - the maximum in-flight elements from each inner Publisher sequence"
+
+RU:
+
+> «prefetch — максимальное количество элементов "в полёте" от каждого inner publisher.»
+
+То есть:
+
+- `maxConcurrency` — про количество одновременно активных inner-цепочек;
+- `prefetch` — про количество элементов, которые можно заранее запросить у **каждой** такой inner-цепочки.
+
+<a id="maxConcurrency"></a>
+
+## Что делает `maxConcurrency`
+
+`maxConcurrency` ограничивает, сколько inner publisher Reactor может подписать и выполнять одновременно.
+
+Например, если:
+
+```java
+int maxConcurrentOrderRequests = 6;
+```
+
+это означает:
+
+- одновременно могут выполняться запросы максимум по 6 `orderId`;
+- 7-й inner publisher не стартует, пока один из этих 6 не завершится.
+
+Источник: https://eherrera.net/project-reactor-course/04-using-other-reactive-operators/combining-publishers.html
+
+EN:
+
+> "concurrency indicates the maximum number of inner sources the operator subscribes to at the same time."
+
+RU:
+
+> «concurrency указывает максимальное количество внутренних источников, на которые оператор подписывается одновременно.»
+
+<a id="prefetch"></a>
+
+## Что делает `prefetch`
+
+`prefetch` — это не “общий размер буфера DTO” и не “сколько готовых результатов можно сложить в память вообще”.
+
+Правильнее понимать так:
+это сколько элементов Reactor заранее запрашивает у **каждого inner publisher**.
+
+Например:
+
+- если inner publisher — это `Mono<UserBillingSummaryDto>`, у него максимум один элемент;
+- значит большой `prefetch` тут почти не ощущается;
+- потому что у `Mono` всё равно больше одного значения нет.
+
+Источник: https://projectreactor.io/docs/core/3.6.2/api/reactor/core/publisher/Flux.html
+
+EN:
+
+> "prefetch - the maximum in-flight elements from each inner Publisher sequence"
+
+RU:
+
+> «prefetch — максимальное количество элементов "в полёте" от каждого inner publisher.»
+
+То есть в ваших примерах с `Mono<DTO>` главное — обычно `maxConcurrency`, а `prefetch` там вторичен.
+
+<a id="buffer"></a>
+
+## Почему формулировка про “буфер результатов” путает
+
+Фраза “сколько готовых строк экспорта можно держать в буфере” слишком грубая и поэтому сбивает с толку.
+
+Точнее так:
+
+- более поздние inner publisher могут завершиться раньше более ранних;
+- но `flatMapSequential` обязан отдать результат наружу в порядке исходных элементов;
+- поэтому готовый более поздний результат может подождать своей очереди.
+
+Источник: https://projectreactor.io/docs/core/3.6.2/api/reactor/core/publisher/Flux.html\#flatMapSequential(java.util.function.Function,int,int)
+
+EN:
+
+> "Transform the elements emitted by this Flux asynchronously into Publishers, then flatten these inner publishers into a single Flux, but merge them in the order of their source element."
+
+RU:
+
+> «Асинхронно преобразует элементы этого Flux во внутренние Publisher'ы, затем разворачивает их в один Flux, но объединяет в порядке исходных элементов.»
+
+Важно: это не значит, что при каком-то “переполнении” Reactor просто начнёт терять результаты.
+Смысл в том, что слишком большие `maxConcurrency` и `prefetch` могут увеличить нагрузку на память и на внешние системы.
+
+<a id="examples"></a>
+
 ### Бизнес-пример 1: когда `flatMap` лучше
+
+Здесь письма независимы друг от друга: для каждого `userId` отдельно строится email и отдельно отправляется.
+Поэтому `flatMap` уместен: он позволяет обрабатывать таких пользователей конкурентно, не дожидаясь завершения предыдущего.
 
 ```java
 Flux<UUID> userIds = marketingSegmentService.findAudience(segmentId);
 
 Flux<EmailSendResult> results = userIds.flatMap(userId ->
-    emailTemplateService.buildOfferEmail(userId)
-        .flatMap(emailClient::send)
+    emailTemplateService.buildOfferEmail(userId) // 1. Строим письмо для конкретного пользователя
+        .flatMap(emailClient::send)              // 2. Отправляем это письмо
 );
 ```
 
@@ -667,13 +860,18 @@ Flux<EmailSendResult> results = userIds.flatMap(userId ->
 
 ### Бизнес-пример 2: когда `concatMap` лучше
 
+Здесь команды одного аккаунта нужно применять строго по порядку.
+- Поэтому `concatMap` уместен: следующая команда начнёт выполняться только после полного завершения предыдущей.
+
 ```java
 Flux<AccountCommand> accountCommands = accountCommandRepository.findPendingCommands(accountId);
 
 Flux<CommandResult> results = accountCommands.concatMap(command ->
-    accountService.applyCommand(command)
-        .flatMap(appliedState -> accountProjectionRepository.save(accountId, appliedState))
-        .thenReturn(new CommandResult(command.id(), "APPLIED"))
+        accountService.applyCommand(command)                    // 1. Применяем текущую команду к аккаунту
+                .flatMap(appliedState ->
+                        accountProjectionRepository.save(accountId, appliedState) // 2. Сохраняем новое состояние/проекцию
+                )
+                .thenReturn(new CommandResult(command.id(), "APPLIED")) // 3. Возвращаем итог обработки команды
 );
 ```
 
@@ -688,112 +886,177 @@ Flux<CommandResult> results = accountCommands.concatMap(command ->
 
 То есть это выбор для сценария: «хочу ускорить I/O, но итоговый порядок должен остаться исходным».
 
-Пример без магических чисел:
+**Пример**: строим отчёт по пользователям.
+- Нужно быстрее сходить в БД по нескольким `userId`, но готовые `UserOrdersDto` всё равно должны выйти в том же порядке, в каком пришли `userId`.
 
 ```java
-Flux<UUID> userIds = reportService.findUserIdsForMonthlyReport();
+Flux<UUID> reportUserIds = reportService.findUserIdsForMonthlyReport();
 
+// Сколько пользовательских запросов можно держать активными одновременно.
 int maxConcurrentUserRequests = 16;
-// Максимум 16 пользовательских запросов могут быть активны одновременно.
 
-int innerResultBufferSize = 32;
-// До 32 результатов inner publisher Reactor может буферизовать,
-// пока ждёт завершения более ранних userId для сохранения порядка.
+// Сколько готовых результатов Reactor может временно держать в буфере,
+// если более поздние userId завершились раньше, чем более ранние.
+int orderedResultBufferSize = 32;
 
-Flux<UserOrdersDto> userOrders = userIds.flatMapSequential(
-    userId -> orderRepository.findPaidByUserId(userId)
-        .collectList()
-        .map(orders -> new UserOrdersDto(userId, orders)),
-    maxConcurrentUserRequests,
-    innerResultBufferSize
+Function<UUID, Mono<UserOrdersDto>> loadUserOrdersForReport = reportUserId ->
+    orderRepository.findPaidByUserId(reportUserId)          // 1. Загружаем оплаченные заказы пользователя
+        .collectList()                                      // 2. Собираем их в List<Order>
+        .map(paidOrders -> new UserOrdersDto(
+            reportUserId,
+            paidOrders
+        ));                                                 // 3. Строим DTO для строки отчёта
+
+Flux<UserOrdersDto> userOrders = reportUserIds.flatMapSequential(
+    loadUserOrdersForReport,                                // Для каждого userId создаём свой Mono<UserOrdersDto>
+    maxConcurrentUserRequests,                              // Лимит одновременно активных inner-операций
+    orderedResultBufferSize                                 // Буфер для сохранения исходного порядка результатов
 );
 ```
 
-Этот код читается так:
-
-- `userIds` приходит потоком;
-- для каждого `userId` создаётся свой запрос в репозиторий;
-- одновременно можно держать до `maxConcurrentUserRequests` активных inner-операций;
-- но наружу `UserOrdersDto` будут выдаваться в том же порядке, в каком пришли `userId`.
+- mapper вынесен в отдельную переменную `loadUserOrdersForReport`;
+- настройки `maxConcurrentUserRequests` и `orderedResultBufferSize` явно относятся к `flatMapSequential`;
+- сразу видно, что оператор запускает запросы конкурентно, но результат отдаёт упорядоченно.
 
 ### Бизнес-пример 1: отчёт по пользователям
 
+Здесь каждый inner publisher возвращает один `UserBillingSummaryDto`.
+Поэтому главный параметр здесь — `maxConcurrentUserRequests`, а `innerPrefetch` носит скорее технический характер.
+
 ```java
-Flux<UUID> userIds = reportService.findUserIdsForMonthlyReport();
+Flux<UUID> reportUserIds = reportService.findUserIdsForMonthlyReport();
 
+// Одновременно собираем отчёт максимум по 8 пользователям.
 int maxConcurrentUserRequests = 8;
-int innerResultBufferSize = 16;
 
-Flux<UserBillingSummaryDto> summaries = userIds.flatMapSequential(
-    userId -> Mono.zip(
-            userRepository.findById(userId),
-            billingRepository.findInvoicesByUserId(userId).collectList(),
-            paymentRepository.findLastPaymentByUserId(userId)
-        )
-        .map(tuple -> new UserBillingSummaryDto(
-            tuple.getT1().getId(),
-            tuple.getT1().getEmail(),
-            tuple.getT2(),
-            tuple.getT3()
-        )),
+// Технический параметр flatMapSequential:
+// сколько элементов заранее запрашивать у каждого inner publisher.
+// Здесь inner publisher = Mono<UserBillingSummaryDto>,
+// поэтому практический эффект почти не виден: у Mono всего один элемент.
+int innerPrefetch = 16;
+
+Function<UUID, Mono<UserBillingSummaryDto>> loadUserBillingSummary = reportUserId ->
+    userRepository.findById(reportUserId) // 1. Загружаем пользователя
+        .flatMap(user ->
+            Mono.zip(
+                    billingRepository.findInvoicesByUserId(reportUserId).collectList(), // 2. Загружаем счета пользователя
+                    paymentRepository.findLastPaymentByUserId(reportUserId)             // 3. Загружаем последний платёж
+                )
+                .map(userBillingData -> {
+                    List<Invoice> invoices = userBillingData.getT1();
+                    Payment lastPayment = userBillingData.getT2();
+
+                    return new UserBillingSummaryDto(
+                        user.getId(),
+                        user.getEmail(),
+                        invoices,
+                        lastPayment
+                    );
+                })
+        );
+
+Flux<UserBillingSummaryDto> summaries = reportUserIds.flatMapSequential(
+    loadUserBillingSummary,
     maxConcurrentUserRequests,
-    innerResultBufferSize
+    innerPrefetch
 );
 ```
 
-Здесь inner-операции могут стартовать конкурентно, но итоговый отчёт останется упорядоченным по входному списку пользователей.
 
 ### Бизнес-пример 2: догрузка карточек товаров
 
+Здесь тоже каждый inner publisher возвращает один `ProductCardDto`.
+Поэтому `maxConcurrentProductRequests` читается как реальный лимит параллельной загрузки, а `innerPrefetch` не надо трактовать как “20 карточек в общем буфере”.
+
 ```java
-Flux<Long> productIds = recommendationService.findRecommendedProductIds(userId);
+Flux<Long> recommendedProductIds = recommendationService.findRecommendedProductIds(userId);
 
+// Одновременно собираем максимум 10 карточек товаров.
 int maxConcurrentProductRequests = 10;
-int innerResultBufferSize = 20;
 
-Flux<ProductCardDto> productCards = productIds.flatMapSequential(
-    productId -> Mono.zip(
-            productRepository.findById(productId),
-            pricingClient.getActualPrice(productId),
-            stockClient.getAvailableStock(productId)
-        )
-        .map(tuple -> new ProductCardDto(
-            tuple.getT1(),
-            tuple.getT2(),
-            tuple.getT3()
-        )),
+// Технический параметр request-size для каждого inner publisher.
+// Здесь inner publisher тоже Mono<ProductCardDto>,
+// поэтому это не "20 карточек в общем буфере".
+int innerPrefetch = 20;
+
+Function<Long, Mono<ProductCardDto>> loadProductCard = recommendedProductId ->
+    productRepository.findById(recommendedProductId) // 1. Загружаем товар
+        .flatMap(product ->
+            Mono.zip(
+                    pricingClient.getActualPrice(recommendedProductId),   // 2. Загружаем цену
+                    stockClient.getAvailableStock(recommendedProductId)   // 3. Загружаем остаток
+                )
+                .map(productPricingData -> {
+                    Price actualPrice = productPricingData.getT1();
+                    Stock availableStock = productPricingData.getT2();
+
+                    return new ProductCardDto(
+                        product,
+                        actualPrice,
+                        availableStock
+                    );
+                })
+        );
+
+Flux<ProductCardDto> productCards = recommendedProductIds.flatMapSequential(
+    loadProductCard,
     maxConcurrentProductRequests,
-    innerResultBufferSize
+    innerPrefetch
 );
 ```
 
-Это удобно, когда UI ожидает карточки в исходном порядке рекомендаций, но запросы хочется выполнять параллельно.
 
 ### Бизнес-пример 3: выгрузка заказов для экспорта
 
+Здесь каждый inner publisher возвращает один `ExportOrderRow`.
+Поэтому при чтении примера глазами почти всё внимание должно идти на `maxConcurrentOrderRequests`.
+
 ```java
-Flux<Long> orderIds = exportService.findOrderIdsForDailyExport();
+Flux<Long> exportOrderIds = exportService.findOrderIdsForDailyExport();
 
+// Одновременно собираем данные максимум по 6 заказам.
 int maxConcurrentOrderRequests = 6;
-int innerResultBufferSize = 12;
 
-Flux<ExportOrderRow> exportRows = orderIds.flatMapSequential(
-    orderId -> Mono.zip(
-            orderRepository.findById(orderId),
-            shipmentRepository.findByOrderId(orderId),
-            paymentRepository.findByOrderId(orderId)
-        )
-        .map(tuple -> new ExportOrderRow(
-            tuple.getT1(),
-            tuple.getT2(),
-            tuple.getT3()
-        )),
+// Технический параметр flatMapSequential.
+// В этом примере каждый inner publisher возвращает один ExportOrderRow,
+// поэтому параметр почти не ощущается на практике.
+int innerPrefetch = 12;
+
+Function<Long, Mono<ExportOrderRow>> loadExportOrderRow = exportOrderId ->
+    orderRepository.findById(exportOrderId) // 1. Загружаем заказ
+        .flatMap(order ->
+            Mono.zip(
+                    shipmentRepository.findByOrderId(exportOrderId), // 2. Загружаем доставку
+                    paymentRepository.findByOrderId(exportOrderId)   // 3. Загружаем платёж
+                )
+                .map(orderRelatedData -> {
+                    Shipment shipment = orderRelatedData.getT1();
+                    Payment payment = orderRelatedData.getT2();
+
+                    return new ExportOrderRow(
+                        order,
+                        shipment,
+                        payment
+                    );
+                })
+        );
+
+Flux<ExportOrderRow> exportRows = exportOrderIds.flatMapSequential(
+    loadExportOrderRow,
     maxConcurrentOrderRequests,
-    innerResultBufferSize
+    innerPrefetch
 );
 ```
 
-Снаружи это выглядит как упорядоченная выгрузка, а внутри даёт более высокую скорость, чем чистый `concatMap`.
+<a id="rules"></a>
+
+## Практическое правило
+
+- Если каждый inner publisher — это `Mono<DTO>`, в первую очередь смотрите на `maxConcurrency`.
+- В таких примерах `prefetch` вторичен и плохо подходит для обучения.
+- `prefetch` становится намного понятнее, когда inner publisher возвращает не один элемент, а `Flux<...>` с несколькими элементами.
+
+Снаружи это выглядит как упорядоченная выдача, а внутри даёт более высокую скорость, чем чистый `concatMap`.
 
 ## Что означает преобразование в `Publisher`
 
