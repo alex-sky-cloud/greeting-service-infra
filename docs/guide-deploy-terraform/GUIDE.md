@@ -89,7 +89,7 @@
 
 ## Раздел 2. Схема архитектуры
 
-![Архитектурная схема](images/architecture.png)
+![Архитектурная схема](../images/architecture.png)
 
 
 
@@ -278,7 +278,7 @@ REG ..> PRODDEPLOY
 ## Раздел 3. Схема CI/CD процесса
 
 ***
-![CI/CD sequence diagram](images/cicd-flow.png)
+![CI/CD sequence diagram](../images/cicd-flow.png)
 
 Sequence diagram: полная последовательность от git push до работающего пода в K8S.
 
@@ -457,7 +457,7 @@ end
 
 ## Раздел 4. Схема Terraform-инфраструктуры
 
-![Terraform infrastructure diagram](images/infra-terraform.png)
+![Terraform infrastructure diagram](../images/infra-terraform.png)
 
 Схема показывает, какие ресурсы создаёт terraform apply в Timeweb Cloud.
 

@@ -3,7 +3,7 @@
 > Краткое руководство по **Spring R2DBC** (реактивный доступ к реляционным БД) и типичным вопросам на Java-собеседованиях.  
 > Формат каждого блока: **ответ простым языком → вопрос → источник → цитата (EN/RU)**.
 
-**См. также:** [project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md) — основы Reactor (Mono, Flux, backpressure).
+**См. также:** [project-reactor-interview-guide.md](../interview/project-reactor-interview-guide.md) — основы Reactor (Mono, Flux, backpressure).
 
 ---
 
@@ -326,7 +326,7 @@ public class UserService {
 | Spring Data R2DBC Reference | https://docs.spring.io/spring-data/r2dbc/docs/current/reference/html/ |
 | Spring Boot — R2DBC | https://docs.spring.io/spring-boot/docs/current/reference/html/data.html#data.r2dbc |
 | R2DBC spec (GitHub) | https://github.com/r2dbc/r2dbc-spi |
-| Project Reactor (основы) | [project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md) |
+| Project Reactor (основы) | [project-reactor-interview-guide.md](../interview/project-reactor-interview-guide.md) |
 
 ---
 

@@ -51,7 +51,7 @@
 
 ### Рисунок 1. Control Plane и Worker Nodes
 
-![Устройство Kubernetes-кластера](./Images-docs/k8s-cluster-architecture.png)
+![Устройство Kubernetes-кластера](../Images-docs/k8s-cluster-architecture.png)
 
 ### Пояснение к рисунку 1
 
@@ -182,7 +182,7 @@ Kubernetes не запускает контейнеры сам — делеги�
 
 ### Рисунок 2. Объекты в namespace prod
 
-![Объекты приложения в namespace prod](./Images-docs/k8s-namespace-objects.png)
+![Объекты приложения в namespace prod](../Images-docs/k8s-namespace-objects.png)
 
 ### Пояснение к рисунку 2
 
@@ -219,7 +219,7 @@ https://kubernetes.io/docs/concepts/workloads/pods/
 
 ### Рисунок 3. Deployment и RollingUpdate
 
-![Deployment RollingUpdate](./Images-docs/k8s-deployment-rolling-update.png)
+![Deployment RollingUpdate](../Images-docs/k8s-deployment-rolling-update.png)
 
 ### Пояснение к рисунку 3
 
@@ -322,7 +322,7 @@ https://kubernetes.io/docs/concepts/services-networking/ingress/
 
 ### Рисунок 4. От браузера до Spring Boot
 
-![Маршрут HTTP-запроса в Kubernetes](./Images-docs/k8s-request-routing.png)
+![Маршрут HTTP-запроса в Kubernetes](../Images-docs/k8s-request-routing.png)
 
 ### Пояснение к рисунку 4 (пошагово)
 
@@ -404,9 +404,9 @@ https://kubernetes.io/docs/concepts/overview/components/
 
 ## Связанные материалы в репозитории
 
-- [GUIDE.md — Раздел 12. Развёртывание Kubernetes](./GUIDE.md)
-- [TECHNOLOGIES.md — раздел 5. Kubernetes](./TECHNOLOGIES.md)
-- [infra/terraform/kubernetes.tf](../infra/terraform/kubernetes.tf)
+- [GUIDE.md — Раздел 12. Развёртывание Kubernetes](GUIDE.md)
+- [TECHNOLOGIES.md — раздел 5. Kubernetes](TECHNOLOGIES.md)
+- [infra/terraform/kubernetes.tf](../../infra/terraform/kubernetes.tf)
 - [infra/helm/greeting-service/](../infra/helm/greeting-service/)
 - [flush-в-JPA-и-Hibernate-автоматически-или-вручную.md](./flush-в-JPA-и-Hibernate-автоматически-или-вручную.md) — пример оформления документа с PNG-рисунками
 

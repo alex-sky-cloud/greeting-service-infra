@@ -25,7 +25,9 @@
 | 0g | **Приём нового соединения (сам accept)** | `netty-transport` | `io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe` | `read()` → `doReadMessages(...)` | Boss-поток вызывает системный `accept()`, создаёт `NioSocketChannel` для клиента |
 | 0h | **Передача принятого канала worker-группе** | `netty-transport` | `io.netty.bootstrap.ServerBootstrap.ServerBootstrapAcceptor` | `channelRead(ChannelHandlerContext ctx, Object msg)` | **Именно этот класс** регистрирует новый `Channel` в Worker `EventLoopGroup` (`childGroup.register(child)`) — граница между boss и worker [web:10][web:16] |
 
-> Источник (актуальная документация): `LoopResources` — "An `EventLoopGroup` selector with associated `Channel` factories" [web:4][web:7]. Именно `LoopResources`/`HttpResources` — тот самый класс, который "готовит фабрику channel и workers", который вы искали.
+- Источник (актуальная документация):
+  
+> `LoopResources` — "An `EventLoopGroup` selector with associated `Channel` factories" [web:4][web:7]. Именно `LoopResources`/`HttpResources` — тот самый класс, который "готовит фабрику channel и workers", который вы искали.
 
 **Почему в исходном файле не находились точки останова:**
 Указанные там классы (`NioEventLoop`, `HttpTrafficHandler`, `HttpServerOperations`, `DispatcherHandler`) существуют и актуальны, но:

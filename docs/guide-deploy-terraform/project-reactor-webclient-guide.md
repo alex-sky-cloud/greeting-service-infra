@@ -3,7 +3,7 @@
 > Краткое руководство по **Spring WebClient** (реактивный HTTP-клиент) и типичным вопросам на Java-собеседованиях.  
 > Формат каждого блока: **ответ простым языком → вопрос → источник → цитата (EN/RU)**.
 
-**См. также:** [project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md) — Mono, Flux, flatMap, retry.
+**См. также:** [project-reactor-interview-guide.md](../interview/project-reactor-interview-guide.md) — Mono, Flux, flatMap, retry.
 
 ---
 
@@ -329,7 +329,7 @@ public Mono<OrderSummaryDto> summary(@PathVariable Long id) {
 | Spring Boot — REST Clients | https://docs.spring.io/spring-boot/docs/current/reference/html/io.html#io.rest-client |
 | WebTestClient | https://docs.spring.io/spring-framework/reference/testing/webtestclient.html |
 | Reactor — error/retry | https://projectreactor.io/docs/core/release/reference/#error.handling |
-| R2DBC (БД в цепочке) | [project-reactor-r2dbc-guide.md](./project-reactor-r2dbc-guide.md) |
+| R2DBC (БД в цепочке) | [project-reactor-r2dbc-guide.md](project-reactor-r2dbc-guide.md) |
 
 ---
 

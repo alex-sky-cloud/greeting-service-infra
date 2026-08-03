@@ -1,0 +1,123 @@
+%% Block 0 — инициализация транспорта (reactive-study)
+%% Исходник для BLOCK-0-INIT-PATH-VERIFICATION.md
+
+%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Arial', 'fontSize': '14px'}}}%%
+
+flowchart TB
+    subgraph P0["⏳ До bind — HTTP-порт ещё закрыт"]
+        direction TB
+        MAIN["SpringApplication.run()"]
+        CTX["Контекст Spring: Flyway, R2DBC, beans"]
+        MAIN --> CTX
+    end
+
+    subgraph P1["🟢 Шаг 1 — Spring Boot собирает сервер"]
+        direction TB
+        FACTORY["NettyReactiveWebServerFactory\n.getWebServer()"]
+        HTTP_SRV["HttpServer\nпорт 8083, настройки"]
+        NETTY_WS["NettyWebServer\nобёртка Spring"]
+        FACTORY --> HTTP_SRV --> NETTY_WS
+    end
+
+    subgraph P2["🔵 Шаг 2 — Старт bind"]
+        direction TB
+        START["NettyWebServer.start()\nstartHttpServer()"]
+        BINDNOW["HttpServer.bindNow()\nMono.block на потоке server"]
+        START --> BINDNOW
+    end
+
+    subgraph P3["🟣 Шаг 3 — Reactor Netty: TransportConnector"]
+        direction TB
+        ST_BIND["ServerTransport.bind()"]
+        TC_BIND["TransportConnector.bind()"]
+        ST_BIND --> TC_BIND
+    end
+
+    subgraph P4["🟠 Шаг 4 — LoopResources создаёт пулы потоков"]
+        direction LR
+        subgraph BOSS["👔 Acceptor / Boss"]
+            ONSEL["onServerSelect()\nDefaultLoopResources"]
+            BOSS_GRP["EventLoopGroup acceptor\nпоток reactor-http-nio-*"]
+            ONSEL --> BOSS_GRP
+        end
+        subgraph WORK["👷 Worker"]
+            ONSRV["onServer()\nDefaultLoopResources"]
+            WORK_GRP["EventLoopGroup worker\n≈ CPU потоков, мин. 4"]
+            ONSRV --> WORK_GRP
+        end
+    end
+
+    subgraph P5["🔴 Шаг 5 — Netty: server Channel + порт"]
+        direction TB
+        INIT["doInitAndRegister()\nServerSocketChannel"]
+        CHAN["Server Channel\nобёртка listening socket"]
+        REG["register на acceptor EventLoop"]
+        PORT["bind localhost:8083"]
+        READ["doBeginRead()\nOP_ACCEPT на Selector"]
+        INIT --> CHAN --> REG --> PORT --> READ
+    end
+
+    subgraph P6["✅ После init — готово к curl"]
+        direction TB
+        LOG["Лог: Netty started on port 8083\nStarted ReactiveStudyApplication"]
+        READY["Listening socket ждёт TCP\nClient Channel — ещё нет"]
+        LOG --> READY
+    end
+
+    P0 -->|"NettyWebServer.start()"| P1
+    P1 --> P2
+    P2 --> P3
+    P3 --> P4
+    P4 --> P5
+    P5 --> P6
+
+    style P0 fill:#F5F5F5,stroke:#9E9E9E,stroke-width:2px,color:#424242
+    style P1 fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    style P2 fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style P3 fill:#EDE7F6,stroke:#5E35B1,stroke-width:2px,color:#311B92
+    style P4 fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#E65100
+    style BOSS fill:#FFE0B2,stroke:#F57C00,stroke-width:1px,color:#BF360C
+    style WORK fill:#C8E6C9,stroke:#388E3C,stroke-width:1px,color:#1B5E20
+    style P5 fill:#FCE4EC,stroke:#C2185B,stroke-width:2px,color:#880E4F
+    style P6 fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#006064
+
+%% --- Состояние после init ---
+
+flowchart LR
+    subgraph AFTER["✅ Состояние транспорта после инициализации"]
+        direction TB
+
+        subgraph ACC["Acceptor EventLoop — boss-роль"]
+            direction TB
+            SEL_A["Selector"]
+            SRV_CH["Server Channel\n:8083 listening"]
+            SEL_A --- SRV_CH
+            ACC_NOTE["Ждёт OP_ACCEPT\nпервый curl → accept()"]
+        end
+
+        subgraph WRK["Worker EventLoop pool — готов, но пуст"]
+            direction TB
+            SEL_W1["Selector worker-1"]
+            SEL_W2["Selector worker-2"]
+            SEL_WN["Selector worker-N"]
+            EMPTY["Client Channel'ов: 0"]
+            SEL_W1 --- EMPTY
+            SEL_W2 --- EMPTY
+            SEL_WN --- EMPTY
+        end
+
+        subgraph NOTYET["❌ Появится только после curl"]
+            direction TB
+            CLIENT_CH["Client Channel"]
+            PIPE["ChannelPipeline\nHttpServerCodec → WebFlux"]
+            CLIENT_CH --> PIPE
+        end
+    end
+
+    ACC -->|"accept()"| NOTYET
+    NOTYET -->|"register()"| WRK
+
+    style AFTER fill:#FAFAFA,stroke:#455A64,stroke-width:2px
+    style ACC fill:#FFF8E1,stroke:#FFA000,stroke-width:2px,color:#E65100
+    style WRK fill:#E8F5E9,stroke:#43A047,stroke-width:2px,color:#2E7D32
+    style NOTYET fill:#FFEBEE,stroke:#E53935,stroke-width:2px,color:#B71C1C,stroke-dasharray: 5 5

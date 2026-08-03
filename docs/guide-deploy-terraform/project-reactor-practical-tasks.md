@@ -5,9 +5,9 @@
 
 **См. также:**
 
-- [project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md) — теория
-- [project-reactor-r2dbc-guide.md](./project-reactor-r2dbc-guide.md) — R2DBC
-- [project-reactor-webclient-guide.md](./project-reactor-webclient-guide.md) — WebClient
+- [project-reactor-interview-guide.md](../interview/project-reactor-interview-guide.md) — теория
+- [project-reactor-r2dbc-guide.md](project-reactor-r2dbc-guide.md) — R2DBC
+- [project-reactor-webclient-guide.md](project-reactor-webclient-guide.md) — WebClient
 
 ---
 
@@ -342,7 +342,7 @@ public Mono<UserDto> fetchUser(WebClient client, Long id) {
     resp -> Mono.error(new NotFoundException(id)))
 ```
 
-**Проверка:** MockWebServer + StepVerifier (см. [project-reactor-webclient-guide.md](./project-reactor-webclient-guide.md)).
+**Проверка:** MockWebServer + StepVerifier (см. [project-reactor-webclient-guide.md](project-reactor-webclient-guide.md)).
 
 **На интервью:** Разница `retrieve()` vs `exchangeToMono`; почему не `block()`.
 

@@ -46,7 +46,7 @@
 
 ### Рисунок 1. Tomcat и Netty — разные модели потоков
 
-![Tomcat 1:1 поток на запрос · Netty N Channel на EventLoop](./Images-docs/webflux-netty-vs-tomcat.png)
+![Tomcat 1:1 поток на запрос · Netty N Channel на EventLoop](../Images-docs/webflux-netty-vs-tomcat.png)
 
 **Слева**: один запрос — один поток.
 
@@ -299,37 +299,37 @@ WorkerEventLoop -> SocketChannel: read / write events
 
 ### Рисунок 2. Новый запрос попадает в EventQueue
 
-![Новый запрос в EventQueue](./Images-docs/webflux-seq-event-queue-1.png)
+![Новый запрос в EventQueue](../Images-docs/webflux-seq-event-queue-1.png)
 
 Запрос с Channel превращается в задачу в очереди EventLoop.
 
 ### Рисунок 3. Второй запрос с другого Channel на том же EventLoop
 
-![Второй канал — та же очередь](./Images-docs/webflux-seq-event-queue-2.png)
+![Второй канал — та же очередь](../Images-docs/webflux-seq-event-queue-2.png)
 
 Второй Channel на том же EventLoop — вторая задача встаёт в FIFO после первой.
 
 ### Рисунок 4. Блокирующая операция уходит в другой пул
 
-![Offload блокирующей операции](./Images-docs/webflux-seq-blocking-offload.png)
+![Offload блокирующей операции](../Images-docs/webflux-seq-blocking-offload.png)
 
 - вызов оператора **subscribeOn**(boundedElastic), с указанием типа boundedElastic,  переносит JDBC / sync HTTP / sleep в отдельный пул. EventLoop не ждёт завершения этого вызова и сразу берёт следующую задачу из EventQueue.
 
 ### Рисунок 5. Неблокирующая задача завершена — ответ уходит клиенту
 
-![CPU-bound завершён на EventLoop](./Images-docs/webflux-seq-cpu-response.png)
+![CPU-bound завершён на EventLoop](../Images-docs/webflux-seq-cpu-response.png)
 
 Лёгкая обработка на EventLoop; ответ через outbound-цепочку.
 
 ### Рисунок 6. Фоновый поток завершил работу — задача снова в EventQueue
 
-![Задача возвращается в очередь](./Images-docs/webflux-seq-requeue.png)
+![Задача возвращается в очередь](../Images-docs/webflux-seq-requeue.png)
 
 После блокирующего шага продолжение снова планируется на EventLoop.
 
 ### Рисунок 7. Запрос завершён и отправлен по тому же Channel
 
-![Ответ по исходному Channel](./Images-docs/webflux-seq-final-response.png)
+![Ответ по исходному Channel](../Images-docs/webflux-seq-final-response.png)
 
 Ответ уходит в тот же **Channel**, с которого пришёл запрос.
 
@@ -361,7 +361,7 @@ return Mono.fromCallable(() -> callExternalApi())
 
 ### Рисунок 8. Цепочка потоков в WebFlux
 
-![WebClient → boundedElastic → EventLoop](./Images-docs/webflux-threading-model.png)
+![WebClient → boundedElastic → EventLoop](../Images-docs/webflux-threading-model.png)
 
 ---
 
@@ -370,7 +370,7 @@ return Mono.fromCallable(() -> callExternalApi())
 Понимание **Event Loop** и потоков **WebFlux** объясняет, как реактивное приложение держит много соединений на малом числе потоков.
 
 Следующий вопрос из статьи автора: что если данные приходят **быстрее**, чем их успевают обработать? Это **Backpressure**. 
- - В проекте: [Backpressure в project-reactor-interview-guide.md](interview/project-reactor-interview-guide.md#4-backpressure-обратное-давление).
+ - В проекте: [Backpressure в project-reactor-interview-guide.md](../interview/project-reactor-interview-guide.md#4-backpressure-обратное-давление).
 
 ---
 

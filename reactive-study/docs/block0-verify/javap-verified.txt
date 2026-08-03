@@ -1,0 +1,52 @@
+=== javap verification ===
+
+--- org.springframework.boot.reactor.netty.NettyReactiveWebServerFactory#getWebServer  jar=spring-boot-reactor-netty-4.0.5.jar ---
+  public org.springframework.boot.web.server.WebServer getWebServer(org.springframework.http.server.reactive.HttpHandler);
+
+--- org.springframework.boot.reactor.netty.NettyWebServer#start  jar=spring-boot-reactor-netty-4.0.5.jar ---
+  public void start() throws org.springframework.boot.web.server.WebServerException;
+
+--- org.springframework.boot.reactor.netty.NettyWebServer#startHttpServer  jar=spring-boot-reactor-netty-4.0.5.jar ---
+  reactor.netty.DisposableServer startHttpServer();
+
+--- reactor.netty.http.server.HttpServer#bindNow  jar=reactor-netty-http-1.3.4.jar ---
+NOT FOUND
+
+--- reactor.netty.transport.ServerTransport#bind  jar=reactor-netty-http-1.3.4.jar ---
+NOT FOUND
+
+--- reactor.netty.transport.TransportConnector#bind  jar=reactor-netty-core-1.3.4.jar ---
+  public static reactor.core.publisher.Mono<io.netty.channel.Channel> bind(reactor.netty.transport.TransportConfig, io.netty.channel.ChannelInitializer<io.netty.channel.Channel>, java.net.SocketAddress, boolean);
+
+--- reactor.netty.transport.TransportConnector#doInitAndRegister  jar=reactor-netty-core-1.3.4.jar ---
+  static reactor.core.publisher.Mono<io.netty.channel.Channel> doInitAndRegister(reactor.netty.transport.TransportConfig, io.netty.channel.ChannelInitializer<io.netty.channel.Channel>, boolean, io.netty.channel.EventLoop);
+
+--- reactor.netty.resources.DefaultLoopResources#onServerSelect  jar=reactor-netty-core-1.3.4.jar ---
+  public io.netty.channel.EventLoopGroup onServerSelect(boolean);
+
+--- reactor.netty.resources.DefaultLoopResources#onServer  jar=reactor-netty-core-1.3.4.jar ---
+  public io.netty.channel.EventLoopGroup onServer(boolean);
+
+--- reactor.netty.http.server.HttpResources#get  jar=reactor-netty-http-1.3.4.jar ---
+NOT FOUND
+
+--- reactor.netty.transport.ServerTransportConfig#eventLoopGroup  jar=reactor-netty-core-1.3.4.jar ---
+  protected final io.netty.channel.EventLoopGroup eventLoopGroup();
+
+--- reactor.netty.transport.ServerTransportConfig#childEventLoopGroup  jar=reactor-netty-core-1.3.4.jar ---
+  final io.netty.channel.EventLoopGroup childEventLoopGroup();
+
+--- io.netty.channel.nio.AbstractNioChannel#doBeginRead  jar=netty-transport-4.2.12.Final.jar ---
+  protected void doBeginRead() throws java.lang.Exception;
+
+--- io.netty.channel.nio.NioIoHandler#run  jar=netty-transport-4.2.12.Final.jar ---
+  public int run(io.netty.channel.IoHandlerContext);
+
+--- reactor.netty.transport.ServerTransport$Acceptor#channelRead  jar=reactor-netty-core-1.3.4.jar ---
+  public void channelRead(io.netty.channel.ChannelHandlerContext, java.lang.Object);
+
+--- io.netty.bootstrap.ServerBootstrap#doBind  jar=netty-transport-4.2.12.Final.jar ---
+NOT FOUND
+
+--- io.netty.bootstrap.AbstractBootstrap#doBind  jar=netty-transport-4.2.12.Final.jar ---
+  private io.netty.channel.ChannelFuture doBind(java.net.SocketAddress);
