@@ -216,4 +216,4 @@ findstr /R /C:"^>>> ENTER" agent\my-trace.log
 
 После разбора log можно заполнить таблицу stop points в учебном markdown (класс, метод, срабатывает при boot / при curl).
 
-Пример готового doc по init: [`BLOCK-0-INIT-PATH-VERIFICATION.md`](BLOCK-0-INIT-PATH-VERIFICATION.md).
+Пример готового doc по init: [`BLOCK-0-INIT-PATH-VERIFICATION.md`](../../reactive-study/docs/BLOCK-0-INIT-PATH-VERIFICATION.md).

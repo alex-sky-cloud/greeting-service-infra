@@ -182,7 +182,7 @@ public class MethodEntryLogAspect {
 
 Пошаговая инструкция **для пользователя** (настройка классов/методов, запуск, разбор log): [`Java agent — проверка пути вызовов своими руками.md`](Java%20agent%20—%20проверка%20пути%20вызовов%20своими%20руками.md).
 
-Код agent: `docs/block0-verify/agent/InitPathAgent.java`. Пример trace после init: `block0-init-trace.log`. Итоговый doc: [`BLOCK-0-INIT-PATH-VERIFICATION.md`](BLOCK-0-INIT-PATH-VERIFICATION.md).
+Код agent: `docs/block0-verify/agent/InitPathAgent.java`. Пример trace после init: `block0-init-trace.log`. Итоговый doc: [`BLOCK-0-INIT-PATH-VERIFICATION.md`](../../reactive-study/docs/BLOCK-0-INIT-PATH-VERIFICATION.md).
 
 <span style="display:none">[^1]</span>
 

@@ -1,7 +1,11 @@
 # Блок 0 — что создаётся при инициализации транспорта
 
 **Модуль:** `reactive-study` (Spring Boot 4.0.5, Reactor Netty 1.3.4, Netty 4.2.12)  
-**Цель:** понять **какие объекты уже существуют**, когда в логе появляется `Netty started on port 8083` — и **в каждом разделе** сразу видеть **класс + метод**, куда поставить breakpoint для перепроверки (не искать по всему документу).
+**Цель:** 
+ - понять **какие объекты уже существуют**, 
+ - когда в логе появляется `Netty started on port 8083` — 
+ - и **в каждом разделе** сразу видеть **класс + метод**, 
+ - куда поставить breakpoint для перепроверки (не искать по всему документу).
 
 > Проверено: `javap` по JAR (SB 4.0.5 / RN 1.3.4), **InitPathAgent** (bytecode agent), jstack после старта.  
 > Инструкция agent: [`Java agent для логирования входов в методы.md`](Java%20agent%20для%20логирования%20входов%20в%20методы.md) → `docs/block0-verify/run-with-agent.cmd`.  
@@ -32,15 +36,17 @@
 
 ## 1. Главная идея
 
-Вы правильно думаете: **Netty разделяет роли** — одна группа потоков принимает новые TCP-соединения на listening socket (условный **boss / acceptor**), другая обслуживает уже принятые соединения клиентов (**worker**).
+**Netty разделяет роли** :
+  - _одна_ **группа потоков** принимает новые TCP-соединения на listening socket (условный **boss / acceptor**), 
+  - другая обслуживает уже принятые соединения клиентов (**worker**).
 
-**Важно для init:** при старте Spring WebFlux создаётся **не весь HTTP-путь**, а **только серверный транспорт**:
+**Важно для init:** 
+  - при старте **Spring WebFlux** создаётся **не весь HTTP-путь**, а **только серверный транспорт**:
+     - пул event loop (**boss** + **worker**),
+     - **один** server `io.netty.channel.Channel` (обёртка над **listening socket** на порту 8083 (порт приложения из примера)),
+     - этот socket переведён в режим «жду подключений» (`OP_ACCEPT`).
 
-- пул event loop (boss + worker),
-- **один** server `io.netty.channel.Channel` (обёртка над listening socket на порту 8083),
-- этот socket переведён в режим «жду подключений» (`OP_ACCEPT`).
-
-Пока никто не вызвал `curl`, **клиентских Channel ещё нет**, HTTP pipeline на соединениях не крутится.
+Пока никто не вызвал `curl`, **клиентских Channel ещё нет**, HTTP pipeline на соединениях не крутится (не запущен).
 
 **Источник (Netty User Guide):** https://netty.io/wiki/user-guide-for-4.x.html
 
@@ -48,7 +54,9 @@
 > The first one, often called 'boss', accepts an incoming connection. The second one, often called 'worker', handles the traffic of the accepted connection once the boss accepts the connection and registers the accepted connection to the worker.
 
 **Перевод:**
-> Первая группа, обычно «boss», принимает входящее соединение. Вторая, «worker», обрабатывает трафик уже принятого соединения после того, как boss зарегистрировал его в worker.
+> Первая группа, обычно **"boss"**, принимает входящее соединение.
+> 
+> Вторая, **"worker"**, обрабатывает трафик уже **принятого соединения** после того, как **boss** зарегистрировал его в **worker**.
 
 ---
 
@@ -56,12 +64,64 @@
 
 Транспорт **не** создаётся в момент `main()` и **не** при загрузке классов Netty.
 
-| Момент | Что происходит | Breakpoint: класс → метод |
-|--------|----------------|---------------------------|
-| `org.springframework.boot.SpringApplication.run(...)` | Поднимается контекст Spring, Flyway, R2DBC — **HTTP-сервер ещё не слушает порт** | *(опционально)* `org.springframework.boot.SpringApplication` → `run` — до refresh контекста |
-| `org.springframework.boot.reactor.netty.NettyWebServer.start()` | Spring вызывает `reactor.netty.transport.ServerTransport.bindNow()` — **здесь начинается init транспорта** | `org.springframework.boot.reactor.netty.NettyWebServer` → `start` или `startHttpServer` |
+| Момент | Что происходит | Breakpoint: класс → метод                                                                                                                            |
+|--------|----------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `org.springframework.boot.SpringApplication.run(...)` | Поднимается контекст Spring, Flyway, R2DBC — **HTTP-сервер ещё не слушает порт** | *(опционально)* `org.springframework.boot.SpringApplication` → `run` — * до refresh контекста                                                        |
+| `org.springframework.boot.reactor.netty.NettyWebServer.start()` | Spring вызывает `reactor.netty.transport.ServerTransport.bindNow()` — **здесь начинается init транспорта** | `org.springframework.boot.reactor.netty.NettyWebServer` → `start` или `startHttpServer`                                                              |
 | Лог `Netty started on port 8083` | Bind завершён, listening socket готов | `reactor.netty.transport.TransportConnector` → `doInitAndRegister` уже отработал; дальше — `io.netty.channel.nio.AbstractNioChannel` → `doBeginRead` |
-| Лог `Started ReactiveStudyApplication` | Весь контекст готов, можно слать HTTP (`com.example.reactivestudy.ReactiveStudyApplication`) | breakpoint init **больше не срабатывают** до перезапуска |
+| Лог `Started ReactiveStudyApplication` | Весь контекст готов, можно слать HTTP (`com.example.reactivestudy.ReactiveStudyApplication`) | breakpoint init **больше не срабатывают** до перезапуска                                                                                             |
+
+
+* `refresh` контекста — это **основной этап инициализации** Spring.
+  - В этот момент Spring создаёт и связывает бины, 
+  - применяет post-processors, 
+  - запускает нужные компоненты; 
+  - после этого `ApplicationContext` готов к работе. 
+  
+Поэтому **«до refresh контекста»** означает: *до того, как Spring полностью собрал и инициализировал приложение*.
+
+---
+
+ - org.springframework.boot.reactor.netty.**NettyWebServer**
+
+```java
+
+ public void start() throws WebServerException {
+        DisposableServer disposableServer = this.disposableServer;
+        if (disposableServer == null) {
+            try {
+                disposableServer = this.startHttpServer();
+                this.disposableServer = disposableServer;
+            } catch (Exception var4) {
+                
+..............
+```
+
+ - `disposableServer = this.startHttpServer()`; - вызывает метод `startHttpServer()` из `org.springframework.boot.reactor.netty.NettyWebServer`
+
+```java
+
+ DisposableServer startHttpServer() {
+        HttpServer server = this.httpServer;
+     .............................
+        return this.lifecycleTimeout != null ? server.bindNow(this.lifecycleTimeout) : server.bindNow();
+    }
+```
+
+ - `HttpServer` наследует `reactor.netty.transport.**ServerTransport**` и там вызывается метод `bindNow()`
+
+
+- reactor.netty.transport.**ServerTransport**
+
+```java
+
+public final DisposableServer bindNow() {
+		return bindNow(Duration.ofSeconds(45));
+	}
+```
+
+---
+
 
 ### Проверка (breakpoint) — §2
 
