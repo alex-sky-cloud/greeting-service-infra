@@ -1,6 +1,9 @@
 # boundedElastic в Project Reactor
 
-> `boundedElastic` — это не «магический реактивный поток» и не `new Thread()` на каждую задачу, а специальный scheduler для **блокирующих** операций: он создаёт **ограниченное** число рабочих потоков, переиспользует их, а лишние задачи временно ставит в очередь.
+> `boundedElastic` — это не «магический реактивный поток» и не `new Thread()` на каждую задачу, а специальный scheduler для **блокирующих** операций:
+> 
+>  - он создаёт **ограниченное** число рабочих потоков, пере-использует их, а 
+>  - лишние задачи временно ставит в очередь.
 
 ## Оглавление
 
@@ -33,7 +36,7 @@
 
 В официальном Reactor Reference Guide прямо сказано, что это *«a handy way to give a blocking process its own thread so that it does not tie up other resources (удобный способ выделить отдельный поток, чтобы не блокировать другие ресурсы)»* — https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
 
-Ключевая идея здесь в слове **bounded**: это не бесконечно растущий пул, а пул с верхней границей. 
+Ключевая идея здесь в слове **bounded**: это не бесконечно растущий пул, а **pool потоков** _с верхней границей_. 
 
 В Javadoc `Schedulers` указано, что максимальный размер общего `boundedElastic()` по умолчанию берётся из свойства `reactor.schedulers.defaultBoundedElasticSize`, а если оно не задано — используется значение `10 * availableProcessors` — https://projectreactor.io/docs/core/release/api/reactor/core/scheduler/Schedulers.html
 
@@ -41,7 +44,9 @@
 
 ## Зачем он нужен
 
-Reactor по своей природе хорошо работает там, где код **не блокирует** поток. Если же внутри реактивной цепочки внезапно вызвать блокирующую операцию на event loop или на `parallel()`, можно «заморозить» поток, на котором должны были обрабатываться и другие задачи. Поэтому blocking work обычно **выносят** на `boundedElastic` — https://docs.spring.io/projectreactor/reactor-core/docs/3.7.0-M3/reference/html/coreFeatures/schedulers.html и https://stackoverflow.com/questions/61304762/difference-between-boundedelastic-vs-parallel-scheduler
+Reactor по своей природе хорошо работает там, где код **не блокирует** поток. 
+ - Если же внутри реактивной цепочки внезапно вызвать блокирующую операцию на event loop или на `parallel()`, можно «заморозить» поток, на котором должны были обрабатываться и другие задачи. 
+ - Поэтому blocking work обычно **выносят** на `boundedElastic` — https://docs.spring.io/projectreactor/reactor-core/docs/3.7.0-M3/reference/html/coreFeatures/schedulers.html и https://stackoverflow.com/questions/61304762/difference-between-boundedelastic-vs-parallel-scheduler
 
 Именно поэтому типичный шаблон в Reactor выглядит так:
 
@@ -59,7 +64,7 @@ Mono.fromCallable(() -> blockingCall())
 
 Ниже схема, которая помогает представить внутреннюю модель `boundedElastic`.
 
-![boundedElastic](../Images-docs/boundedElastic.png)
+![boundedElastic](../../Images-docs/boundedElastic.png)
 
 
 Мысленно это можно представить так:

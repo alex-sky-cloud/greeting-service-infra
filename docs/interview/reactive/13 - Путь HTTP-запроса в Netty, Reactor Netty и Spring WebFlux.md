@@ -7,58 +7,97 @@
 - [Схема](#%D1%81%D1%85%D0%B5%D0%BC%D0%B0)
 - [Главное](#%D0%B3%D0%BB%D0%B0%D0%B2%D0%BD%D0%BE%D0%B5)
 
-**Channel Handlers (обработчики канала Netty) и реактивные операторы — разные слои.** Первые обрабатывают сетевые события и преобразуют данные на уровне Netty; вторые строят реактивную цепочку бизнес-логики в Project Reactor.
+**Channel Handlers**  (обработчики канала Netty) и **реактивные операторы**  — разные слои:
+  - Первые обрабатывают сетевые события и преобразуют данные на уровне Netty; 
+  - вторые строят реактивную цепочку бизнес-логики в Project Reactor.
 
 ## Путь запроса
 
-1. **Netty EventLoop (рабочий цикл событий, worker group)** — поток, который обслуживает сокет. Он получает от **Selector** сообщение, что данные в сокете готовы к чтению.
-2. **ChannelPipeline (конвейер канала Netty)** — цепочка `Channel Handlers` (обработчиков канала). 
- - **Входящие байты** проходят через обработчики, например:
-    - `ByteToMessageDecoder` — собирает входящие байты в сообщения или кадры;
-    - `HttpServerCodec` — преобразует HTTP-байты в `HttpRequest` и `HttpContent`;
-    - `HttpObjectAggregator` — необязательный обработчик: объединяет `HttpMessage` и следующие за ним части `HttpContent` в единый `FullHttpRequest`. Обычно он нужен, если приложение хочет получить тело HTTP-запроса целиком, а не обрабатывать его потоково.
- 
- - Источник: https://netty.io/4.1/api/io/netty/handler/codec/http/HttpObjectAggregator.html
+Ниже — путь одного `GET /api/orders/first-10` в `reactive-study`.
+ - Создание **server Channel** и **bind порта** — описывает отдельный документ [`Block 0`](BLOCK-0-INIT-PATH-VERIFICATION.md); 
+ - здесь сервер уже слушает порт.
 
-EN:
+1. **TCP accept и EventLoop.** `reactor.netty.transport.ServerTransport$Acceptor#channelRead` принимает новый **client Channel**. 
+ - На Windows/NIO дальнейшее чтение идёт на `io.netty.channel.nio.NioIoHandler#run` внутри `io.netty.channel.SingleThreadIoEventLoop`. 
+   - В этом проекте не нужно считать `NioEventLoop#run` или `ServerBootstrapAcceptor` обязательным путём: trace их не показал.
 
-> “A `ChannelHandler` that aggregates an `HttpMessage` and its following `HttpContent`s into a single `FullHttpRequest` or `FullHttpResponse`.”
+2. **Входящий ChannelPipeline.** 
+  - Netty передаёт байты через `HttpServerCodec`: 
+    - его inbound-половина `HttpRequestDecoder` создаёт `HttpRequest` и `HttpContent`. 
+    - Затем `reactor.netty.http.server.HttpTrafficHandler#channelRead` создаёт `HttpServerOperations`.
 
-RU:
+**Источник:** https://netty.io/4.2/api/io/netty/handler/codec/http/HttpServerCodec.html
 
-> «`ChannelHandler` (обработчик канала), который объединяет `HttpMessage` и следующие за ним части `HttpContent` в единый `FullHttpRequest` или `FullHttpResponse`.»
-3. **HttpServerOperations (адаптер Reactor Netty)** — это граница между Netty и реактивным API Reactor Netty. После обработки HTTP-протокола данные становятся доступными реактивному коду:
-    - тело запроса читается как поток `Flux<DataBuffer>`;
-    - данные запроса — метод, URI, заголовки — доступны через API HTTP-запроса.
-4. **Твой реактивный код: Spring WebFlux / RouterFunction / WebFilter** — здесь начинается область Project Reactor:
-    - `flatMap`, `map`, `filter`, `zipWith` — реактивные операторы;
-    - обработчик маршрута (`Handler`, `Controller` или `RouterFunction`) вызывает бизнес-логику;
+**Цитата:**
+> A combination of `HttpRequestDecoder` and `HttpResponseEncoder` which enables easier server side HTTP implementation.
 
+**Перевод:**
+> Комбинация `HttpRequestDecoder` и `HttpResponseEncoder`, упрощающая серверную HTTP-реализацию.
+
+`HttpObjectAggregator` не является обязательным элементом обычного HTTP/1.1 пути Reactor Netty. 
+ - В его официальной схеме агрегатор относится к WebSocket-ветке, а 
+ - основной server path содержит `HttpTrafficHandler`.
+
+**Источник:** https://projectreactor.io/docs/netty/1.3.4/api/reactor/netty/NettyPipeline.html
+
+**Цитата:**
+> -> http traffic handler ? [HttpTrafficHandler]
+>
+> ...
+>
+> -> websocket frame aggregator ? [WsFrameAggregator]
+
+**Перевод:**
+> В server pipeline расположен `HttpTrafficHandler`; 
+> 
+> frame aggregator относится к WebSocket-ветке.
+
+3. **Reactor Netty HTTP operation.** `HttpTrafficHandler` создаёт `HttpServerOperations`; далее `HttpServerOperations#onInboundNext` передаёт HTTP-сообщение в server handler. В trace этот переход подтверждён: `HttpTrafficHandler#channelRead` → `HttpServerOperations#onInboundNext`.
+
+**Источник:** https://github.com/reactor/reactor-netty/blob/v1.3.4/reactor-netty-http/src/main/java/reactor/netty/http/server/HttpTrafficHandler.java
+
+**Цитата:**
+> ops = new HttpServerOperations(...);
+>
+> ops.bind();
+>
+> ctx.fireChannelRead(msg);
+
+**Перевод:**
+> Handler создаёт `HttpServerOperations`, привязывает операцию к channel и передаёт HTTP-сообщение дальше.
+
+4. **Переход в Spring WebFlux.** `org.springframework.http.server.reactive.ReactorHttpHandlerAdapter#apply` адаптирует Reactor Netty request/response к Spring `HttpHandler`. Затем `DispatcherHandler#handle` находит обработчик маршрута, а `RequestMappingHandlerAdapter#handle` вызывает аннотационный контроллер.
+
+**Источник:** https://docs.spring.io/spring-framework/docs/7.0.6/javadoc-api/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.html
+
+**Цитата:**
+> Adapt `HttpHandler` to the Reactor Netty channel handling function.
+
+**Перевод:**
+> Адаптирует `HttpHandler` к функции обработки канала Reactor Netty.
+
+**Источник:** https://docs.spring.io/spring-framework/docs/7.0.6/javadoc-api/org/springframework/web/reactive/DispatcherHandler.html
+
+**Цитата:**
+> Central dispatcher for HTTP request handlers/controllers.
+
+**Перевод:**
+> Центральный диспетчер обработчиков HTTP-запросов и контроллеров.
+
+5. **Код приложения.** Runtime trace показал:
+
+```text
+DispatcherHandler.handle
+→ RequestMappingHandlerAdapter.handle
+→ OrderController.first10
+→ OrderService.findFirst10
 ```
-- например, `repository.findById(id)` возвращает `Mono<Entity>` или `Flux<Entity>` при использовании реактивного драйвера БД.
-```
 
-5. **Подписчик (Subscriber, подписчик)** запрашивает данные у источника. Это реализует `backpressure` (обратное давление): получатель сам сообщает, сколько элементов готов принять.
+Контроллер возвращает `Flux<OrderResponse>`. Сервис строит его из `OrderRepository.findTop10ByOrderByIdAsc()` и `map(OrderResponse::from)`.
 
-Reactor Netty поддерживает Reactive Streams и обратное давление на уровне сетевого движка.
-    - Источник: https://projectreactor.io/docs/netty/1.1.21/reference
+6. **Reactive Streams и R2DBC.** Вызов контроллера или сервиса доказывает создание `Flux`, но сам SQL появляется при подписке и спросе downstream. Для derived query `findTop10ByOrderByIdAsc` подходящая точка — `org.springframework.data.r2dbc.repository.query.PartTreeR2dbcQuery#execute`, затем `AbstractR2dbcQuery#execute`. Эти методы не были в фильтре agent данного запуска, поэтому не помечаются как runtime-подтверждённые.
 
-EN:
-
-> “Reactor Netty offers backpressure-ready network engines for HTTP (including Websockets), TCP, and UDP.”
-
-RU:
-
-> «Reactor Netty предоставляет сетевые движки с поддержкой обратного давления для HTTP, включая WebSocket, TCP и UDP.»
-6. **Реактивный запрос к БД** — при вызове `repository.findById(...)` реактивный драйвер отправляет запрос к БД неблокирующе. Пока БД не ответила, `EventLoop` не ждёт её синхронно и может обслуживать другие каналы.
-```
-7. **Результат: `Mono<ServerResponse>`** — реактивная цепочка формирует ответ. В функциональном API WebFlux это обычно `Mono<ServerResponse>`; в аннотационных контроллерах результат затем адаптируется инфраструктурой Spring WebFlux в HTTP-ответ.
-```
-
-8. **Исходящий ChannelPipeline (конвейер канала Netty)** — ответ проходит обратно через исходящие `Channel Handlers`:
-    - `HttpResponseEncoder` — преобразует HTTP-ответ и заголовки в байты;
-    - Netty записывает байты в сокет;
-    - ОС передаёт данные через сетевой интерфейс клиенту.
+7. **Ответ.** WebFlux кодирует `OrderResponse` в JSON (`Jackson2JsonEncoder#encode`), после чего outbound-половина `HttpServerCodec` — `HttpResponseEncoder#encode` — записывает HTTP-объекты как байты в сокет. Эти две точки корректны по API, но не были в фильтре agent.
 
 ## Схема
 
@@ -71,82 +110,79 @@ skinparam rectangle {
   RoundCorner 12
 }
 
-rectangle "Сетевой сокет\n(входящие HTTP-байты)" as socketIn #E3F2FD
+rectangle "Сетевой сокет\n(входящие TCP-байты)" as socketIn #E3F2FD
+rectangle "ServerTransport.Acceptor\nпринять TCP-соединение" as acceptor #F3F4F6
+rectangle "NioIoHandler\nSingleThreadIoEventLoop\nREAD ready" as eventLoop #F3F4F6
 
-frame "Netty: EventLoop\n(рабочий цикл событий)" as eventLoop #F3F4F6 {
-
-  frame "Входящий ChannelPipeline\n(конвейер канала)" as pipelineIn #DCEBFF {
-    rectangle "Channel Handlers\n(обработчики канала Netty)" as handlers #DCEBFF
-    rectangle "ByteToMessageDecoder\nбайты -> сообщения / кадры" as decoder
-    rectangle "HttpServerCodec\nбайты -> HttpRequest + HttpContent" as codec
-    rectangle "HttpObjectAggregator\nнеобязательно:\nчасти -> FullHttpRequest" as aggregator
-
-    handlers --> decoder
-    decoder --> codec
-    codec --> aggregator
-  }
-
-  rectangle "HttpServerOperations\n(адаптер Reactor Netty:\nграница Netty и Reactor)" as bridge #FFF3CD
-
-  frame "Reactor Streams\n(реактивные потоки Project Reactor)" as reactor #D9F2E6 {
-    rectangle "Flux<DataBuffer>\nтело запроса" as flux
-    rectangle "Handler / Controller /\nRouterFunction / WebFilter" as handler
-    rectangle "Реактивные операторы\nflatMap, map, filter, zipWith" as operators
-    rectangle "repository.findById(id)" as repository
-    database "Реактивная БД\nR2DBC / MongoDB" as db
-    rectangle "Mono<ServerResponse>\nответ приложения" as response
-
-    flux --> handler
-    handler --> operators
-    operators --> repository
-    repository --> db
-    db --> response
-  }
-
-  frame "Исходящий ChannelPipeline\n(конвейер канала)" as pipelineOut #FCE4EC {
-    rectangle "Channel Handlers\n(обработчики канала Netty)" as outHandlers #FCE4EC
-    rectangle "HttpResponseEncoder\nHTTP-ответ -> байты" as encoder
-    rectangle "Сетевой сокет\n(ответ клиенту)" as socketOut #E3F2FD
-
-    outHandlers --> encoder
-    encoder --> socketOut
-  }
+frame "Входящий ChannelPipeline\n(Netty)" as pipelineIn #DCEBFF {
+  rectangle "HttpServerCodec\nHttpRequestDecoder:\nбайты -> HttpRequest + HttpContent" as codec
+  rectangle "HttpTrafficHandler\nсоздаёт HttpServerOperations" as traffic
+  rectangle "HttpServerOperations\nonInboundNext" as operations #FFF3CD
 }
 
-socketIn --> pipelineIn
-aggregator --> bridge
-bridge --> flux
-response --> pipelineOut
+frame "Spring WebFlux" as webflux #D9F2E6 {
+  rectangle "ReactorHttpHandlerAdapter\nReactor Netty -> HttpHandler" as adapter
+  rectangle "DispatcherHandler\nRequestMappingHandlerAdapter" as dispatcher
+  rectangle "OrderController\nOrderService\nсоздаёт Flux<OrderResponse>" as application
+}
 
-note right of bridge
-  Граница слоёв:
-  Netty передаёт управление
-  реактивной цепочке Reactor
+frame "Project Reactor и данные" as reactor {
+  rectangle "Подписка и request(n)" as demand
+  rectangle "PartTreeR2dbcQuery\n(derived query)" as query
+  database "PostgreSQL\nR2DBC" as db
+}
+
+frame "Исходящий ChannelPipeline\n(Netty)" as pipelineOut #FCE4EC {
+  rectangle "Jackson2JsonEncoder\nOrderResponse -> JSON DataBuffer" as json
+  rectangle "HttpResponseEncoder\nHTTP-объекты -> байты" as encoder
+  rectangle "Сетевой сокет\n(ответ клиенту)" as socketOut #E3F2FD
+}
+
+rectangle "HttpObjectAggregator\nне обязательный HTTP/1.1 шаг;\nWebSocket-ветка" as aggregator #FFF3CD
+
+socketIn --> acceptor
+acceptor --> eventLoop
+eventLoop --> codec
+codec --> traffic
+traffic --> operations
+operations --> adapter
+adapter --> dispatcher
+dispatcher --> application
+application --> demand
+demand --> query
+query --> db
+db --> json
+json --> encoder
+encoder --> socketOut
+
+codec ..> aggregator : только при соответствующей настройке
+
+note right of operations
+  Runtime trace подтверждает путь
+  от Acceptor до OrderService.
+  Query и encode — API-точки,
+  не instrumented в этом запуске.
 end note
 
 note bottom of db
-  При реактивном драйвере EventLoop
-  не блокируется в ожидании ответа БД
+  Вызов SQL выполняется после
+  подписки и request(n).
 end note
 @enduml
 ```
 
-На схеме `EventLoop` охватывает обработку сетевых событий, входящий и исходящий `ChannelPipeline`, а также выполнение реактивной цепочки, если код явно не переключил выполнение на другой планировщик через `publishOn(...)` или `subscribeOn(...)`.
+`NioIoHandler` обслуживает сетевые события и ChannelPipeline Netty. Реактивная цепочка может начаться на том же event loop, но нельзя рисовать весь R2DBC-путь как безусловно выполняющийся в одном потоке: планировщик может быть переключён, а драйвер БД работает асинхронно.
 
-
-`HttpObjectAggregator` в реальном pipeline `Reactor Netty` 
- - отсутствует по умолчанию — сноска про "необязательный обработчик" уже есть, 
- - но в самой схеме (PlantUML) и в основном тексте пункта 2 он показан как штатный последовательный шаг наравне с `HttpServerCodec`. 
- - Стоит визуально пометить его **как опциональный** (пунктиром или отдельным примечанием), а не как обязательное звено цепочки.
+`HttpObjectAggregator` вынесен из основной линии. Пунктирная стрелка означает, что это не обязательная стадия обычного HTTP/1.1 request path.
 
 
 ## Главное
 
-- **EventLoop (рабочий цикл событий)** читает данные из сокета, запускает обработку сетевых событий и записывает ответ обратно в сокет.
-- **ChannelPipeline (конвейер канала)** — часть Netty; он содержит `Channel Handlers` (обработчики канала).
-- **Channel Handlers** работают на уровне транспорта и протокола: преобразуют байты в HTTP-объекты и HTTP-объекты в байты.
-- **HttpServerOperations** — мост между обработкой Netty и реактивной моделью Reactor Netty.
-- **Реактивные операторы** — `flatMap`, `map`, `filter` и другие операторы Project Reactor; здесь находится бизнес-логика приложения.
-- **`HttpObjectAggregator` не обязателен**: он собирает HTTP-сообщение полностью, что не требуется для потоковой обработки тела запроса. [Источник: документация Netty](https://netty.io/4.1/api/io/netty/handler/codec/http/HttpObjectAggregator.html)
+- **TCP accept:** в этом runtime `ServerTransport$Acceptor#channelRead` принимает client Channel.
+- **EventLoop:** на Windows/NIO `NioIoHandler` обрабатывает selected keys и запускает обработчики pipeline.
+- **ChannelPipeline:** `HttpServerCodec` преобразует байты в HTTP-объекты, а `HttpTrafficHandler` создаёт `HttpServerOperations`.
+- **Граница Spring:** `ReactorHttpHandlerAdapter` передаёт request в `HttpHandler`; `DispatcherHandler` и `RequestMappingHandlerAdapter` доходят до контроллера.
+- **Бизнес-цепочка:** `OrderController` и `OrderService` создают `Flux`; выполнение derived query происходит при подписке, а не в момент возврата `Flux`.
+- **`HttpObjectAggregator` не обязателен:** он не входит в основной HTTP/1.1 путь Reactor Netty и на схеме обозначен отдельно.
 
 

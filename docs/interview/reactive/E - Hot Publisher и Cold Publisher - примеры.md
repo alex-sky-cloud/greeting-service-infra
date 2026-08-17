@@ -144,7 +144,7 @@ com.example.coldhotpublisher/
 - `doOnNext`,
 - `@ConfigurationProperties`,
 - минимальные `record` в `model/`,
-- демонстрация через HTTP-клиента ([`shop-demo.http`](../../reactor-cold-hot-publisher/docs/shop-demo.http)).
+- демонстрация через HTTP-клиента ([`shop-demo.http`](../../../reactor-cold-hot-publisher/docs/shop-demo.http)).
 
 ## 4. `WebClient`, registry и учебная подмена сети
 
