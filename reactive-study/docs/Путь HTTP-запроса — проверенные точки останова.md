@@ -72,17 +72,43 @@ curl
 reactor.netty.transport.ServerTransport$Acceptor#channelRead
 ```
 
-Это предпочитаемая точка при новом TCP-соединении. 
+`ServerTransport$Acceptor`
+(класс: `reactor.netty.transport.ServerTransport$Acceptor`) — внутренний
+**handler** Reactor Netty, который получает **новое TCP-соединение**.
 
-- В **trace** под ней видны:
+Например, когда `curl` подключается к `127.0.0.1:8083`, операционная система
+сообщает Netty: «появился новый клиент». 
+
+Тогда вызывается:
 
 ```text
-io.netty.channel.nio.AbstractNioMessageChannel$NioMessageUnsafe.read
-io.netty.channel.nio.NioIoHandler.run
-io.netty.channel.SingleThreadIoEventLoop.run
+ServerTransport$Acceptor#channelRead
 ```
 
-Значит для Netty 4.2 в этом приложении не нужно искать `ServerBootstrapAcceptor` или старый `NioEventLoop.run()` как обязательный runtime-путь.
+- Этот метод принимает созданный Netty `Channel` — объект, представляющий
+соединение с конкретным клиентом — и добавляет к нему настройку дальнейшей
+обработки: **event loop** и **HTTP pipeline**.
+
+```text
+curl подключается к порту 8083
+  → Netty принимает TCP-соединение
+  → ServerTransport$Acceptor#channelRead
+  → для соединения настраивается обработка HTTP-запросов
+```
+
+Под ним в trace видны Netty-методы:
+
+```text
+io.netty.channel.nio.AbstractNioMessageChannel$NioMessageUnsafe#read
+io.netty.channel.nio.NioIoHandler#run
+io.netty.channel.SingleThreadIoEventLoop#run
+```
+
+- `NioIoHandler#run` ждёт сетевые события от NIO: новое подключение или данные.
+- `AbstractNioMessageChannel$NioMessageUnsafe#read` забирает готовое новое
+  TCP-соединение из NIO.
+- `SingleThreadIoEventLoop#run` — главный цикл Netty-потока, который по кругу
+  обрабатывает сетевые события и задачи.
 
 ### 2. Codec: байты → HTTP request
 
@@ -90,15 +116,35 @@ io.netty.channel.SingleThreadIoEventLoop.run
 io.netty.handler.codec.http.HttpRequestDecoder#decode
 ```
 
-`HttpServerCodec` объединяет inbound `HttpRequestDecoder` и outbound `HttpResponseEncoder`.
+`HttpRequestDecoder`
+(класс: `io.netty.handler.codec.http.HttpRequestDecoder`) — читает байты,
+полученные из TCP-сокета, и разбирает их как HTTP-запрос.
 
-**Источник:** https://netty.io/4.2/api/io/netty/handler/codec/http/HttpServerCodec.html
+Например, из таких байтов:
 
-**Цитата:**
-> A combination of `HttpRequestDecoder` and `HttpResponseEncoder` which enables easier server side HTTP implementation.
+```text
+GET /api/orders/first-10 HTTP/1.1
+Host: 127.0.0.1:8083
+```
 
-**Перевод:**
-> Комбинация `HttpRequestDecoder` и `HttpResponseEncoder`, упрощающая серверную HTTP-реализацию.
+он создаёт Netty-объекты `HttpRequest` и, если есть тело запроса,
+`HttpContent`.
+
+`HttpServerCodec`
+(класс: `io.netty.handler.codec.http.HttpServerCodec`) — объединяет две части:
+
+```text
+входящий запрос:
+ - HttpRequestDecoder
+байты → HttpRequest
+
+исходящий ответ:
+ - HttpResponseEncoder
+HttpResponse → байты
+```
+
+То есть `HttpRequestDecoder#decode` нужен, чтобы Netty понял: полученные из
+сокета байты — это HTTP-запрос, и передал его дальше как объект `HttpRequest`.
 
 ### 3. Главная точка Reactor Netty
 
@@ -106,25 +152,35 @@ io.netty.handler.codec.http.HttpRequestDecoder#decode
 reactor.netty.http.server.HttpTrafficHandler#channelRead
 ```
 
-При `msg instanceof HttpRequest` handler создаёт `HttpServerOperations`, вызывает `ops.bind()` и передаёт сообщение дальше. В runtime trace этот метод сработал.
+`HttpTrafficHandler`
+(класс: `reactor.netty.http.server.HttpTrafficHandler`) — обработчик входящего
+HTTP-запроса в Reactor Netty.
 
-**Источник:** https://github.com/reactor/reactor-netty/blob/v1.3.4/reactor-netty-http/src/main/java/reactor/netty/http/server/HttpTrafficHandler.java
+`channelRead(...)` — метод, который вызывается, когда Netty уже прочитал
+запрос из сети и распознал его как HTTP-запрос (`HttpRequest`).
 
-**Цитата:**
-> if (msg instanceof HttpRequest) {
->
->     ...
->
->     ops = new HttpServerOperations(...);
->
->     ops.bind();
->
->     ...
->
->     ctx.fireChannelRead(msg);
+Дальше он создаёт `HttpServerOperations`:
 
-**Перевод:**
-> Для входящего `HttpRequest` Reactor Netty создаёт `HttpServerOperations`, привязывает его к channel и передаёт сообщение следующему handler.
+```text
+reactor.netty.http.server.HttpServerOperations
+```
+
+`HttpServerOperations` — объект, который хранит всё, что относится к одному
+конкретному HTTP-обмену: 
+ - текущий request, 
+ - будущий response и 
+ - состояние обработки.
+
+Коротко путь такой:
+
+```text
+Netty получил HTTP-запрос
+  → HttpTrafficHandler#channelRead
+  → создаётся HttpServerOperations для этого запроса
+  → запрос передаётся дальше в Reactor Netty и затем в Spring WebFlux
+```
+
+`HttpTrafficHandler#channelRead` — подтверждённая runtime-точка вашего trace.
 
 ### 4. HTTP operation → WebFlux
 
@@ -132,14 +188,59 @@ reactor.netty.http.server.HttpTrafficHandler#channelRead
 reactor.netty.http.server.HttpServerOperations#onInboundNext
 ```
 
-Метод protected, поэтому как обычную точку останова используйте `HttpTrafficHandler#channelRead`. Trace показывает переход:
+`HttpServerOperations`  
+- (пакет: `reactor.netty.http.server`) — объект Reactor Netty, который
+представляет один текущий HTTP-обмен: 
+  - входящий request, формируемый response
+и состояние их обработки.
+
+`onInboundNext(...)` — метод, который получает очередной **inbound** HTTP-объект
+данного запроса: сам `HttpRequest`, часть тела или завершающий HTTP-фрагмент.
+
+Метод `protected`, поэтому breakpoint на нём можно поставить только с
+поддержкой non-public methods в IDE. 
+
+Практичнее ставить breakpoint на:
 
 ```text
-HttpServerOperations.onInboundNext
-  → HttpServerOperations.handleDefaultHttpRequest
-  → HttpServer$HttpServerHandle.onStateChange
-  → DispatcherHandler.handle
+reactor.netty.http.server.HttpTrafficHandler#channelRead
 ```
+
+`HttpTrafficHandler#channelRead` получает **HTTP-объект** из Netty pipeline,
+создаёт или находит `HttpServerOperations` для текущего запроса и передаёт
+объект в обработку операции.
+
+Подтверждённый trace показывает следующий переход:
+
+```text
+HttpServerOperations#onInboundNext
+  → HttpServerOperations#handleDefaultHttpRequest
+  → HttpServer$HttpServerHandle#onStateChange
+  → DispatcherHandler#handle
+```
+
+Роли методов:
+
+- `HttpServerOperations#onInboundNext` — принимает входящее HTTP-событие
+  текущего запроса.
+
+- `HttpServerOperations#handleDefaultHttpRequest` — для обычного HTTP-запроса
+  запускает стандартный серверный handler Reactor Netty.
+
+- `HttpServer$HttpServerHandle#onStateChange` — получает изменение состояния
+  HTTP-операции и запускает обработчик, настроенный для `HttpServer`.
+  В Spring Boot WebFlux этим обработчиком является мост
+  `ReactorHttpHandlerAdapter`.
+
+- `DispatcherHandler#handle` — первая центральная точка Spring WebFlux:
+  принимает уже адаптированный Spring HTTP request и начинает поиск
+  контроллера, который должен его обработать.
+
+**Идея перехода:** 
+ - `HttpServerOperations` ещё относится к Reactor Netty и
+управляет текущей HTTP-операцией. 
+ - После `HttpServerHandle#onStateChange`
+выполняется **handler**, подключённый Spring Boot, и запрос переходит в WebFlux.
 
 ### 5. Мост в Spring
 
