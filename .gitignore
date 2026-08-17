@@ -39,3 +39,5 @@ Thumbs.db
 /app/.gradle/
 /ocs/interview/reactive/WebFlux_Reactor_Netty_Architecture.docx
 /reacitve-word/
+/reactive-study/.gradle/
+/reactive-study/build/

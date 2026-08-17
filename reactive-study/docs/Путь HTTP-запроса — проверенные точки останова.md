@@ -147,17 +147,52 @@ HttpServerOperations.onInboundNext
 org.springframework.http.server.reactive.ReactorHttpHandlerAdapter#apply
 ```
 
-Это правильный FQCN. JAR — `spring-web-7.0.6.jar`, не `spring-boot-reactor-netty`.
+`ReactorHttpHandlerAdapter`  
+  - (пакет: `org.springframework.http.server.reactive`) — адаптер между API
+  - Reactor Netty и общим серверным API Spring WebFlux (`HttpHandler`).
 
-**Источник:** https://docs.spring.io/spring-framework/docs/7.0.6/javadoc-api/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.html
+Метод `apply(...)` получает **нативные объекты** Reactor Netty:
 
-**Цитата:**
-> Adapt `HttpHandler` to the Reactor Netty channel handling function.
+```text
+HttpServerRequest
+HttpServerResponse
+```
 
-**Перевод:**
-> Адаптирует `HttpHandler` к функции обработки канала Reactor Netty.
+и оборачивает их в HTTP-объекты Spring WebFlux:
 
-В этом прогоне agent не смог инструментировать класс, поэтому это API-подтверждённая точка, но не runtime ✅.
+```text
+ReactorServerHttpRequest
+ReactorServerHttpResponse
+```
+
+После этого он вызывает:
+
+```text
+httpHandler.handle(request, response)
+```
+
+- То есть передаёт запрос из Reactor Netty в WebFlux. 
+- В обычном WebFlux
+приложении, этим `httpHandler` -  является цепочка Spring, которая далее приходит
+в `DispatcherHandler#handle`.
+
+- Отдельно для `HEAD`-запроса response оборачивается в
+`HttpHeadResponseDecorator`: 
+   - обработчик может сформировать тело ответа, но
+клиенту оно не отправляется, как требует HTTP-метод `HEAD`.
+
+Метод возвращает `Mono<Void>` — реактивный сигнал завершения обработки
+HTTP-запроса. При некорректном URI он выставляет `400 Bad Request`.
+
+---
+
+Смысл этого участка: 
+ - до `apply` запрос представлен типами Reactor Netty, после создания `ReactorServerHttpRequest` и `ReactorServerHttpResponse` — типами Spring WebFlux. 
+ - Это и есть граница, на которой транспорт **Netty** передаёт обработку Spring. 
+ - Сам класс реализует `BiFunction<HttpServerRequest, HttpServerResponse, Mono<Void>>` и адаптирует `HttpHandler` к функции обработки канала Reactor Netty.
+
+
+---
 
 ### 6. WebFlux → контроллер
 
