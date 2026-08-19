@@ -35,6 +35,8 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun --no-daemon
 
 **Лаборатория HTTP-пути:** `GET /api/orders/first-10` — см. [`docs/HTTP-REQUEST-DEBUG-BREAKPOINTS.md`](docs/HTTP-REQUEST-DEBUG-BREAKPOINTS.md).
 
+**Лаборатория Spring Events:** `GET /api/demo/events/block/{address}` — см. [`docs/SPRING-EVENTS-DEBUG-BREAKPOINTS.md`](docs/SPRING-EVENTS-DEBUG-BREAKPOINTS.md).
+
 ---
 
 ## Структура модуля

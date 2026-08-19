@@ -1,6 +1,6 @@
 # Observer и Listener: паттерны в Java и Spring
 
-> Отдельное руководство к [project-reactor-interview-guide.md](project-reactor-interview-guide.md), §2.  
+> Отдельное руководство к [project-reactor-interview-guide.md](../project-reactor-interview-guide.md), §2.  
 > **Формат:** схема → кто есть кто → как выглядит код → источник → цитата EN/RU.
 
 **Перегенерация PNG:** `python docs/Images-docs/gen_reactor_diagrams.py`.
@@ -20,22 +20,29 @@
 
 ---
 
-![Observer и Listener — схема](../Images-docs/observer-vs-Listener.png)
+![Observer и Listener — схема](../../Images-docs/observer-vs-Listener.png)
 
 **Как читать рисунок:** 
   - слева — **классический Observer** (Subject **сам хранит** список наблюдателей и **сам вызывает** `update()`). 
   - Справа — **события Spring** (издатель публикует событие в контекст, а `ApplicationEventMulticaster` — центральный посредник — находит нужные listener'ы по типу события и вызывает их).
 
-> **Уточнение:** Spring в официальной документации называет `ApplicationListener` реализацией «standard Observer design pattern». Это верно **концептуально** (push-уведомление, ослабленная связанность). Однако **структурно** модель ближе к **Listener + Mediator**: издатель не знает слушателей и не вызывает их напрямую — за это отвечает `ApplicationEventMulticaster` как посредник. Подробно — в §3 и §4.
+> **Уточнение:** Spring в официальной документации называет `ApplicationListener` реализацией «standard Observer design pattern».
+> 
+> Это верно **концептуально** (push-уведомление, ослабленная связанность). 
+>  - Однако **структурно** модель ближе к **Listener + Mediator**: 
+>   - издатель (Publisher) не знает слушателей (**Listeners**) и не вызывает их напрямую — за это отвечает `ApplicationEventMulticaster` как посредник. Подробно — в §3 и §4.
 
 
 # Пояснение к рисунку: почему на схеме есть `ApplicationEventMulticaster`, а в коде его нет
 
 ## В чём возникает путаница
 
-На рисунке справа показана цепочка `Publisher → ApplicationEventMulticaster → Listener`, а в примере кода разработчик видит только `ApplicationEvent`, `ApplicationEventPublisher`, `ApplicationListener` и `@EventListener`. Из-за этого может возникнуть ощущение, что схема и код противоречат друг другу.
+На рисунке справа показана цепочка `Publisher → ApplicationEventMulticaster → Listener`, а в примере кода разработчик видит только `ApplicationEvent`, `ApplicationEventPublisher`, `ApplicationListener` и `@EventListener`. 
+ - Из-за этого может возникнуть ощущение, что схема и код противоречат друг другу.
 
-На самом деле противоречия нет: код показывает **публичный API Spring**, а рисунок показывает **внутреннюю архитектурную цепочку доставки события**.
+На самом деле противоречия нет: 
+ - код показывает **публичный API Spring**, 
+ - а рисунок показывает **внутреннюю архитектурную цепочку доставки события**.
 
 ---
 
@@ -627,7 +634,7 @@ public class BlockedListNotifier {
 
 Типичный **Spring Boot** listener — реакция на **жизненный цикл** приложения (не Reactor).
 
-![Sequence: старт Spring Boot → ApplicationReadyEvent](../Images-docs/reactor-seq-spring-boot-startup.png)
+![Sequence: старт Spring Boot → ApplicationReadyEvent](../../Images-docs/reactor-seq-spring-boot-startup.png)
 
 **Цепочка:** `SpringApplication.run()` → контекст поднят → runners → **`ApplicationReadyEvent`** → ваш `@EventListener`.
 
