@@ -4,6 +4,8 @@ import com.example.reactivestudy.event.BlockedListEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ApplicationEventPublisherAware;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Сервис рассылки — издатель доменного события.
