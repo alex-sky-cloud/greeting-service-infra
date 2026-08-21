@@ -13,6 +13,7 @@
 - [FROM — откуда берём строки](#from--откуда-берём-строки)
 - [WHERE — фильтрация строк](#where--фильтрация-строк)
 - [ORDER BY — сортировка](#order-by--сортировка)
+- [ORDER BY: DESC и несколько столбцов](#order-by-desc-и-несколько-столбцов)
 - [LIMIT — ограничение числа строк](#limit--ограничение-числа-строк)
 - [Полный запрос — разбор по частям](#полный-запрос--разбор-по-частям)
 - [Типичные ошибки](#типичные-ошибки)
@@ -362,6 +363,115 @@ LIMIT 10;
 
 ---
 
+## ORDER BY: DESC и несколько столбцов
+
+**Ситуация:** вы написали `ORDER BY id, full_name DESC` и ожидали «всё по убыванию», а получили другое. Или в теме 03 — `ORDER BY cnt, status DESC` вместо «крупные count сверху».
+
+**Ключевое правило:** `ASC` / `DESC` относится **только к выражению непосредственно слева от него**. Запятая начинает **следующее** правило сортировки со **своим** направлением (по умолчанию `ASC`).
+
+**Источник:** https://www.postgresql.org/docs/current/queries-order.html
+
+EN:
+
+> The sort expression(s) can be any expression that would be valid in the query's select list. … Each expression can be followed by an optional `ASC` or `DESC` keyword … `ASC` order is the default.
+
+EN:
+
+> Note that the ordering options are considered independently for each sort column. For example `ORDER BY x, y DESC` means `ORDER BY x ASC, y DESC`, which is not the same as `ORDER BY x DESC, y DESC`.
+
+RU:
+
+> Каждое выражение сортировки может иметь свой `ASC` или `DESC`; по умолчанию — `ASC`.
+
+RU:
+
+> Параметры направления считаются **независимо для каждого столбца** сортировки. Например, `ORDER BY x, y DESC` означает `ORDER BY x ASC, y DESC` — это **не то же самое**, что `ORDER BY x DESC, y DESC`.
+
+### Синтаксис (как читает PostgreSQL)
+
+```sql
+ORDER BY
+    <выражение_1> [ASC | DESC],
+    <выражение_2> [ASC | DESC],
+    ...
+```
+
+- **Позиция слева направо** — приоритет: сначала сортировка по первому ключу; второй — только при **равенстве** первого.
+- **`DESC` «приклеен»** к одному выражению слева — не ко всему списку.
+
+### Пример на `users` — два ключа
+
+```sql
+SELECT id, full_name
+FROM users
+ORDER BY full_name, id DESC
+LIMIT 10;
+```
+
+PostgreSQL понимает это так:
+
+```sql
+ORDER BY
+    full_name ASC,   -- сначала по имени A→Z
+    id DESC;         -- при одинаковом имени — id от большего к меньшему
+```
+
+**Разбор:**
+
+| Запись | К чему относится `DESC` | Направление |
+|---|---|---|
+| `full_name` | к `full_name` | `ASC` (по умолчанию) |
+| `, id DESC` | **только** к `id` | `DESC` |
+
+### Сравнение — почему меняется результат
+
+| Запрос | Как читает PostgreSQL | Главный порядок |
+|---|---|---|
+| `ORDER BY id, full_name DESC` | `id ASC`, затем `full_name DESC` | сначала **id** ↑ |
+| `ORDER BY id DESC, full_name` | `id DESC`, затем `full_name ASC` | сначала **id** ↓ |
+| `ORDER BY full_name DESC, id DESC` | оба по убыванию | сначала **full_name** ↓ |
+
+**Подводный камень:** `ORDER BY id, full_name DESC` — **не** «оба по убыванию». `DESC` относится **только** к `full_name`.
+
+### Связь с темой 03 (агрегаты и GROUP BY)
+
+Те же правила для **столбца-агрегата** или его **псевдонима** в `ORDER BY` (после `GROUP BY`):
+
+```sql
+SELECT
+    status,
+    COUNT(*) AS cnt
+FROM orders
+GROUP BY status
+ORDER BY cnt DESC, status;
+```
+
+**Цель:** статусы с **наибольшим** числом заказов — сверху.
+
+PostgreSQL читает:
+
+```sql
+ORDER BY
+    cnt DESC,    -- главный ключ: count по убыванию
+    status ASC;  -- при равном count — status по возрастанию
+```
+
+| Запрос | Эффект |
+|---|---|
+| `ORDER BY cnt DESC, status` | **крупные** count сверху — **то, что нужно** |
+| `ORDER BY cnt, status DESC` | **мелкие** count сверху (`cnt` без `DESC` = `ASC`) |
+| `ORDER BY status, cnt DESC` | главным становится **status**, count — только внутри одинакового status |
+
+**Запомнить:**
+
+1. Чтобы сортировать **по убыванию** конкретное поле — пишите `поле DESC` **рядом**.
+2. Запятая — **новое** правило сортировки, не «продолжение DESC на всё».
+3. В `ORDER BY` можно использовать **псевдоним** из `SELECT` (`cnt`) — в отличие от `WHERE` / `HAVING` (тема 03).
+
+Подробнее про агрегаты и `HAVING` — **тема 03**.
+
+---
+
 ## LIMIT — ограничение числа строк
 
 **Утверждение:** `LIMIT n` возвращает **не более n строк** из результата.
@@ -472,13 +582,15 @@ RU:
 
 ## Типичные ошибки
 
-| Ошибка | Правильно |
-|---|---|
-| `SELECT email, full_name WHERE id = 1` — нет `FROM` | `SELECT … FROM users WHERE id = 1` |
-| Ожидать стабильный порядок без `ORDER BY` | Добавлять `ORDER BY`, если порядок важен |
-| `WHERE name = 'Ann'` — нет столбца `name` | `WHERE full_name = 'Ann Smith'` |
-| `WHERE email = ann@example.com` — без кавычек | `WHERE email = 'ann@example.com'` |
-| `SELECT full_name AS name … WHERE name = 'Ann'` | `WHERE full_name = 'Ann Smith'` |
+| Неправильно | В чём ошибка | Правильно |
+|---|---|---|
+| `SELECT email, full_name WHERE id = 1` — нет `FROM` | нет источника данных | `SELECT … FROM users WHERE id = 1` |
+| Ожидать стабильный порядок без `ORDER BY` | порядок не гарантирован | добавить `ORDER BY`, если порядок важен |
+| `ORDER BY id, full_name DESC` — ждали «всё DESC» | `DESC` только у `full_name`; `id` = `ASC` | `ORDER BY id DESC, full_name DESC` |
+| `ORDER BY cnt, status DESC` при GROUP BY (тема 03) | мелкие count сверху | `ORDER BY cnt DESC, status` |
+| `WHERE name = 'Ann'` — нет столбца `name` | неверное имя столбца | `WHERE full_name = 'Ann Smith'` |
+| `WHERE email = ann@example.com` — без кавычек | не строковый литерал | `WHERE email = 'ann@example.com'` |
+| `SELECT full_name AS name … WHERE name = 'Ann'` | псевдоним в `WHERE` нельзя | `WHERE full_name = 'Ann Smith'` |
 
 ---
 
@@ -490,6 +602,7 @@ RU:
 2. Только `id` и `email` пользователя с `id = 42` (если такого нет — пустой результат, это нормально).
 3. 5 пользователей с **наибольшим** `id` (подсказка: `ORDER BY id DESC LIMIT 5`).
 4. Один и тот же запрос без `ORDER BY` — выполнить два раза и сравнить порядок строк.
+5. Два пользователя с одинаковым `full_name` (если найдёте) — сравните `ORDER BY full_name, id` и `ORDER BY full_name, id DESC`: к чему относится `DESC`?
 
 ---
 
