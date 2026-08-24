@@ -1,0 +1,42 @@
+server:
+  port: 8084
+
+
+spring:
+  application:
+    name: reactor-workshop
+  r2dbc:
+    url: ${R2DBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  flyway:
+    enabled: true
+    url: ${DB_URL}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    locations: classpath:db/migration
+    schemas: reactor_workshop
+    default-schema: reactor_workshop
+    create-schemas: true
+    baseline-on-migrate: true
+
+logging:
+  pattern:
+    console: '%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n'
+  level:
+    org.springframework.r2dbc: INFO
+    io.r2dbc.postgresql.QUERY: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
