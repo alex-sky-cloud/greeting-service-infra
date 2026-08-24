@@ -226,3 +226,5 @@ Bean name Spring Data = имя интерфейса. `OrderRepository` во вт
 
 - 2026-08-24: pretty SQL log = `io.r2dbc:r2dbc-proxy` + `LocalR2dbcSqlLogConfig` (профиль `local`). `hibernate.format_sql` на R2DBC не действует — Hibernate нет.
 
+- 2026-08-24: t02 JavaDoc теперь явно разделяет LIMIT/OFFSET (пагинация в SQL) и limitRate/prefetch/драйвер (demand в JVM).
+

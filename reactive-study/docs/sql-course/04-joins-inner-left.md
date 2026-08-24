@@ -9,9 +9,10 @@
 - [Что изучаем](#что-изучаем)
 - [Зачем JOIN — история из двух таблиц](#зачем-join--история-из-двух-таблиц)
 - [Как таблицы связаны в Reactive Shop](#как-таблицы-связаны-in-reactive-shop)
+- [Учебные таблицы «до JOIN»](#учебные-таблицы-до-join)
 - [INNER JOIN — только пары «клиент ↔ заказ»](#inner-join--только-пары-клиент--заказ)
 - [LEFT JOIN — все клиенты, даже без заказов](#left-join--все-клиенты-даже-без-заказов)
-- [INNER vs LEFT — когда что выбирать](#inner-vs-left--когда-что-выбирать)
+- [INNER vs LEFT — один запрос, два результата](#inner-vs-left--один-запрос-два-результата)
 - [ON, WHERE и порядок выполнения](#on-where-и-порядок-выполнения)
 - [Псевдонимы таблиц](#псевдонимы-таблиц)
 - [Демо-данные для JOIN (миграция V12)](#демо-данные-для-join-миграция-v12)
@@ -101,11 +102,38 @@ users                          orders
 
 ---
 
+## Учебные таблицы «до JOIN»
+
+Дальше все примеры строятся на **маленьком фрагменте** данных. Сначала смотрим **исходные таблицы**, потом — **результат JOIN**.
+
+### Таблица `users` (клиенты)
+
+| id | full_name |
+|---|---|
+| 1 | Ann Smith |
+| 2 | Bob Jones |
+| 3 | Carol Lee |
+| 5001 | JOIN Demo No Orders 1 |
+
+Клиенты **5001** и подобные добавлены миграцией V12 — у них **нет заказов** (нужно для LEFT JOIN).
+
+### Таблица `orders` (заказы)
+
+| id | user_id | amount | status |
+|---|---|---|---|
+| 12854 | 1 | 141.15 | delivered |
+| 17784 | 1 | 1992.83 | pending |
+| 24773 | 1 | 1737.84 | shipped |
+| … | 2 | … | … |
+| 100001 | 5005 | 42.00 | delivered |
+
+- `user_id` — **чей** это заказ (ссылка на `users.id`).
+- У Ann (`id = 1`) **много** заказов → в результате JOIN её имя **повторится** на каждой строке заказа.
+- У клиента **5001** заказов **нет** → при LEFT JOIN справа будут **NULL**.
+
+---
+
 ## INNER JOIN — только пары «клиент ↔ заказ»
-
-**Ситуация:** менеджеру нужен отчёт «заказ (**order**) + имя покупателя(**name**)» — только по **существующим** заказам с **известным** клиентом.
-
-**INNER JOIN** оставляет строки, где условие в `ON` **выполнилось**. Нет клиента для заказа или нет заказа у клиента — такая пара **не попадает** в результат.
 
 **Источник:** https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-JOIN
 
@@ -117,7 +145,15 @@ RU:
 
 > `INNER JOIN` — для каждой строки R1 из T1 соединённая таблица содержит строку для каждой строки из T2, которая удовлетворяет условию соединения с R1.
 
-### Пример 1 — заказы Ann Smith (id = 1)
+**Простыми словами:** в результат попадают только строки, где условие `ON` **истинно**. Нет пары «клиент ↔ заказ» — строки **нет в ответе**.
+
+---
+
+### Пример 1 — поддержка: «кто сделал этот заказ?»
+
+**Задача:** оператор видит заказ и должен сразу получить **имя покупателя** и **сумму**. Нужны только **реальные** пары «заказ + клиент».
+
+**Запрос:**
 
 ```sql
 SELECT o.id AS order_id,
@@ -128,48 +164,106 @@ FROM orders o
 INNER JOIN users u ON u.id = o.user_id
 WHERE u.id = 1
 ORDER BY o.id
-LIMIT 5;
+LIMIT 3;
 ```
 
-**Разбор:**
+**Разбор запроса:**
 
 | Часть | Что делает |
 |---|---|
-| `FROM orders o` | основа — таблица заказов; `o` — короткое имя (псевдоним) |
-| `INNER JOIN users u` | подтянуть таблицу клиентов |
-| `ON u.id = o.user_id` | **склеить:** id клиента = user_id в заказе |
-| `WHERE u.id = 1` | только заказы Ann |
-| `LIMIT 5` | первые 5 для просмотра |
+| `FROM orders o` | начинаем с заказов |
+| `INNER JOIN users u` | подтягиваем клиентов |
+| `ON u.id = o.user_id` | склеиваем: id клиента = user_id в заказе |
+| `WHERE u.id = 1` | только Ann Smith |
+| `LIMIT 3` | первые 3 строки для наглядности |
 
-**Применение:** экран поддержки, чек «кто заказал», выгрузка для бухгалтерии.
+**Результат на вашей базе:**
 
-### Пример 2 — что «отсекается» INNER JOIN
+| order_id | full_name | amount | status |
+|---|---|---|---|
+| 12854 | Ann Smith | 141.15 | shipped |
+| 17784 | Ann Smith | 1992.83 | processing |
+| 24773 | Ann Smith | 1737.84 | shipped |
 
-Упрощённая картинка (как в документации PostgreSQL):
+**Что достигли:** одна таблица — видно **и заказ, и имя**, без ручного поиска по `user_id`.
 
-```text
-Клиенты          Заказы           INNER JOIN (по id = user_id)
- id=1 Ann    +    user_id=1    →   Ann + заказ ✓
- id=2 Bob    +    user_id=3    →   нет пары для Bob с этим заказом *
- id=3 Carol  +    user_id=2    →   Bob + заказ ✓ (Carol не участвует)
+---
 
-* В реальной базе у каждого заказа есть user_id; «осиротевший» заказ
-  без клиента здесь не бывает — но INNER всё равно не покажет
-  клиента Bob, если у него нет заказа в выборке.
+### Пример 2 — на двух маленьких таблицах (механика INNER JOIN)
+
+**Задача:** понять, **какие строки остаются**, а какие **отбрасываются**.
+
+**Исходные данные — `users`:**
+
+| id | full_name |
+|---|---|
+| 1 | Ann |
+| 2 | Bob |
+| 3 | Carol |
+
+**Исходные данные — `orders`:**
+
+| id | user_id | amount |
+|---|---|---|
+| 101 | 1 | 999.99 |
+| 102 | 1 | 29.99 |
+| 103 | 2 | 79.00 |
+
+Carol (**id = 3**) зарегистрирована, но **заказов нет**.
+
+**Запрос:**
+
+```sql
+SELECT u.full_name, o.id AS order_id, o.amount
+FROM users u
+INNER JOIN orders o ON o.user_id = u.id
+ORDER BY u.id, o.id;
 ```
 
-**Главное:** INNER JOIN отвечает на вопрос «покажи **только те** комбинации, где **обе** стороны нашлись».
+**Результат:**
+
+| full_name | order_id | amount |
+|---|---|---|
+| Ann | 101 | 999.99 |
+| Ann | 102 | 29.99 |
+| Bob | 103 | 79.00 |
+
+**Пошагово:**
+
+| Шаг | Что делает SQL |
+|---|---|
+| 1 | Берёт Ann (`id=1`) → находит заказы 101 и 102 → **2 строки** |
+| 2 | Берёт Bob (`id=2`) → находит заказ 103 → **1 строка** |
+| 3 | Берёт Carol (`id=3`) → заказов нет → **0 строк** |
+
+**Вывод:** Carol **исчезла** из результата — для INNER JOIN нужна **пара** слева и справа.
+
+---
+
+### Пример 3 — клиент без заказов: INNER возвращает 0 строк
+
+**Задача:** проверить учебного клиента `join-demo-no-orders-1` — у него **нет заказов** (миграция V12).
+
+**Запрос:**
+
+```sql
+SELECT u.email, u.full_name, o.id AS order_id
+FROM users u
+INNER JOIN orders o ON o.user_id = u.id
+WHERE u.email = 'join-demo-no-orders-1@example.com';
+```
+
+**Результат:**
+
+| email | full_name | order_id |
+|---|---|---|
+| *(пусто — 0 строк)* | | |
+
+**Вывод:** INNER JOIN **не подходит**, если нужно видеть клиентов **без покупок**.
 
 ---
 
 ## LEFT JOIN — все клиенты, даже без заказов
-
-**Ситуация:** отдел маркетинга хочет список **всех** зарегистрированных клиентов и понять, делали ли они заказ. Клиенты **без** заказов тоже должны быть в отчёте.
-
-**LEFT JOIN** (то же, что `LEFT OUTER JOIN`):
-
-1. Сначала работает как INNER JOIN.
-2. Потом добавляет **каждую** строку из **левой** таблицы, для которой **не нашлось** пары справа — столбцы справа заполняются **NULL**.
 
 **Источник:** https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-JOIN
 
@@ -181,76 +275,205 @@ RU:
 
 > `LEFT OUTER JOIN` — сначала выполняется inner join. Затем для каждой строки в T1, не удовлетворившей условию соединения ни с одной строкой в T2, добавляется соединённая строка со значениями NULL в столбцах T2. Таким образом, соединённая таблица всегда содержит хотя бы одну строку для каждой строки в T1.
 
-### Пример 3 — все клиенты и их заказы (фрагмент)
+**Простыми словами:**
+
+1. Сначала — как **INNER JOIN** (все найденные пары).
+2. Потом — для каждой «лишней» строки **слева** добавляется строка, где столбцы **справа = NULL**.
+
+`LEFT JOIN` = `LEFT OUTER JOIN` (слова `OUTER` можно опускать).
+
+---
+
+### Пример 4 — на тех же маленьких таблицах (механика LEFT JOIN)
+
+**Задача:** маркетинг хочет **всех** клиентов и их заказы **если есть**. Carol **не должна пропасть**.
+
+**Исходные данные** — те же, что в примере 2 (Ann, Bob, Carol + 3 заказа).
+
+**Запрос:**
 
 ```sql
-SELECT u.id AS user_id,
+SELECT u.full_name, o.id AS order_id, o.amount
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+ORDER BY u.id, o.id;
+```
+
+**Результат:**
+
+| full_name | order_id | amount |
+|---|---|---|
+| Ann | 101 | 999.99 |
+| Ann | 102 | 29.99 |
+| Bob | 103 | 79.00 |
+| Carol | **NULL** | **NULL** |
+
+**Пошагово (после цитаты из документации):**
+
+| Шаг | Что делает SQL |
+|---|---|
+| 1 (inner) | Ann + 2 заказа, Bob + 1 заказ — как в INNER JOIN |
+| 2 (добавление) | Carol не нашла пару → **одна строка** с NULL справа |
+
+**Вывод:** LEFT JOIN **сохраняет всех** клиентов из левой таблицы (`users`). Нет заказа — видим **NULL**, а не пустой ответ.
+
+---
+
+### Пример 5 — CRM: «спящие» клиенты (NULL на реальной базе)
+
+**Задача:** найти клиентов, которые **зарегистрировались, но ни разу не заказали** — для re-activation рассылки.  
+Используем учебных клиентов `join-demo-no-orders-*` (миграция V12).
+
+**Запрос:**
+
+```sql
+SELECT u.email,
        u.full_name,
        o.id AS order_id,
        o.amount
-FROM users u
-LEFT JOIN orders o ON o.user_id = u.id
-WHERE u.id <= 3
-ORDER BY u.id, o.id
-LIMIT 10;
-```
-
-**Разбор:**
-
-| Часть | Что делает |
-|---|---|
-| `FROM users u` | **слева** — клиенты (главная таблица отчёта) |
-| `LEFT JOIN orders o` | справа — заказы; если нет — NULL |
-| `ON o.user_id = u.id` | условие склейки |
-| `u.id <= 3` | три первых демо-клиента для наглядности |
-
-У Ann (id=1) может быть **несколько** строк — по одной на каждый заказ. У клиента без заказов была бы **одна** строка: имя есть, `order_id` и `amount` — **NULL**.
-
-### Пример 4 — классика интервью: клиенты без заказов
-
-**Ситуация:** CRM ищет «спящих» пользователей для re-activation рассылки.
-
-```sql
-SELECT u.id,
-       u.full_name,
-       u.email
 FROM users u
 LEFT JOIN orders o ON o.user_id = u.id
 WHERE u.email LIKE 'join-demo-no-orders-%'
 ORDER BY u.email;
 ```
 
-**Разбор:**
+**Разбор запроса:**
 
 | Часть | Что делает |
 |---|---|
-| `LEFT JOIN` | все клиенты + попытка найти заказ |
-| `WHERE u.email LIKE 'join-demo-no-orders-%'` | четыре учебных клиента **без заказов** (миграция V12) |
-| **Результат** | 4 строки: имя и email есть, столбцы заказа — **NULL** |
+| `FROM users u` | **слева** — клиенты (главная таблица) |
+| `LEFT JOIN orders o` | справа — заказы; если нет — NULL |
+| `ON o.user_id = u.id` | правило склейки |
+| `WHERE u.email LIKE …` | только 4 учебных клиента без заказов |
 
-> Демо-клиенты добавлены специально: в bulk-данных у каждого из 5 000 пользователей был хотя бы один заказ, и NULL на практике не видно было.
+**Результат на вашей базе:**
 
-> **Важно:** `WHERE o.id IS NULL` **после** LEFT JOIN — частый паттерн на собеседованиях. С INNER JOIN такой трюк **не работает** (строк без заказа просто нет).
+| email | full_name | order_id | amount |
+|---|---|---|---|
+| join-demo-no-orders-1@example.com | JOIN Demo No Orders 1 | **NULL** | **NULL** |
+| join-demo-no-orders-2@example.com | JOIN Demo No Orders 2 | **NULL** | **NULL** |
+| join-demo-no-orders-3@example.com | JOIN Demo No Orders 3 | **NULL** | **NULL** |
+| join-demo-no-orders-4@example.com | JOIN Demo No Orders 4 | **NULL** | **NULL** |
+
+**Что достигли:** видим **4 клиента**; столбцы заказа **пустые (NULL)** — пара справа не нашлась.
 
 ---
 
-## INNER vs LEFT — когда что выбирать
+### Пример 6 — один клиент с заказами + один без (сравнение в одном запросе)
+
+**Задача:** в одном отчёте показать **оба** случая: клиент **с** заказами и клиент **без**.
+
+**Запрос:**
+
+```sql
+SELECT u.email,
+       u.full_name,
+       o.id AS order_id,
+       o.amount
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE u.email IN (
+    'join-demo-no-orders-1@example.com',
+    'join-demo-single-order@example.com'
+)
+ORDER BY u.email, o.id NULLS FIRST;
+```
+
+**Результат (первые строки):**
+
+| email | full_name | order_id | amount |
+|---|---|---|---|
+| join-demo-no-orders-1@example.com | JOIN Demo No Orders 1 | **NULL** | **NULL** |
+| join-demo-single-order@example.com | JOIN Demo Single Order | 100001 | 42.00 |
+| join-demo-single-order@example.com | JOIN Demo Single Order | 100002 | 11.11 |
+| join-demo-single-order@example.com | JOIN Demo Single Order | 100003 | 22.22 |
+| … | … | … | … |
+
+**Вывод:**
+
+| Клиент | Строк в результате | order_id |
+|---|---|---|
+| No Orders 1 | **1** | NULL |
+| Single Order | **7** (по числу заказов) | заполнен |
+
+Имя клиента **повторяется** — это нормально: у одного человека несколько заказов.
+
+---
+
+### Пример 7 — отбор только «без заказов» (`WHERE o.id IS NULL`)
+
+**Задача:** из **всех** клиентов оставить только тех, у кого **нет ни одного** заказа.
+
+**Запрос:**
+
+```sql
+SELECT u.id, u.full_name, u.email
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE o.id IS NULL
+ORDER BY u.id
+LIMIT 5;
+```
+
+**Результат (фрагмент):**
+
+| id | full_name | email |
+|---|---|---|
+| 5001 | JOIN Demo No Orders 1 | join-demo-no-orders-1@example.com |
+| 5002 | JOIN Demo No Orders 2 | join-demo-no-orders-2@example.com |
+| 5003 | JOIN Demo No Orders 3 | join-demo-no-orders-3@example.com |
+| 5004 | JOIN Demo No Orders 4 | join-demo-no-orders-4@example.com |
+
+**Почему работает:** LEFT JOIN сначала ставит NULL там, где заказ не найден; `WHERE o.id IS NULL` оставляет **только такие** строки.  
+С **INNER JOIN** этот приём **не работает** — строк без заказа просто нет.
+
+---
+
+## INNER vs LEFT — один запрос, два результата
+
+**Задача:** для **одних и тех же** учебных клиентов сравнить INNER и LEFT.
+
+**Запрос A — INNER JOIN:**
+
+```sql
+SELECT u.email, o.id AS order_id
+FROM users u
+INNER JOIN orders o ON o.user_id = u.id
+WHERE u.email LIKE 'join-demo-no-orders-%';
+```
+
+**Результат A:** **0 строк** (нет пар «клиент + заказ»).
+
+**Запрос B — LEFT JOIN:**
+
+```sql
+SELECT u.email, o.id AS order_id
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE u.email LIKE 'join-demo-no-orders-%';
+```
+
+**Результат B:**
+
+| email | order_id |
+|---|---|
+| join-demo-no-orders-1@example.com | **NULL** |
+| join-demo-no-orders-2@example.com | **NULL** |
+| join-demo-no-orders-3@example.com | **NULL** |
+| join-demo-no-orders-4@example.com | **NULL** |
+
+### Когда что выбирать
 
 | Вопрос бизнеса | JOIN |
 |---|---|
 | «Покажи заказы **с именами** клиентов» | `INNER JOIN` |
 | «Покажи **всех** клиентов и их заказы, если есть» | `LEFT JOIN` |
 | «Кто зарегистрировался, но **не покупал**?» | `LEFT JOIN` + `WHERE o.id IS NULL` |
-| «Сумма выручки только по **реальным** заказам с клиентом» | `INNER JOIN` (или только `orders`, если FK гарантирует клиента) |
+| «Сумма выручки по **реальным** заказам» | `INNER JOIN` |
 
-**Правило большого пальца:**
+**Правило:** INNER — только **совпадения**; LEFT — важна **левая** таблица целиком, правая опциональна.
 
-- **INNER** — «мне нужны только **совпадения**».
-- **LEFT** — «мне важна **левая** таблица целиком; правая — опциональна».
-
-`RIGHT JOIN` и `FULL JOIN` существуют, но на практике их заменяют перестановкой таблиц и `LEFT JOIN`. В этом курсе достаточно **INNER** и **LEFT**.
-
----
+`RIGHT JOIN` — зеркало LEFT: «главная» таблица **справа**. На практике чаще пишут `LEFT JOIN`, просто меняя таблицы местами.
 
 ## ON, WHERE и порядок выполнения
 
@@ -274,9 +497,11 @@ RU:
 
 > Необязательные предложения `WHERE`, `GROUP BY` и `HAVING` в выражении таблицы задают последовательность преобразований, выполняемых над таблицей, полученной в предложении `FROM`.
 
-### Пример 5 — INNER JOIN + фильтр по статусу
+### Пример 8 — INNER JOIN + фильтр по статусу
 
-**Ситуация:** складу нужны **доставленные** заказы с email клиента для SMS-опроса.
+**Задача:** складу нужны **доставленные** заказы с **email** клиента для SMS-опроса.
+
+**Запрос:**
 
 ```sql
 SELECT o.id,
@@ -285,20 +510,27 @@ SELECT o.id,
 FROM orders o
 INNER JOIN users u ON u.id = o.user_id
 WHERE o.status = 'delivered'
+  AND u.id = 1
 ORDER BY o.id
-LIMIT 5;
+LIMIT 3;
 ```
 
 **Разбор:**
 
 | Шаг | Что происходит |
 |---|---|
-| 1. JOIN | к каждому заказу подставляется email клиента |
-| 2. WHERE | только `delivered` |
+| 1. JOIN | к заказу подставляется email клиента |
+| 2. WHERE | только `delivered` и только Ann |
 | 3. SELECT | id заказа, email, сумма |
 
-Фильтр по `status` — свойство **заказа**, поэтому логично в `WHERE`, а не в `ON`.  
-(В `ON` тоже можно, но для обучения держите в `ON` только **связь таблиц**.)
+**Результат (фрагмент — у Ann только 2 доставленных заказа):**
+
+| id | email | amount |
+|---|---|---|
+| 28238 | ann@example.com | 1179.42 |
+| 32482 | ann@example.com | 1130.22 |
+
+**Вывод:** `ON` — **как склеить** таблицы; `WHERE` — **что оставить** после склейки.
 
 ---
 
@@ -332,58 +564,25 @@ INNER JOIN users u ON u.id = o.user_id;
 
 ## Демо-данные для JOIN (миграция V12)
 
-Миграция `V12__join_demo_seed.sql` добавляет **учебные строки**, чтобы NULL при JOIN было видно в клиенте.
+Миграция `V12__join_demo_seed.sql` добавляет строки, чтобы **NULL** было видно в клиенте (см. примеры 5–7).
 
 | Кого добавили | Зачем |
 |---|---|
-| `join-demo-no-orders-1` … `4@example.com` | 4 клиента **без заказов** → LEFT JOIN: справа NULL |
-| `join-demo-single-order@example.com` | 1 клиент с несколькими учебными заказами → INNER JOIN |
-| Заказы `JOIN-DEMO-NO-PRODUCT-*` | `product_id IS NULL` (для темы 05) |
-| Заказы `JOIN-DEMO-NO-PAYMENT-*` | нет строк в `payment_attempts` |
-| Заказы `JOIN-DEMO-NO-EVENT-*` | нет строк в `order_status_events` |
+| `join-demo-no-orders-1` … `4@example.com` | 4 клиента **без заказов** |
+| `join-demo-single-order@example.com` | клиент с учебными заказами |
 
-**Ограничение схемы:** `orders.user_id` обязателен и ссылается на `users.id` — заказа «без клиента» в базе **не бывает**.  
-Для **RIGHT JOIN** с NULL слева используйте перестановку:
+**Ограничение:** заказ без клиента в базе **невозможен** (`orders.user_id` + FK).  
+Для **RIGHT JOIN** с NULL слева:
 
 ```sql
-SELECT o.id AS order_id,
-       u.full_name,
-       u.email
+SELECT o.id AS order_id, u.full_name, u.email
 FROM orders o
 RIGHT JOIN users u ON u.id = o.user_id
 WHERE u.email LIKE 'join-demo-no-orders-%'
 ORDER BY u.email;
 ```
 
-Здесь **справа** — все выбранные клиенты; у четырёх `order_id` будет **NULL** (то же по смыслу, что LEFT JOIN, но «главная» таблица справа).
-
-### Проверка LEFT JOIN — NULL видно явно
-
-```sql
-SELECT u.email,
-       u.full_name,
-       o.id AS order_id,
-       o.amount
-FROM users u
-LEFT JOIN orders o ON o.user_id = u.id
-WHERE u.email LIKE 'join-demo-no-orders-%'
-ORDER BY u.email;
-```
-
-Ожидаемый результат: **4 строки**, столбцы `order_id` и `amount` — пустые (NULL).
-
-### Проверка INNER JOIN — «сирот» нет
-
-```sql
-SELECT u.email, o.product_name
-FROM users u
-INNER JOIN orders o ON o.user_id = u.id
-WHERE u.email LIKE 'join-demo-no-orders-%';
-```
-
-Ожидаемый результат: **0 строк** (у этих клиентов нет заказов — INNER их отбросил).
-
-Если миграция ещё не применена — **запустите приложение reactive-study** (Flyway выполнит V12) или попросите ассистента применить миграцию.
+**Результат:** те же 4 строки — `order_id` = **NULL**, имя и email заполнены.
 
 ---
 

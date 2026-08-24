@@ -8,7 +8,14 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * Показание из {@code reactor_workshop.readings} (~100 000 строк).
+ * Строка {@code reactor_workshop.readings} (~100 000 записей).
+ * В сюжете {@code limitRate} этот record стримится по всей таблице;
+ * в сюжете {@code LIMIT}/{@code OFFSET} — только страница из native query.
+ *
+ * @param id          PK, по нему {@code ORDER BY} в SQL-странице
+ * @param meterId     счётчик
+ * @param kwh         показание
+ * @param recordedAt  время записи
  */
 @Table(value = "readings", schema = "reactor_workshop")
 public record T02ReadingEntity(
