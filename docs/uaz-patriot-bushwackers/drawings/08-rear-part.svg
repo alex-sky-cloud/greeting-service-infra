@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" font-family="Arial, sans-serif">
+  <style>
+    .title { font-size: 18px; font-weight: bold; }
+    .sub { font-size: 12px; fill: #444; }
+    .dim { font-size: 13px; }
+    .part { fill: #fdebd0; stroke: #000; stroke-width: 2; }
+    .hidden { stroke: #999; stroke-dasharray: 6 4; fill: none; }
+    .section { stroke: #c00; stroke-width: 1.5; fill: none; }
+    .fuel { fill: none; stroke: #c00; stroke-width: 2; stroke-dasharray: 8 4; }
+  </style>
+
+  <text x="20" y="28" class="title">03 --L  704=89 1CH20:5@ (;520O AB>@>=0)</text>
+  <text x="20" y="48" class="sub">-A:87=K9 G5@BQ6 | 04 = 75@:0;L=> | 2K@57 ;NG:0  ?> :><?;5:B0F88 10:0</text>
+
+  <text x="40" y="80" class="dim">84 A1>:C</text>
+  <path class="part" d="
+    M 360 480
+    L 400 480
+    Q 420 380 460 320
+    Q 520 260 620 240
+    Q 720 230 800 260
+    Q 860 290 900 360
+    L 920 480
+    L 880 500
+    Q 840 400 760 370
+    Q 640 350 540 380
+    Q 460 410 420 500
+    Z
+  "/>
+
+  <!-- Styk end (front of rear part) -->
+  <line x1="360" y1="240" x2="360" y2="500" class="section"/>
+  <text x="280" y="380" class="sub" fill="#c00">B>@5F ABK:0</text>
+  <text x="280" y="395" class="sub" fill="#c00">?>4 =0E;QAB 01</text>
+
+  <!-- EPDM groove -->
+  <line x1="365" y1="280" x2="365" y2="460" stroke="#2ecc71" stroke-width="4"/>
+  <text x="280" y="300" class="sub">?07 EPDM</text>
+
+  <!-- Rear bumper attach -->
+  <rect x="910" y="440" width="30" height="50" fill="#888" stroke="#333"/>
+  <text x="945" y="455" class="sub">:@5?.</text>
+  <text x="945" y="468" class="sub">: 704.</text>
+  <text x="945" y="481" class="sub">10<?5@C</text>
+
+  <!-- Fuel door -->
+  <rect class="fuel" x="580" y="300" width="70" height="55" rx="5"/>
+  <text x="555" y="290" class="sub" fill="#c00">;NG>: 2 10:0</text>
+
+  <!-- Outset -->
+  <line x1="620" y1="240" x2="620" y2="180" stroke="#000"/>
+  <line x1="770" y1="240" x2="770" y2="180" stroke="#000"/>
+  <line x1="620" y1="170" x2="770" y2="170" stroke="#000"/>
+  <text x="670" y="165" class="dim">150</text>
+
+  <line x1="360" y1="540" x2="920" y2="540" stroke="#000"/>
+  <text x="560" y="560" class="dim">L H 750&850 << (?> :@><:5)</text>
+
+  <!-- Mounting flange -->
+  <path class="hidden" d="M 400 480 Q 420 380 460 320 Q 520 260 620 240"/>
+  <text x="405" y="520" class="sub">D;0=5F 30 << ’ : :@K;C</text>
+
+  <rect x="720" y="480" width="260" height="120" fill="none" stroke="#000"/>
+  <text x="730" y="505" class="sub">1>7=0G5=85: --L</text>
+  <text x="730" y="525" class="sub">0B5@80;: ! 3,5 <<</text>
+  <text x="730" y="545" class="sub">>;-2>: 1</text>
+  <text x="730" y="565" class="sub">0AA0 ~2,0 :3</text>
+  <text x="730" y="585" class="sub">0AHB01: MA:87</text>
+</svg>

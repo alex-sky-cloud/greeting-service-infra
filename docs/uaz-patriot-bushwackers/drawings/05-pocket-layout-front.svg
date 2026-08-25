@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 320" font-family="Arial, sans-serif">
+  <style>
+    .title { font-size: 18px; font-weight: bold; }
+    .sub { font-size: 12px; fill: #444; }
+    .dim { font-size: 13px; }
+    .edge { fill: none; stroke: #000; stroke-width: 2; }
+    .pocket { fill: #333; stroke: #000; stroke-width: 1; }
+    .ref { stroke: #999; stroke-dasharray: 5 4; fill: none; }
+  </style>
+
+  <text x="20" y="28" class="title">01 --L  @072Q@B:0 :0@<0=>2 (284 =0 =0@C6=CN ?>25@E=>ABL)</text>
+  <text x="20" y="48" class="sub">;8=0 ?> 4C35 ~900 << | 7 :0@<0=>2 | H03 100 << | Ø22 3;C18=0 7</text>
+
+  <!-- Arc baseline (unrolled) -->
+  <line x1="50" y1="200" x2="950" y2="200" class="edge"/>
+  <text x="50" y="190" class="sub">25@E=OO :@><:0 (?@8;530=85 : :C7>2C)</text>
+  <line x1="50" y1="260" x2="950" y2="260" class="edge"/>
+  <text x="50" y="280" class="sub">=86=89 1>@B</text>
+
+  <!-- Pockets at x: 100, 200, 300, 400, 500, 600, 700 (7 pcs, step 100 from start 100) -->
+  <circle class="pocket" cx="100" cy="230" r="11"/>
+  <circle class="pocket" cx="200" cy="230" r="11"/>
+  <circle class="pocket" cx="300" cy="230" r="11"/>
+  <circle class="pocket" cx="400" cy="230" r="11"/>
+  <circle class="pocket" cx="500" cy="230" r="11"/>
+  <circle class="pocket" cx="600" cy="230" r="11"/>
+  <circle class="pocket" cx="700" cy="230" r="11"/>
+
+  <!-- Dimensions -->
+  <line x1="100" y1="120" x2="200" y2="120" stroke="#000"/>
+  <text x="135" y="110" class="dim">100</text>
+  <line x1="50" y1="300" x2="750" y2="300" stroke="#000"/>
+  <text x="350" y="315" class="dim">700 (@01>G0O 7>=0 :0@<0=>2)</text>
+
+  <!-- End zones -->
+  <line x1="50" y1="200" x2="50" y2="260" class="ref"/>
+  <text x="55" y="235" class="sub">?5@54=89</text>
+  <text x="55" y="248" class="sub">B>@5F ’ 10<?5@</text>
+
+  <line x1="850" y1="200" x2="850" y2="260" class="ref"/>
+  <text x="760" y="235" class="sub">704=89 B>@5F ’ ABK: 03</text>
+  <text x="760" y="248" class="sub">(=0E;QAB 20 <<)</text>
+
+  <!-- Segmentation for 3D print -->
+  <line x1="300" y1="170" x2="300" y2="290" class="ref"/>
+  <line x1="550" y1="170" x2="550" y2="290" class="ref"/>
+  <text x="270" y="165" class="sub" fill="#c00">A-A</text>
+  <text x="520" y="165" class="sub" fill="#c00">B-B</text>
+  <text x="770" y="165" class="sub" fill="#c00">C-C</text>
+  <text x="280" y="305" class="sub">A53<5=BK 3D-?5G0B8 ?> ~250 <<</text>
+</svg>

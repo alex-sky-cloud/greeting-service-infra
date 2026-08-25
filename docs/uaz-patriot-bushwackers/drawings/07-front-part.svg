@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" font-family="Arial, sans-serif">
+  <style>
+    .title { font-size: 18px; font-weight: bold; }
+    .sub { font-size: 12px; fill: #444; }
+    .dim { font-size: 13px; }
+    .part { fill: #e8f4fc; stroke: #000; stroke-width: 2; }
+    .hidden { stroke: #999; stroke-dasharray: 6 4; fill: none; }
+    .section { stroke: #c00; stroke-width: 1.5; fill: none; }
+  </style>
+
+  <text x="20" y="28" class="title">01 --L  ?5@54=89 1CH20:5@ (;520O AB>@>=0)</text>
+  <text x="20" y="48" class="sub">-A:87=K9 G5@BQ6 | 02 = 75@:0;L=> | ?>A04>G=0O :@><:0  CB>G=8BL ?> A:0=C</text>
+
+  <!-- Side view outline -->
+  <text x="40" y="80" class="dim">84 A1>:C</text>
+  <path class="part" d="
+    M 80 480
+    L 120 480
+    Q 140 380 180 320
+    Q 240 260 340 240
+    Q 440 230 520 260
+    Q 580 290 620 360
+    L 640 480
+    L 600 500
+    Q 560 400 480 370
+    Q 360 350 260 380
+    Q 180 410 140 500
+    Z
+  "/>
+
+  <!-- Mounting flange -->
+  <path class="hidden" d="M 120 480 Q 140 380 180 320 Q 240 260 340 240"/>
+  <text x="125" y="520" class="sub">D;0=5F 30 << ’ : :@K;C</text>
+
+  <!-- Bumper attach -->
+  <rect x="70" y="440" width="30" height="50" fill="#888" stroke="#333"/>
+  <text x="55" y="435" class="sub">:@5?.</text>
+  <text x="55" y="448" class="sub">: ?5@54.</text>
+  <text x="55" y="461" class="sub">10<?5@C</text>
+
+  <!-- Overlap end -->
+  <line x1="620" y1="240" x2="620" y2="500" class="section"/>
+  <text x="625" y="380" class="sub" fill="#c00">B>@5F ABK:0</text>
+  <text x="625" y="395" class="sub" fill="#c00">=0E;QAB 20</text>
+
+  <!-- Outset dim -->
+  <line x1="340" y1="240" x2="340" y2="180" stroke="#000"/>
+  <line x1="490" y1="240" x2="490" y2="180" stroke="#000"/>
+  <line x1="340" y1="170" x2="490" y2="170" stroke="#000"/>
+  <text x="390" y="165" class="dim">150</text>
+
+  <!-- Arc length -->
+  <line x1="80" y1="540" x2="640" y2="540" stroke="#000"/>
+  <text x="300" y="560" class="dim">L H 850&950 << (?> :@><:5)</text>
+
+  <!-- Top view sketch -->
+  <text x="40" y="590" class="dim">84 A25@EC (AE5<0)</text>
+  <path class="part" transform="translate(700,200) scale(0.35)" d="
+    M 80 480 L 120 480 Q 140 380 180 320 Q 240 260 340 240 Q 440 230 520 260 Q 580 290 620 360 L 640 480 L 600 500 Q 560 400 480 370 Q 360 350 260 380 Q 180 410 140 500 Z
+  "/>
+
+  <!-- Title block -->
+  <rect x="720" y="480" width="260" height="120" fill="none" stroke="#000"/>
+  <text x="730" y="505" class="sub">1>7=0G5=85: --L</text>
+  <text x="730" y="525" class="sub">0B5@80;: ! 3,5 <<</text>
+  <text x="730" y="545" class="sub">>;-2>: 1</text>
+  <text x="730" y="565" class="sub">0AA0 ~2,2 :3</text>
+  <text x="730" y="585" class="sub">0AHB01: MA:87</text>
+</svg>

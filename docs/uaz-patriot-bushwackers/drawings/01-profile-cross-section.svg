@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#000"/>
+    </marker>
+  </defs>
+  <style>
+    .dim { font-size: 14px; fill: #111; }
+    .title { font-size: 18px; font-weight: bold; fill: #111; }
+    .sub { font-size: 12px; fill: #444; }
+    .part { fill: none; stroke: #000; stroke-width: 2; }
+    .thin { stroke: #666; stroke-width: 1; stroke-dasharray: 6 4; fill: none; }
+    .center { stroke: #c00; stroke-width: 1; stroke-dasharray: 12 6; fill: none; }
+  </style>
+
+  <text x="20" y="30" class="title">-/  ?>?5@5G=K9 ?@>D8;L (@07@57 A-A)</text>
+  <text x="20" y="50" class="sub">0AHB01 1:2 | K;5B 150 << | ">;I8=0 AB5=:8 3,5 << | #:;>= 2°</text>
+
+  <!-- Body reference line -->
+  <line x1="80" y1="320" x2="80" y2="80" class="thin"/>
+  <text x="85" y="75" class="sub">?;>A:>ABL :@K;0</text>
+
+  <!-- Cross section profile (scaled 2:1 => 150mm = 300px, 3.5mm wall ~ 7px) -->
+  <!-- Flange 30mm = 60px, extension 150mm = 300px, lip 12mm = 24px -->
+  <path class="part" d="
+    M 80 320
+    L 140 320
+    L 140 300
+    Q 200 260 380 240
+    L 440 240
+    L 440 320
+    L 464 320
+    L 464 240
+    L 440 240
+    L 380 240
+    Q 200 260 140 300
+    L 140 280
+    L 80 280
+    Z
+  "/>
+
+  <!-- Simplified cleaner profile outline -->
+  <path class="part" d="
+    M 80 300
+    L 140 300
+    L 140 260
+    C 180 220, 260 200, 380 200
+    L 440 200
+    L 440 300
+    L 452 300
+    L 452 188
+    L 440 188
+    L 380 188
+    C 260 188, 180 208, 140 248
+    L 140 220
+    L 80 220
+    Z
+  "/>
+
+  <!-- Pocket -->
+  <circle cx="400" cy="210" r="11" class="part"/>
+  <text x="388" y="195" class="sub">Ø22</text>
+
+  <!-- Dimensions -->
+  <line x1="80" y1="350" x2="440" y2="350" stroke="#000" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="220" y="375" class="dim">150</text>
+
+  <line x1="80" y1="340" x2="140" y2="340" stroke="#000" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="95" y="335" class="dim">30</text>
+
+  <line x1="440" y1="340" x2="452" y2="340" stroke="#000" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="442" y="335" class="dim">12</text>
+
+  <line x1="500" y1="188" x2="500" y2="300" stroke="#000" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="508" y="250" class="dim">140-160</text>
+
+  <!-- Draft angle -->
+  <path d="M 420 300 L 435 260" class="thin"/>
+  <text x="438" y="285" class="sub">2°</text>
+
+  <text x="560" y="120" class="sub">1  D;0=5F ?>A04:8</text>
+  <text x="560" y="140" class="sub">2  C?;>B=8B5;L 8×12</text>
+  <text x="560" y="160" class="sub">3  2K?C:;0O ?>;:0</text>
+  <text x="560" y="180" class="sub">4  :0@<0= M5</text>
+  <text x="560" y="200" class="sub">5  >1@0B=K9 1>@B</text>
+
+  <text x="20" y="410" class="sub">--L/R, --L/R | <0B5@80;: ! 3,5 <<</text>
+</svg>

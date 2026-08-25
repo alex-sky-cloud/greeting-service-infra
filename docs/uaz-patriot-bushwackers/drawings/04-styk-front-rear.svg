@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" font-family="Arial, sans-serif">
+  <style>
+    .title { font-size: 18px; font-weight: bold; }
+    .sub { font-size: 12px; fill: #444; }
+    .dim { font-size: 13px; }
+    .front { fill: #4a90d9; stroke: #135; stroke-width: 2; }
+    .rear { fill: #e67e22; stroke: #a40; stroke-width: 2; }
+    .sill { fill: #bbb; stroke: #333; stroke-width: 1.5; }
+    .hidden { stroke: #999; stroke-dasharray: 6 4; fill: none; }
+  </style>
+
+  <text x="20" y="28" class="title">#75; ABK:0 01 ” 03 (284 A25@EC, <0AHB01 1:1)</text>
+  <text x="20" y="48" class="sub">5@54=OO 45B0;L ?5@5:@K205B 704=NN. 07>@ 58 << ?@8 CAB0=>2:5. %>4 ?@8 ?@>3815 ±15 <<.</text>
+
+  <!-- Rocker sill -->
+  <rect class="sill" x="350" y="200" width="200" height="80" rx="4"/>
+  <text x="395" y="245" class="sub">?>@>3 / ?>4=>6:0</text>
+
+  <!-- Rear part 03 (underneath) -->
+  <path class="rear" d="M 520 120 L 520 360 L 680 360 L 680 120 Q 620 100 560 120 Z"/>
+  <text x="570" y="250" class="dim" fill="#fff">03 704=OO</text>
+
+  <!-- Front part 01 (overlap) -->
+  <path class="front" d="M 220 120 L 220 360 L 560 360 L 560 120 Q 480 100 380 120 Z"/>
+  <text x="320" y="250" class="dim" fill="#fff">01 ?5@54=OO</text>
+
+  <!-- Overlap zone -->
+  <rect x="520" y="120" width="40" height="240" fill="none" stroke="#c00" stroke-width="2" stroke-dasharray="8 4"/>
+  <text x="525" y="110" class="dim" fill="#c00">=0E;QAB 20</text>
+
+  <!-- Gap -->
+  <line x1="520" y1="380" x2="560" y2="380" stroke="#c00" stroke-width="2"/>
+  <text x="525" y="400" class="dim">707>@ 5-8</text>
+
+  <!-- EPDM groove on rear -->
+  <rect x="518" y="150" width="6" height="200" fill="#2ecc71" stroke="#080" stroke-width="1"/>
+  <text x="470" y="160" class="sub">EPDM 8×12</text>
+
+  <!-- Clip -->
+  <circle cx="450" cy="240" r="8" fill="none" stroke="#000" stroke-width="2"/>
+  <text x="430" y="270" class="sub">:;8?A0</text>
+
+  <!-- Motion arrows -->
+  <path d="M 400 420 L 440 420 M 425 405 L 440 420 L 425 435" stroke="#c00" fill="none" stroke-width="2"/>
+  <path d="M 600 420 L 640 420 M 625 405 L 640 420 L 625 435" stroke="#c00" fill="none" stroke-width="2"/>
+  <text x="380" y="455" class="sub" fill="#c00"> E>4 ?5@54=53> 10<?5@0</text>
+  <text x="560" y="455" class="sub" fill="#c00">E>4 704=53> 10<?5@0 ’</text>
+
+  <!-- Section mark -->
+  <text x="720" y="250" class="sub">@07@57 B-B</text>
+  <line x1="700" y1="240" x2="760" y2="240" class="hidden"/>
+</svg>

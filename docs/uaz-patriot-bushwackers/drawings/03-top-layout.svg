@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" font-family="Arial, sans-serif">
+  <style>
+    .title { font-size: 18px; font-weight: bold; }
+    .sub { font-size: 12px; fill: #444; }
+    .dim { font-size: 13px; }
+    .body { fill: #eee; stroke: #333; stroke-width: 2; }
+    .f1 { fill: #4a90d9; stroke: #135; stroke-width: 1.5; opacity: 0.9; }
+    .f2 { fill: #3498db; stroke: #135; stroke-width: 1.5; opacity: 0.9; }
+    .r1 { fill: #e67e22; stroke: #a40; stroke-width: 1.5; opacity: 0.9; }
+    .r2 { fill: #d35400; stroke: #a40; stroke-width: 1.5; opacity: 0.9; }
+    .center { stroke: #999; stroke-dasharray: 10 6; fill: none; }
+  </style>
+
+  <text x="20" y="28" class="title"> 0A?>;>65=85 4 45B0;59  284 A25@EC (AE5<0)</text>
+  <text x="20" y="48" class="sub">(8@8=0 :C7>20 1900 + 2×150 = 2200 << ?> 0@:0< | >;QA=0O 1070 2760 <<</text>
+
+  <!-- Body top view -->
+  <rect class="body" x="200" y="180" width="800" height="340" rx="40"/>
+
+  <!-- Center line -->
+  <line x1="600" y1="100" x2="600" y2="620" class="center"/>
+  <text x="605" y="115" class="sub">>AL</text>
+
+  <!-- Left front 01 -->
+  <path class="f1" d="M 200 220 Q 120 280 100 350 Q 90 420 120 480 L 200 500 L 220 420 Q 210 320 240 260 Z"/>
+  <text x="130" y="360" class="dim" fill="#fff">01</text>
+  <text x="115" y="378" class="sub" fill="#fff">--L</text>
+
+  <!-- Right front 02 -->
+  <path class="f2" d="M 1000 220 Q 1080 280 1100 350 Q 1110 420 1080 480 L 1000 500 L 980 420 Q 990 320 960 260 Z"/>
+  <text x="1040" y="360" class="dim" fill="#fff">02</text>
+  <text x="1025" y="378" class="sub" fill="#fff">--R</text>
+
+  <!-- Left rear 03 -->
+  <path class="r1" d="M 200 420 Q 120 480 100 550 Q 90 620 120 680 L 200 700 L 220 620 Q 210 520 240 460 Z"/>
+  <text x="130" y="560" class="dim" fill="#fff">03</text>
+  <text x="115" y="578" class="sub" fill="#fff">--L</text>
+
+  <!-- Right rear 04 -->
+  <path class="r2" d="M 1000 420 Q 1080 480 1100 550 Q 1110 620 1080 680 L 1000 700 L 980 620 Q 990 520 960 460 Z"/>
+  <text x="1040" y="560" class="dim" fill="#fff">04</text>
+  <text x="1025" y="578" class="sub" fill="#fff">--R</text>
+
+  <!-- Split lines between front/rear on each side -->
+  <line x1="180" y1="350" x2="240" y2="350" stroke="#c00" stroke-width="2"/>
+  <line x1="960" y1="350" x2="1020" y2="350" stroke="#c00" stroke-width="2"/>
+  <text x="170" y="345" class="sub" fill="#c00">ABK: L</text>
+  <text x="950" y="345" class="sub" fill="#c00">ABK: R</text>
+
+  <!-- Width dimension -->
+  <line x1="100" y1="140" x2="1100" y2="140" stroke="#000" stroke-width="1"/>
+  <text x="530" y="130" class="dim">2200 (1900 + 2×150)</text>
+
+  <!-- Wheelbase -->
+  <line x1="350" y1="650" x2="850" y2="650" stroke="#000" stroke-width="1"/>
+  <text x="530" y="670" class="dim">2760 1070</text>
+
+  <!-- Outset -->
+  <line x1="200" y1="500" x2="100" y2="500" stroke="#000" stroke-width="1"/>
+  <text x="110" y="495" class="dim">150</text>
+</svg>

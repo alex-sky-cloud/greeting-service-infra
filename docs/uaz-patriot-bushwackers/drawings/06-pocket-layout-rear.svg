@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" font-family="Arial, sans-serif">
+  <style>
+    .title { font-size: 18px; font-weight: bold; }
+    .sub { font-size: 12px; fill: #444; }
+    .dim { font-size: 13px; }
+    .edge { fill: none; stroke: #000; stroke-width: 2; }
+    .pocket { fill: #333; stroke: #000; stroke-width: 1; }
+    .ref { stroke: #999; stroke-dasharray: 5 4; fill: none; }
+    .fuel { fill: none; stroke: #c00; stroke-width: 2; stroke-dasharray: 8 4; }
+  </style>
+
+  <text x="20" y="28" class="title">03 --L  @072Q@B:0 :0@<0=>2 (284 =0 =0@C6=CN ?>25@E=>ABL)</text>
+  <text x="20" y="48" class="sub">;8=0 ?> 4C35 ~800 << | 6 :0@<0=>2 | H03 105 << | ÿ22 3;C18=0 7</text>
+
+  <line x1="50" y1="200" x2="850" y2="200" class="edge"/>
+  <line x1="50" y1="260" x2="850" y2="260" class="edge"/>
+
+  <!-- 6 pockets -->
+  <circle class="pocket" cx="130" cy="230" r="11"/>
+  <circle class="pocket" cx="235" cy="230" r="11"/>
+  <circle class="pocket" cx="340" cy="230" r="11"/>
+  <circle class="pocket" cx="445" cy="230" r="11"/>
+  <circle class="pocket" cx="550" cy="230" r="11"/>
+  <circle class="pocket" cx="655" cy="230" r="11"/>
+
+  <line x1="130" y1="120" x2="235" y2="120" stroke="#000"/>
+  <text x="165" y="110" class="dim">105</text>
+
+  <!-- Fuel door cutout (2-tank version) -->
+  <rect class="fuel" x="380" y="195" width="90" height="70" rx="6"/>
+  <text x="385" y="185" class="sub" fill="#c00">2K@57 ;NG:0 (2 10:0)</text>
+  <text x="385" y="285" class="sub" fill="#c00">4;O 1 10:0  70:@KBL</text>
+
+  <!-- Styk end -->
+  <line x1="50" y1="170" x2="50" y2="290" class="ref"/>
+  <text x="55" y="235" class="sub">?5@54=89 B>@5F ê ABK: 01</text>
+
+  <line x1="800" y1="170" x2="800" y2="290" class="ref"/>
+  <text x="720" y="235" class="sub">704=89 B>@5F í 10<?5@</text>
+
+  <line x1="280" y1="170" x2="280" y2="290" class="ref"/>
+  <line x1="530" y1="170" x2="530" y2="290" class="ref"/>
+  <text x="250" y="165" class="sub" fill="#c00">A-A</text>
+  <text x="500" y="165" class="sub" fill="#c00">B-B</text>
+</svg>
