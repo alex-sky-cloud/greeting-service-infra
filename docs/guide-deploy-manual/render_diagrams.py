@@ -78,7 +78,7 @@ def panel(d, xy, fill, outline, title, body, *, title_size=52, body_size=44):
 def render_architecture() -> Path:
     """Обзор: четыре крупных контура сверху вниз — читаемо в Word."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    w, h = 1800, 2200
+    w, h = 1800, 2280
     img = Image.new("RGB", (w, h), BG)
     d = ImageDraw.Draw(img)
 
@@ -126,7 +126,7 @@ def render_architecture() -> Path:
         [
             "k8s-master — «мозг» кластера (API :6443, kubeconfig)",
             "k8s-worker-1 / worker-2 — здесь крутятся Pod с greeting-service",
-            "Deployment + Service + Secret/ConfigMap + PostgreSQL (StatefulSet)",
+            "Deployment + Service + Secret/ConfigMap (без базы внутри k3s)",
             "Service типа NodePort — «дверь», в которую стучится Traefik",
         ],
     )
@@ -154,17 +154,18 @@ def render_architecture() -> Path:
         (40, 1670, 1760, 1920),
         SOFT,
         NODE_OUT,
-        "5. VPS «storage» — S3 через MinIO",
+        "5. VPS «данные» — PostgreSQL и MinIO вне k3s",
         [
-            "MinIO даёт S3-совместимый API на своём сервере",
-            "Bucket greeting-artifacts + AccessKey / SecretKey",
-            "Нужен для артефактов/бэкапов без облачного S3-плагина",
+            "PostgreSQL: primary + replica, свой диск на каждой машине",
+            "Приложение ходит в БД по частной сети, не через интернет",
+            "MinIO — S3 bucket greeting-artifacts на VPS storage",
         ],
     )
 
     text(d, 40, 1980, "Два главных потока (запомните):", size=48, bold=True, fill=TITLE)
     text(d, 40, 2050, "A) Код:  ПК → git push → GitLab → Runner → Registry → Helm → Pod в k3s", size=40)
     text(d, 40, 2110, "B) Трафик: браузер → DNS → Traefik Floating IP → NodePort → Pod", size=40)
+    text(d, 40, 2170, "C) Данные: Pod → частная сеть → PostgreSQL primary (отдельные VPS)", size=40)
 
     out = OUT_DIR / "architecture-manual.png"
     img.save(out, optimize=True)
@@ -295,8 +296,8 @@ def render_tech_map() -> Path:
             "Один chart = набор манифестов + values",
         ]),
         (1550, PKG, PKG_OUT, "kubectl / MinIO / PostgreSQL", [
-            "kubectl — пульт диагностики кластера",
-            "MinIO — свой S3; PostgreSQL — база данных сервиса",
+            "kubectl — пульт диагностики кластера приложения",
+            "MinIO — свой S3; PostgreSQL — отдельный VPS-кластер",
         ]),
     ]
     for y, fill, outl, title, body in items:

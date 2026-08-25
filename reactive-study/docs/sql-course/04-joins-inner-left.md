@@ -12,6 +12,7 @@
 - [Учебные таблицы «до JOIN»](#учебные-таблицы-до-join)
 - [INNER JOIN — только пары «клиент ↔ заказ»](#inner-join--только-пары-клиент--заказ)
 - [LEFT JOIN — все клиенты, даже без заказов](#left-join--все-клиенты-даже-без-заказов)
+- [ORDER BY: NULLS FIRST и NULLS LAST](#order-by-nulls-first-и-nulls-last)
 - [INNER vs LEFT — один запрос, два результата](#inner-vs-left--один-запрос-два-результата)
 - [ON, WHERE и порядок выполнения](#on-where-и-порядок-выполнения)
 - [Псевдонимы таблиц](#псевдонимы-таблиц)
@@ -400,6 +401,85 @@ ORDER BY u.email, o.id NULLS FIRST;
 
 ---
 
+## ORDER BY: NULLS FIRST и NULLS LAST
+
+После LEFT JOIN в столбцах справа часто появляется **NULL**. При сортировке нужно понимать, **куда попадают NULL** — в начало или в конец.
+
+**Это не отдельный оператор.** `NULLS FIRST` / `NULLS LAST` — **дополнение к конкретному столбцу** в `ORDER BY`, сразу после него:
+
+```sql
+ORDER BY u.email, o.id NULLS FIRST
+--            ↑           ↑
+--      1-й ключ      2-й ключ: id по возрастанию,
+--                    NULL — в начале среди равного email
+```
+
+**Источник:** https://www.postgresql.org/docs/current/sql-select.html#SQL-ORDERBY
+
+EN:
+
+> If `NULLS LAST` is specified, null values sort after all non-null values; if `NULLS FIRST` is specified, null values sort before all non-null values. If neither is specified, the default behavior is `NULLS LAST` when `ASC` is specified or implied, and `NULLS FIRST` when `DESC` is specified.
+
+RU:
+
+> Если указано `NULLS LAST`, значения NULL идут после всех non-null; если `NULLS FIRST` — до всех non-null. Если не указано: по умолчанию `NULLS LAST` при `ASC` (или когда направление не задано), и `NULLS FIRST` при `DESC`.
+
+### Таблица по умолчанию (PostgreSQL)
+
+| Запись | Куда деваются NULL |
+|---|---|
+| `ORDER BY o.id` (ASC по умолчанию) | **в конце** (`NULLS LAST`) |
+| `ORDER BY o.id DESC` | **в начале** (`NULLS FIRST`) |
+| `ORDER BY o.id NULLS FIRST` | **явно в начале** |
+| `ORDER BY o.id NULLS LAST` | **явно в конце** |
+
+### Пример — когда NULLS FIRST меняет порядок
+
+**Задача:** отсортировать **только по id заказа** — у «спящего» клиента id = NULL.
+
+```sql
+SELECT u.email, o.id AS order_id
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE u.email IN (
+    'join-demo-no-orders-1@example.com',
+    'join-demo-single-order@example.com'
+);
+```
+
+**`ORDER BY o.id` (по умолчанию NULL в конце):**
+
+| email | order_id |
+|---|---|
+| join-demo-single-order@example.com | 100001 |
+| join-demo-single-order@example.com | 100002 |
+| … | … |
+| join-demo-no-orders-1@example.com | **NULL** |
+
+**`ORDER BY o.id NULLS FIRST`:**
+
+| email | order_id |
+|---|---|
+| join-demo-no-orders-1@example.com | **NULL** |
+| join-demo-single-order@example.com | 100001 |
+| join-demo-single-order@example.com | 100002 |
+| … | … |
+
+### Пример — когда NULLS FIRST **не меняет** результат
+
+**Задача:** сортировка **сначала по email**, потом по id (как в практике, задание 12).
+
+```sql
+ORDER BY u.email, o.id
+```
+
+Клиент без заказов имеет email `join-demo-no-orders-1@…` — он **и так** идёт раньше `join-demo-single-order@…` по алфавиту.  
+Поэтому строка с NULL **уже сверху** — не из‑за `NULLS FIRST`, а из‑за **первого** ключа `u.email`.
+
+**Вывод:** `NULLS FIRST` нужен, когда сортируете по столбцу с NULL **без** более главного ключа выше; иначе порядок может не измениться.
+
+---
+
 ### Пример 7 — отбор только «без заказов» (`WHERE o.id IS NULL`)
 
 **Задача:** из **всех** клиентов оставить только тех, у кого **нет ни одного** заказа.
@@ -426,6 +506,47 @@ LIMIT 5;
 
 **Почему работает:** LEFT JOIN сначала ставит NULL там, где заказ не найден; `WHERE o.id IS NULL` оставляет **только такие** строки.  
 С **INNER JOIN** этот приём **не работает** — строк без заказа просто нет.
+
+---
+
+### GROUP BY после JOIN — что указывать
+
+**Задача (задание 11):** посчитать **число заказов** и **сумму** по каждому клиенту.
+
+После `INNER JOIN` у каждой строки **`u.id = o.user_id`** — это один и тот же клиент.  
+`GROUP BY u.id` собирает **все строки заказов** этого клиента в одну «корзину»; `COUNT(o.id)` считает строки внутри.
+
+**Достаточно:**
+
+```sql
+SELECT u.id,
+       u.full_name,
+       COUNT(o.id) AS cnt_orders,
+       SUM(o.amount) AS amount_orders
+FROM users u
+INNER JOIN orders o ON o.user_id = u.id
+WHERE u.id IN (1, 2, 3)
+GROUP BY u.id, u.full_name
+ORDER BY u.id;
+```
+
+**Результат:**
+
+| id | full_name | cnt_orders | amount_orders |
+|---|---|---|---|
+| 1 | Ann Smith | 23 | 24106.88 |
+| 2 | Bob Jones | 14 | 16205.29 |
+| 3 | Carol Lee | 18 | 21619.10 |
+
+**Почему `o.user_id` в GROUP BY не обязателен:** после `ON u.id = o.user_id` поле `o.user_id` **в каждой строке группы одинаково** и равно `u.id`. Добавить его в `GROUP BY` можно — результат **тот же**; SQL просто требует, чтобы все столбцы в `SELECT` (кроме агрегатов) были в `GROUP BY`.
+
+| GROUP BY | cnt для Ann |
+|---|---|
+| `u.id, u.full_name` | 23 |
+| `u.full_name` | 23 |
+| `u.full_name, o.user_id` | 23 |
+
+**Главное:** считает **`COUNT(o.id)`**, а не `GROUP BY o.user_id`. Группировка — **по клиенту**; заказы уже «размножены» строками **до** `GROUP BY`.
 
 ---
 

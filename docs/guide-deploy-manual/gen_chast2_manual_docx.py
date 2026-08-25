@@ -37,6 +37,16 @@ IMG_TECH = HERE / "images" / "tech-map.png"
 IMG_ARCH = HERE / "images" / "architecture-manual.png"
 IMG_TRAFFIC = HERE / "images" / "architecture-traffic.png"
 IMG_CICD = HERE / "images" / "cicd-manual.png"
+IMG_SCHEME11 = HERE / "images" / "scheme-1-1-chto-stroim-v2.jpg"
+
+SCHEME11_CANDIDATES = [
+    Path(
+        r"C:/Users/sky/.cursor/projects/d-Project-infra-greeting-service-infra"
+        r"/assets/c__Users_sky_AppData_Roaming_Cursor_User_workspaceStorage"
+        r"_371f2630de332b8e39996771b99e1f6e_images_image-b38e4a38-d34b-49b8-b9e7-e84623b61d7e.jpg"
+    ),
+    HERE / "images" / "scheme-1-1-chto-stroim.png",
+]
 
 TEMPLATE_CANDIDATES = [
     ROOT / "docs/guide-deploy-terraform/Razdel-15a-gitlab-cicd.docx",
@@ -52,6 +62,8 @@ TRAEFIK_1_IP = "<TRAEFIK_1_IP>"
 TRAEFIK_2_IP = "<TRAEFIK_2_IP>"
 TRAEFIK_FLOATING_IP = "<TRAEFIK_FLOATING_IP>"
 STORAGE_IP = "<STORAGE_IP>"
+POSTGRES_PRIMARY_IP = "<POSTGRES_PRIMARY_IP>"
+POSTGRES_REPLICA_IP = "<POSTGRES_REPLICA_IP>"
 DOMAIN = "greeting-dev.example.com"
 GITLAB_GROUP = "greeting-group"
 GITLAB_PROJECT = "greeting-service"
@@ -63,6 +75,7 @@ REPO_LIN = "~/Project_infra/greeting-service-infra"
 TOC = [
     ("1. Архитектурное описание решения", "m2_s01_arch"),
     ("1.1. Что строим", "m2_s01_1_what"),
+    ("1.1.1. Почему PostgreSQL не внутри k3s", "m2_s01_1_1_pg_outside"),
     ("1.2. Ключевые компоненты", "m2_s01_2_comp"),
     ("1.3. Ключевые архитектурные решения", "m2_s01_3_decisions"),
     ("1.4. Экскурсия по технологиям (зачем схема + текст)", "m2_s01_4_tour"),
@@ -96,7 +109,7 @@ TOC = [
     ("11. GitLab CE на devtools", "m2_s11_gitlab"),
     ("12. GitLab Runner (self-hosted)", "m2_s12_runner"),
     ("13. S3 Bucket (MinIO)", "m2_s13_s3"),
-    ("14. PostgreSQL в Kubernetes", "m2_s14_pg"),
+    ("14. PostgreSQL на отдельных VPS (Patroni)", "m2_s14_pg"),
     ("15. Secrets и первый деплой Helm", "m2_s15_helm"),
     ("16. DNS", "m2_s16_dns"),
     ("17. GitLab CI/CD и подключение существующего репозитория", "m2_s17_pipeline"),
@@ -138,6 +151,17 @@ def add_os_triple(doc: Document, win: str, mac: str, linux: str) -> None:
     sty.add_platform_block(doc, "Локальный ПК — Linux / Ubuntu (Terminal)", linux)
 
 
+def ensure_scheme11() -> Path:
+    if IMG_SCHEME11.exists():
+        return IMG_SCHEME11
+    IMG_SCHEME11.parent.mkdir(parents=True, exist_ok=True)
+    for src in SCHEME11_CANDIDATES:
+        if src.exists():
+            shutil.copy2(src, IMG_SCHEME11)
+            return IMG_SCHEME11
+    return IMG_SCHEME11
+
+
 def build_document(doc: Document) -> None:
     sty.add_normal(doc, "ЧАСТЬ II-M", consolas=True)
     sty.add_normal(doc, "CI/CD и развёртывание вручную", consolas=True)
@@ -170,6 +194,15 @@ def build_document(doc: Document) -> None:
     sty.add_heading3(doc, "1.1. Что строим", "m2_s01_1_what")
     sty.add_normal(
         doc,
+        "Ниже — описание той же схемы 1.1: отдельные VPS для CI/CD, приложения (k3s), "
+        "входа из интернета (Traefik) и базы данных (PostgreSQL). "
+        "«Кластер базы» здесь — это primary + replica на своих машинах, а не база внутри Kubernetes.",
+    )
+    if IMG_SCHEME11.exists():
+        add_figure(doc, IMG_SCHEME11, "Рисунок 1.1. Что строим: k3s только для приложения, PostgreSQL на отдельных VPS")
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
         "1. Простой Java-микросервис на Spring Boot с REST endpoint GET /api/greeting "
         "(репозиторий greeting-service-infra у вас уже есть).",
     )
@@ -177,29 +210,145 @@ def build_document(doc: Document) -> None:
     sty.add_normal(
         doc,
         "2. Сервис разворачивается в самостоятельно установленном Kubernetes-кластере (k3s) "
-        "на обычных VPS любого облачного/VPS-провайдера и доступен из интернета.",
+        "на обычных VPS любого облачного/VPS-провайдера. На схеме блок k3s — это worker-ноды, "
+        "где крутятся Pod приложения. Доступ из интернета идёт не напрямую в k3s, а через Traefik.",
     )
     sty.add_empty(doc)
     sty.add_normal(
         doc,
         "3. Весь путь от git push до новой версии в кластере автоматизирован через GitLab CI/CD "
-        "(self-hosted GitLab CE + self-hosted GitLab Runner).",
+        "(self-hosted GitLab CE + self-hosted GitLab Runner) и Helm.",
     )
     sty.add_empty(doc)
     sty.add_normal(
         doc,
-        "4. GitLab CE, Docker Registry и GitLab Runner размещаются на отдельном VPS (devtools). "
-        "Внешний HTTP(S)-трафик принимает отдельный кластер Traefik на своих VPS "
-        "(не managed Ingress провайдера).",
+        "4. GitLab CE, Docker Registry и GitLab Runner размещаются на отдельном VPS (devtools): "
+        "сборка, тесты, публикация образа.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
+        "5. Внешний HTTP(S)-трафик принимает отдельный кластер Traefik на своих VPS "
+        "(порты :80 / :443). Это не managed Ingress провайдера. Traefik маршрутизирует запрос "
+        "к API greeting-service внутри k3s.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
+        "6. База данных — отдельный PostgreSQL-кластер на своих VPS (не внутри k3s): "
+        "один primary, одна или несколько replica. Приложение на worker-нодах ходит в базу "
+        "по частной сети. Диск каждой машины принадлежит только этой ноде базы.",
+    )
+
+    sty.add_heading3(doc, "1.1.1. Почему PostgreSQL не внутри k3s", "m2_s01_1_1_pg_outside")
+    sty.add_normal(
+        doc,
+        "Kubernetes умеет останавливать контейнеры и запускать их на другом узле. "
+        "Для сайта (stateless Pod) это нормально: потерялся экземпляр — поднялся новый.",
+    )
+    sty.add_citation(
+        doc,
+        "https://kubernetes.io/docs/concepts/workloads/pods/",
+        "You'll rarely create individual Pods directly in Kubernetes—even singleton Pods. "
+        "This is because Pods are designed as relatively ephemeral, disposable entities. "
+        "When a Pod gets created … The Pod remains on that node until the Pod finishes execution, "
+        "the Pod object is deleted, the Pod is evicted for lack of resources, or the node fails.",
+        "Поды в Kubernetes редко создают напрямую даже по одному. Поды задуманы как относительно "
+        "эфемерные, одноразовые сущности. Под остаётся на узле, пока не завершится, не будет удалён, "
+        "не будет вытеснен из‑за нехватки ресурсов или пока не упадёт узел.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
+        "Для PostgreSQL этого недостаточно. У базы данные на диске, открытые клиентские соединения "
+        "и журнал записей (WAL). WAL — это не «лог для красоты»: изменения в файлах таблиц "
+        "записываются только после того, как описание этих изменений сброшено на постоянное хранилище. "
+        "Если диск «уехал» не туда или одновременно живы два primary, можно получить порчу данных, "
+        "а не «магический отказоустойчивый кластер».",
+    )
+    sty.add_citation(
+        doc,
+        "https://www.postgresql.org/docs/current/wal-intro.html",
+        "WAL's central concept is that changes to data files (where tables and indexes reside) "
+        "must be written only after those changes have been logged, that is, after WAL records "
+        "describing the changes have been flushed to permanent storage.",
+        "Центральная идея WAL: изменения в файлах данных (таблицы и индексы) должны записываться "
+        "только после того, как эти изменения занесены в журнал, то есть после сброса записей WAL "
+        "на постоянное хранилище.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
+        "Поэтому кластер базы делают иначе, чем кластер приложения. Два-три отдельных VPS, "
+        "у каждого свой диск. Один сервер — primary (чтение и запись), остальные — replica "
+        "(следят за primary). Если одна машина вышла из строя, живые остаются; replica можно "
+        "повысить до primary. Это и есть high availability в терминах PostgreSQL.",
+    )
+    sty.add_citation(
+        doc,
+        "https://www.postgresql.org/docs/current/high-availability.html",
+        "Database servers can work together to allow a second server to take over quickly "
+        "if the primary server fails (high availability) … Servers that can modify data are "
+        "called read/write, master or primary servers. Servers that track changes in the primary "
+        "are called standby or secondary servers.",
+        "Серверы баз данных могут работать вместе, чтобы второй сервер быстро принял нагрузку, "
+        "если primary отказал (высокая доступность). Серверы, которые могут изменять данные, "
+        "называют primary. Серверы, которые отслеживают изменения primary, называют standby / replica.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
+        "Два контейнера Postgres внутри k3s на тех же worker-нодах, что и приложение, — это не "
+        "боевой кластер базы. Упала одна worker-машина или общее хранилище — судьба обеих копий "
+        "общая. Плюс диск в Kubernetes часто сетевой или разделяемый: скачки задержки для WAL "
+        "сразу бьют по Postgres. Соседние сервисы на том же узле дают noisy neighbor: нагрузка "
+        "на диск и CPU сайта не должна тормозить записи в базу. Обновление k3s не должно быть "
+        "окном обслуживания самой БД.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
+        "Ещё одно уточнение, чтобы не путать слова. Kubernetes даёт перезапуск пода: процесс "
+        "подняли заново. Failover базы — это другое: старый primary нужно изолировать (fencing), "
+        "replica — повысить, клиентам указать новый адрес записи. Перезапуск контейнера сам по себе "
+        "этого не делает. Для такого контура на отдельных машинах обычно берут Patroni: он "
+        "управляет PostgreSQL и автоматическим переключением primary.",
+    )
+    sty.add_citation(
+        doc,
+        "https://patroni.readthedocs.io/en/latest/",
+        "Patroni is a template for high availability (HA) PostgreSQL solutions using Python. "
+        "For maximum accessibility, Patroni supports a variety of distributed configuration stores "
+        "like ZooKeeper, etcd, Consul or Kubernetes.",
+        "Patroni — шаблон решений высокой доступности PostgreSQL на Python. Для гибкости Patroni "
+        "поддерживает разные распределённые хранилища конфигурации: ZooKeeper, etcd, Consul или Kubernetes.",
+    )
+    sty.add_citation(
+        doc,
+        "https://patroni.readthedocs.io/en/latest/faq.html",
+        "If a primary node fails, Patroni will not only fail over to a replica, but also attempt "
+        "to rejoin the former primary as a replica of the new primary. … You should not attempt "
+        "to manage Postgres directly! Any attempt of bouncing the Postgres server without Patroni "
+        "can lead your cluster to face failovers.",
+        "Если primary отказывает, Patroni не только делает failover на replica, но и пытается "
+        "вернуть бывший primary уже как replica нового primary. Postgres нельзя дергать напрямую: "
+        "перезапуск сервера в обход Patroni может привести к лишним failover.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(
+        doc,
+        "Замечание по терминологии: Patroni умеет работать и поверх Kubernetes (это прямо сказано "
+        "в его документации). В этом гайде мы сознательно этого не делаем: база живёт на отдельных "
+        "VPS со своими дисками, k3s остаётся контуром приложения. Связь — частная сеть, как на схеме.",
     )
 
     sty.add_heading3(doc, "1.2. Ключевые компоненты", "m2_s01_2_comp")
     sty.add_normal(doc, "• Исходный код — Java 21, Spring Boot; хранится в GitLab CE на VPS devtools;", consolas=True)
     sty.add_normal(doc, "• CI/CD — GitLab Pipelines + self-hosted Runner (shell executor);", consolas=True)
     sty.add_normal(doc, "• Docker Registry — distribution/registry:2 на devtools :5000;", consolas=True)
-    sty.add_normal(doc, "• Kubernetes — k3s (control-plane + workers на отдельных VPS);", consolas=True)
+    sty.add_normal(doc, "• Kubernetes — k3s: worker-ноды для приложения (Pod greeting-service);", consolas=True)
     sty.add_normal(doc, "• Вход из интернета — Traefik Proxy на отдельном edge-кластере VPS;", consolas=True)
-    sty.add_normal(doc, "• БД — PostgreSQL как StatefulSet в k3s (self-hosted);", consolas=True)
+    sty.add_normal(doc, "• БД — PostgreSQL primary + replica на отдельных VPS, Patroni, частная сеть;", consolas=True)
     sty.add_normal(doc, "• S3 — MinIO на VPS storage (совместимый S3 API);", consolas=True)
     sty.add_normal(doc, "• Деплой — Helm 3 из Runner / с локального ПК;", consolas=True)
     sty.add_normal(doc, "• IaC — нет; всё вручную через CLI и root.", consolas=True)
@@ -259,6 +408,14 @@ def build_document(doc: Document) -> None:
         "MinIO is a high-performance, S3 compatible object store.",
         "MinIO — высокопроизводительное объектное хранилище, совместимое с S3.",
     )
+    sty.add_empty(doc)
+    sty.add_normal(doc, "Почему PostgreSQL на отдельных VPS, а не StatefulSet в k3s?")
+    sty.add_normal(
+        doc,
+        "См. п. 1.1.1. Коротко: сайт можно переносить между узлами; у базы диск, WAL и роль primary. "
+        "Два Postgres-контейнера на worker-нодах k3s не дают настоящего failover. "
+        "Для боевого контура — отдельные машины и Patroni.",
+    )
 
     sty.add_heading3(doc, "1.4. Экскурсия по технологиям (зачем схема + текст)", "m2_s01_4_tour")
     sty.add_normal(
@@ -316,8 +473,16 @@ def build_document(doc: Document) -> None:
     sty.add_normal(
         doc,
         "k3s — это полноценный Kubernetes в компактной упаковке для обычных VPS. "
-        "Master держит API; workers запускают Pod с вашим Spring Boot. "
-        "Service NodePort — стабильная «точка входа» внутри/снаружи нод, на которую смотрит Traefik.",
+        "На схеме 1.1 блок k3s — worker-ноды, где крутится greeting-service. "
+        "Service NodePort — «дверь», в которую стучится Traefik. "
+        "Базы данных в этом блоке нет.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(doc, "VPS PostgreSQL (отдельный кластер)", consolas=True)
+    sty.add_normal(
+        doc,
+        "Жёлтый блок схемы: primary и replica на своих VPS, каждый со своим диском. "
+        "Связь с приложением — частная сеть, не публичный интернет.",
     )
     sty.add_empty(doc)
     sty.add_normal(doc, "Отдельный кластер Traefik (edge)", consolas=True)
@@ -498,10 +663,12 @@ def build_document(doc: Document) -> None:
     sty.add_normal(doc, "Сервер | vCPU | RAM | Диск | Роль", consolas=True)
     sty.add_normal(doc, "devtools | 4 | 8 ГБ | 100 ГБ | GitLab CE + Registry + Runner", consolas=True)
     sty.add_normal(doc, "k8s-master | 2 | 4 ГБ | 50 ГБ | control-plane k3s", consolas=True)
-    sty.add_normal(doc, "k8s-worker-1 | 2 | 4 ГБ | 50 ГБ | worker k3s", consolas=True)
-    sty.add_normal(doc, "k8s-worker-2 | 2 | 4 ГБ | 50 ГБ | worker k3s", consolas=True)
+    sty.add_normal(doc, "k8s-worker-1 | 2 | 4 ГБ | 50 ГБ | worker k3s (приложение)", consolas=True)
+    sty.add_normal(doc, "k8s-worker-2 | 2 | 4 ГБ | 50 ГБ | worker k3s (приложение)", consolas=True)
     sty.add_normal(doc, "traefik-1 | 2 | 2 ГБ | 40 ГБ | Traefik node 1", consolas=True)
     sty.add_normal(doc, "traefik-2 | 2 | 2 ГБ | 40 ГБ | Traefik node 2 (HA)", consolas=True)
+    sty.add_normal(doc, "postgres-1 | 2 | 4 ГБ | 80 ГБ | PostgreSQL primary", consolas=True)
+    sty.add_normal(doc, "postgres-2 | 2 | 4 ГБ | 80 ГБ | PostgreSQL replica", consolas=True)
     sty.add_normal(doc, "storage | 2 | 4 ГБ | 100 ГБ | MinIO (S3)", consolas=True)
     sty.add_empty(doc)
     sty.add_normal(doc, "Алгоритм заказа (одинаков у большинства панелей):")
@@ -521,6 +688,8 @@ def build_document(doc: Document) -> None:
         f"TRAEFIK_1_IP={TRAEFIK_1_IP}\n"
         f"TRAEFIK_2_IP={TRAEFIK_2_IP}\n"
         f"TRAEFIK_FLOATING_IP={TRAEFIK_FLOATING_IP}\n"
+        f"POSTGRES_PRIMARY_IP={POSTGRES_PRIMARY_IP}\n"
+        f"POSTGRES_REPLICA_IP={POSTGRES_REPLICA_IP}\n"
         f"STORAGE_IP={STORAGE_IP}\n"
         "EOF",
     )
@@ -986,76 +1155,92 @@ def build_document(doc: Document) -> None:
     )
 
     # ── 14 PostgreSQL ────────────────────────────────────────────────────
-    sty.add_heading2(doc, "14. PostgreSQL в Kubernetes", "m2_s14_pg")
+    sty.add_heading2(doc, "14. PostgreSQL на отдельных VPS (Patroni)", "m2_s14_pg")
+    sty.add_normal(
+        doc,
+        "Базу не ставим StatefulSet-ом в k3s. На схеме 1.1 это жёлтый блок: "
+        "postgres-1 (primary) и postgres-2 (replica), связь с worker-нодами — частная сеть.",
+    )
+    sty.add_empty(doc)
+    sty.add_normal(doc, "На каждом postgres-VPS (после SSH, Ubuntu root):")
     sty.add_platform_block(
         doc,
-        "Локальный ПК — kubectl",
-        "kubectl create namespace data\n"
-        "kubectl -n data apply -f - << 'EOF'\n"
-        "apiVersion: v1\n"
-        "kind: Secret\n"
-        "metadata:\n"
-        "  name: postgres-secret\n"
-        "type: Opaque\n"
-        "stringData:\n"
-        "  POSTGRES_PASSWORD: ChangeMe_DbPass\n"
-        "---\n"
-        "apiVersion: apps/v1\n"
-        "kind: StatefulSet\n"
-        "metadata:\n"
-        "  name: postgres\n"
-        "spec:\n"
-        "  serviceName: postgres\n"
-        "  replicas: 1\n"
-        "  selector:\n"
-        "    matchLabels:\n"
-        "      app: postgres\n"
-        "  template:\n"
-        "    metadata:\n"
-        "      labels:\n"
-        "        app: postgres\n"
-        "    spec:\n"
-        "      containers:\n"
-        "        - name: postgres\n"
-        "          image: postgres:16\n"
-        "          ports:\n"
-        "            - containerPort: 5432\n"
-        "          env:\n"
-        "            - name: POSTGRES_PASSWORD\n"
-        "              valueFrom:\n"
-        "                secretKeyRef:\n"
-        "                  name: postgres-secret\n"
-        "                  key: POSTGRES_PASSWORD\n"
-        "            - name: POSTGRES_DB\n"
-        "              value: greeting\n"
-        "          volumeMounts:\n"
-        "            - name: data\n"
-        "              mountPath: /var/lib/postgresql/data\n"
-        "  volumeClaimTemplates:\n"
-        "    - metadata:\n"
-        "        name: data\n"
-        "      spec:\n"
-        "        accessModes: [\"ReadWriteOnce\"]\n"
-        "        resources:\n"
-        "          requests:\n"
-        "            storage: 10Gi\n"
-        "---\n"
-        "apiVersion: v1\n"
-        "kind: Service\n"
-        "metadata:\n"
-        "  name: postgres\n"
-        "spec:\n"
-        "  selector:\n"
-        "    app: postgres\n"
-        "  ports:\n"
-        "    - port: 5432\n"
-        "      targetPort: 5432\n"
-        "EOF",
+        "На postgres-1 и postgres-2",
+        "apt-get update\n"
+        "apt-get install -y postgresql postgresql-contrib python3-pip python3-psycopg2 etcd\n"
+        "systemctl stop postgresql\n"
+        "systemctl disable postgresql\n"
+        "# Patroni сам запускает Postgres; systemd postgresql не должен с ним спорить",
+    )
+    sty.add_normal(
+        doc,
+        "Patroni ставится официальным пакетом или через pip. Ниже — pip, как в документации Patroni "
+        "(раздел Installation). Для production кластер etcd лучше из трёх узлов; для учебного стенда "
+        "etcd может жить на postgres-1.",
+    )
+    sty.add_citation(
+        doc,
+        "https://patroni.readthedocs.io/en/latest/installation.html",
+        "Patroni can be installed with pip: pip install patroni[dependencies] … "
+        "Patroni packages may be available for your operating system … "
+        "Once you have installed the PGDG repository for your OS you can install patroni.",
+        "Patroni можно установить через pip: pip install patroni[зависимости]. "
+        "Пакеты Patroni могут быть доступны для вашей ОС. После подключения репозитория PGDG "
+        "Patroni ставят штатным пакетным менеджером (например apt-get install patroni).",
+    )
+    sty.add_platform_block(
+        doc,
+        "На postgres-1 и postgres-2",
+        "pip3 install 'patroni[etcd]'",
+    )
+    sty.add_platform_block(
+        doc,
+        "Пример /etc/patroni.yml (имена и IP подставьте свои)",
+        "scope: greeting-pg\n"
+        "name: postgres-1\n"
+        "restapi:\n"
+        "  listen: 0.0.0.0:8008\n"
+        f"  connect_address: {POSTGRES_PRIMARY_IP}:8008\n"
+        "etcd:\n"
+        f"  host: {POSTGRES_PRIMARY_IP}:2379\n"
+        "bootstrap:\n"
+        "  dcs:\n"
+        "    ttl: 30\n"
+        "    loop_wait: 10\n"
+        "    postgresql:\n"
+        "      use_pg_rewind: true\n"
+        "  initdb:\n"
+        "    - encoding: UTF8\n"
+        "    - data-checksums\n"
+        "postgresql:\n"
+        "  listen: 0.0.0.0:5432\n"
+        f"  connect_address: {POSTGRES_PRIMARY_IP}:5432\n"
+        "  data_dir: /var/lib/postgresql/16/main\n"
+        "  authentication:\n"
+        "    superuser:\n"
+        "      username: postgres\n"
+        "      password: ChangeMe_DbPass\n"
+        "    replication:\n"
+        "      username: replicator\n"
+        "      password: ChangeMe_ReplPass",
         yaml_block=True,
     )
     sty.add_normal(
         doc,
-        "JDBC URL внутри кластера: jdbc:postgresql://postgres.data.svc.cluster.local:5432/greeting",
+        "На replica тот же файл, но name: postgres-2 и connect_address с IP replica. "
+        "Первый запуск Patroni на postgres-1 инициализирует primary; второй узел подхватит роль replica. "
+        "Порт 5432 открывайте только в частной сети (ufw: allow from подсети worker-нод).",
+    )
+    sty.add_platform_block(
+        doc,
+        "Проверка с postgres-1",
+        "patronictl -c /etc/patroni.yml list",
+    )
+    sty.add_normal(
+        doc,
+        f"JDBC из приложения (k3s workers, частная сеть): "
+        f"jdbc:postgresql://{POSTGRES_PRIMARY_IP}:5432/greeting "
+        "После появления VIP/HAProxy перед Patroni подставьте VIP вместо IP primary.",
     )
 
     # ── 15 Helm ──────────────────────────────────────────────────────────
@@ -1071,7 +1256,7 @@ def build_document(doc: Document) -> None:
         "export KUBECONFIG=~/.kube/selfhosted-greeting.yaml\n"
         "kubectl create namespace dev\n"
         "kubectl -n dev create secret generic greeting-service-secret \\\n"
-        "  --from-literal=DB_URL='jdbc:postgresql://postgres.data.svc.cluster.local:5432/greeting' \\\n"
+        f"  --from-literal=DB_URL='jdbc:postgresql://{POSTGRES_PRIMARY_IP}:5432/greeting' \\\n"
         "  --from-literal=DB_USER=postgres \\\n"
         "  --from-literal=DB_PASSWORD='ChangeMe_DbPass'\n"
         f"docker login {DEVTOOLS_IP}:5000 -u docker -p docker\n"
@@ -1256,7 +1441,7 @@ def build_document(doc: Document) -> None:
     sty.add_normal(doc, "4. Traefik-кластер на отдельных VPS → dynamic route.")
     sty.add_normal(doc, "5. Registry + GitLab CE + Runner на devtools.")
     sty.add_normal(doc, "6. MinIO bucket на storage.")
-    sty.add_normal(doc, "7. PostgreSQL StatefulSet + Secrets.")
+    sty.add_normal(doc, "7. PostgreSQL primary+replica на отдельных VPS (Patroni) + Secret с JDBC.")
     sty.add_normal(doc, "8. DNS A → Traefik Floating IP.")
     sty.add_normal(doc, "9. git remote add gitlab → push → pipeline → Helm → проверка curl.")
     sty.add_empty(doc)
@@ -1269,6 +1454,7 @@ def build_document(doc: Document) -> None:
 
 def main() -> None:
     sty.reset_bookmarks()
+    ensure_scheme11()
     render_tech_map()
     render_architecture()
     render_architecture_traffic()
