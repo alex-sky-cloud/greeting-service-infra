@@ -65,6 +65,25 @@ users                orders                 products           product_categorie
 
 **Важно для интервью:** `orders.product_id` **может быть NULL** — заказ оформлен «свободным текстом» в `product_name`, без карточки в каталоге (учебные строки `JOIN-DEMO-NO-PRODUCT-*`).
 
+### Что такое SKU в нашей базе
+
+**SKU** (Stock Keeping Unit) — **артикул товара**, уникальный код в каталоге.  
+В Reactive Shop это столбец **`products.sku`** (тип `text`, уникальный).
+
+| products.id | products.sku | products.name | products.category_id |
+|---|---|---|---|
+| 1 | SKU-00001 | Product 1 | 1 |
+| 10 | SKU-00010 | Product 10 | 10 |
+| 20 | SKU-00020 | Product 20 | 10 |
+
+Связь с заказом:
+
+```text
+orders.product_id = 10  →  products.id = 10  →  products.sku = 'SKU-00010'
+```
+
+В отчётах **`p.sku`** — это «артикул из каталога»; **`o.product_name`** — текст на заказе (может отличаться, особенно если `product_id` пустой).
+
 ---
 
 ## JOIN трёх таблиц — orders → products → categories
