@@ -1,0 +1,306 @@
+<html>
+<head>
+    
+    <meta charset="utf-8" />
+    <title>Плагины</title>
+    
+    <style>            
+            
+            #contents_main p, #contents_main h4 {
+                margin: 0px;
+                padding: 8px;
+                padding-top: 5px;
+                padding-bottom: 5px;
+                clear: both;
+            }
+
+            #contents_main hr {
+                border: 1px dashed #cccccc;
+                border-collapse: collapse;
+                clear: both;
+            }
+
+            #contents_main p img {
+                float: left;
+                margin-right: 8px;
+                margin-bottom: 8px;
+                padding: 2px;
+                border: 1px solid #cccccc;
+            }
+            
+            ol li, ul li {
+                padding-bottom: 3px;
+            }
+
+            h4 {
+                margin-top: 10px !important;
+                padding-top: 10px !important;
+                margin-bottom: 5px !important;
+                padding-bottom: 5px !important;
+            }
+            
+        </style>
+
+        <link rel="stylesheet" type="text/css" href="https://visualvm.java.net/shadowbox/shadowbox.css">
+        <script type="text/javascript" src="https://visualvm.java.net/shadowbox/shadowbox.js"></script>
+        <script type="text/javascript">
+        Shadowbox.init();
+        </script>
+    
+</head>
+
+<body>
+
+<div id="contents_div">
+    
+    <div id="contents_contents">
+        <div id="contents_main">
+            
+            <h1>Плагины</h1>
+            
+            <p>
+                В VisualVM Plugins Center доступны различные <strong>plugin</strong> (плагины), включая сторонние; другие плагины можно получить отдельной загрузкой у их авторов. Плагины интеграции с IDE описаны на странице <a href="features.html">Features</a> (возможности).
+            </p>
+            
+            <p style="margin-bottom: 15px;">
+                Если нужна особая возможность или поддержка конкретного инструмента, можно написать свой плагин. Это несложно: для API NetBeans Platform и <strong>VisualVM</strong> есть много сведений и примеров кода. Хорошая отправная точка — раздел <a href="#write_plugin">Write Plugin</a> (написать плагин).
+            </p>
+            
+            <a name="get_plugins"></a>
+            <h3>Получить плагин</h3>
+            <div style="background: #f0f1f2; padding-top: 10px; padding-right: 10px; padding-bottom: 5px; margin-top: 0px;">
+                <p style="margin-top: 0px; padding-top: 0px;"><b>Чтобы установить плагин из VisualVM Plugins Center, выполните следующие шаги:</b>
+                </p>
+                
+                <ol>
+                    <li>В главном меню VisualVM выберите <strong>Tools</strong> (Инструменты) | <strong>Plugins</strong> (плагины) — откроется диалог Plugins</li>
+                    <li>Перейдите на вкладку <strong>Available Plugins</strong> (Доступные плагины) и выберите плагин, который хотите установить</li>
+                    <li>Нажмите кнопку <strong>Install</strong> (Установить), просмотрите и примите лицензию плагина и дождитесь загрузки и установки плагина</li>
+                </ol>
+
+                <p>
+                    <small><b>Примечание: </b>плагины для автономных установок VisualVM можно скачать вручную со страницы <a href="pluginscenters.html">Plugins Centers</a> (центры плагинов).</small>
+                </p>
+            </div>
+            <div style="padding-top: 5px;">    
+                <p><b>Некоторые сторонние плагины нужно устанавливать из скачанного файла .nbm:</b>
+                </p>
+                
+                <ol style="margin-bottom: 13px;">
+                    <li>В главном меню VisualVM выберите <strong>Tools</strong> (Инструменты) | <strong>Plugins</strong> (плагины) — откроется диалог Plugins</li>
+                    <li>Перейдите на вкладку <strong>Downloaded</strong> (Загруженные), нажмите кнопку <strong>Add Plugins...</strong> (Добавить плагины...), выберите скачанные файлы плагина .nbm и нажмите кнопку <strong>Open</strong> (Открыть)</li>
+                    <li>Нажмите кнопку <strong>Install</strong> (Установить), просмотрите и примите лицензию плагина и дождитесь установки плагина</li>
+                </ol>
+            </div>
+            
+            <a name="available_plugins"></a>
+            <h3>Доступные плагины</h3>
+            <div>
+                <h4>Стабильные</h4>
+
+                <p><a href="images/mbeans.jpg" rel="lightbox[plugins]" title="MBeans Browser."><img src="images/mbeans_thumb.jpg"/></a><b>MBeans Browser.</b>
+                Плагин MBeans Browser в целом даёт ту же функциональность, что и MBeans Browser в инструменте <strong>JDK</strong> (Java Development Kit, комплект разработки Java) <strong>JConsole</strong>: показывает <strong>MBeans</strong> (Managed Beans, управляемые компоненты) приложения, отображает значения, операции и уведомления.
+                В VisualVM браузер будет дальше улучшаться, чтобы стать удобнее и лучше поддерживать новейшие возможности <strong>JMX</strong>.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <hr/>
+
+                <p><a href="images/visualgc.jpg" rel="lightbox[plugins]" title="Visual GC Plugin."><img src="images/visualgc_thumb.jpg"/></a><b>Visual GC Plugin.</b>
+                Интеграция инструмента Visual GC в VisualVM. Visual GC подключается к приложению и собирает и графически отображает данные о сборке мусора (<strong>GC</strong>), загрузчике классов и производительности компилятора HotSpot.
+                См. <a href="http://www.oracle.com/technetwork/java/visualgc-136680.html">Visual GC page</a> (страница Visual GC) для подробностей.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/tracer.jpg" rel="lightbox[plugins]" title="Tracer."><img src="images/tracer_thumb.jpg"/></a><b>Tracer.</b>
+                Каркас и GUI для подробного мониторинга и анализа приложений Java. С помощью различных типов проб (probes) Tracer собирает метрики из приложения и показывает данные на временной шкале.
+                Данные отображаются и графически, и в таблице и их можно экспортировать в обычные форматы для дальнейшей обработки во внешних инструментах.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/threadsinsp.jpg" rel="lightbox[plugins]" title="Threads Inspector."><img src="images/threadsinsp_thumb.jpg"/></a><b>Threads Inspector.</b>
+                Плагин интегрируется со вкладкой <strong>Threads</strong> (Потоки) и позволяет анализировать трассировку стека одного или нескольких выбранных потоков напрямую, без необходимости снимать и
+                открывать полные <strong>Thread Dump</strong> (дампы потоков). Это особенно полезно для быстрого и простого анализа различных проблем с потоками.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/btrace.jpg" rel="lightbox[plugins]" title="BTrace Plugin."><img src="images/btrace_thumb.jpg"/></a><b>BTrace Plugin.</b>
+                BTrace — инструмент динамической трассировки для Java. С этим плагином можно создавать, разворачивать и сохранять сценарии трассировки BTrace прямо из VisualVM. Подробности:
+                <a href="http://kenai.com/projects/btrace">http://kenai.com/projects/btrace</a>.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <hr/>
+
+                <p><a href="images/extensions.jpg" rel="lightbox[plugins]" title="VisualVM Extensions."><img src="images/extensions_thumb.jpg"/></a><b>VisualVM Extensions.</b>
+                Назначение этого модуля — добавить поддержку дополнительной функциональности (новые JDK, <strong>JVM</strong>, версии HotSpot и т. д.), которую модули ядра VisualVM не поддерживали на момент выпуска VisualVM.
+                Этот плагин всегда полезно поставить в свежую установку VisualVM.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/security.jpg" rel="lightbox[plugins]" title="Security."><img src="images/security_thumb.jpg"/></a><b>Security.</b>
+                GUI для настройки keystore, truststore, протоколов и шифров для подключений SSL/TLS в VisualVM. Использование плагина эквивалентно
+                заданию соответствующих системных свойств <code>javax.net.ssl.*</code> и <code>javax.rmi.ssl.client.*</code><br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/buffer_monitor.jpg" rel="lightbox[plugins]" title="Buffer Monitor."><img src="images/buffer_monitor_thumb.jpg"/></a><b>Buffer Monitor.</b>
+                Плагин для мониторинга использования прямых буферов, созданных <code>ByteBuffer.allocateDirect</code>, и отображённых буферов, созданных <code>FileChannel.map</code>.
+                Учтите: мониторинг буферов требует, чтобы наблюдаемое приложение работало на JDK 7 начиная со сборки 36.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+                
+                <p><a href="images/killapp.jpg" rel="lightbox[plugins]" title="Kill Application."><img src="images/killapp_thumb.jpg"/></a><b>Kill Application.</b>
+                Позволяет завершить наблюдаемое приложение, которое перестало отвечать.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/systray.jpg" rel="lightbox[plugins]" title="System Tray."><img src="images/systray_thumb.jpg"/></a><b>System Tray.</b>
+                Позволяет свернуть/восстановить работающий экземпляр VisualVM в системный лоток / из него. На Mac OS X не поддерживается (ничего не делает).<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/jvmcap.jpg" rel="lightbox[plugins]" title="JVM Capabilities."><img src="images/jvmcap_thumb.jpg"/></a><b>JVM Capabilities.</b>
+                Добавляет на вкладку <strong>Overview</strong> (Обзор) дополнительный раздел с возможностями JVM наблюдаемого приложения.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/meviewer.jpg" rel="lightbox[plugins]" title="Java ME Profiler Snapshot Viewer."><img src="images/meviewer_thumb.jpg"/></a><b>Java ME Profiler Snapshot Viewer.</b>
+                Позволяет открыть файл <strong>Profiler</strong> (профилировщика) Java ME SDK в VisualVM.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/jconsoleplugins.jpg" rel="lightbox[plugins]" title="JConsole Plugins Container."><img src="images/jconsoleplugins_thumb.jpg"/></a><b>JConsole Plugins Container.</b>
+                Контейнер плагинов JConsole позволяет использовать существующие плагины JConsole (например JTop) внутри VisualVM. Плагины полностью работоспособны, но мы рекомендуем перенести их в плагины VisualVM,
+                чтобы лучше вписаться в рабочий процесс и интерфейс VisualVM и воспользоваться богатыми API VisualVM, которые дают больше источников данных с меньшей нагрузкой.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <h4 style="margin-top: 20px !important;">В разработке</h4>
+                
+                <p><a href="images/startup_profiler_small.jpg" rel="lightbox[plugins]" title="Startup Profiler."><img src="images/startup_profiler_thumb.jpg"/></a><b>Startup Profiler.</b>
+                Startup Profiler позволяет профилировать запуск локальных приложений Java 5+ и помогает профилировать короткоживущие процессы.
+                Подробности на <a href="startupprofiler.html">Startup Profiler plugin page</a> (страница плагина Startup Profiler).<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <p><a href="images/glassfish.jpg" rel="lightbox[plugins]" title="GlassFish Plugin."><img src="images/glassfish_thumb.jpg"/></a><b>GlassFish Plugin.</b>
+                Плагин GlassFish даёт дополнительные сведения для серверов GlassFish: число активных сеансов, обработанных транзакций и т. д. Он также умеет мониторить каждое развёрнутое
+                веб-приложение отдельно.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <hr/>
+
+                <p><a href="images/oql.jpg" rel="lightbox[plugins]" title="OQL Syntax Support."><img src="images/oql_thumb.jpg"/></a><b>OQL Syntax Support.</b>
+                Этот плагин устанавливает улучшенный редактор для консоли <strong>OQL</strong> (Object Query Language, язык запросов к объектам) в HeapWalker с подсветкой синтаксиса и базовым автодополнением кода.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <h4 style="margin-top: 20px !important;">Сторонние</h4>
+                
+                <p><a href="images/tda.jpg" rel="lightbox[plugins]" title="TDA Plugin."><img src="images/tda_thumb.jpg"/></a><b>TDA Plugin.</b>
+                Thread Dump Analyzer (TDA) для Java — небольшой GUI для анализа дампов потоков и сведений о куче, которые генерирует Sun Java VM. Он даёт статистику по дампам потоков, сведения о заблокированных мониторах и ожидающих потоках и многое другое.
+                Подробное описание: <a href="http://java.net/projects/tda/">http://java.net/projects/tda</a>.<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+
+                <hr/>
+
+                <p><a href="images/osgi.jpg" rel="lightbox[plugins]" title="OSGi Plugin."><img src="images/osgi_thumb.jpg"/></a><b>OSGi Plugin.</b>
+                Плагин для базового управления платформами OSGi через JMX. Подробное описание и инструкции по установке — на <a href="http://wiki.chameleon.ow2.org/xwiki/bin/view/Main/AdminTools">plugin page</a> (странице плагина).<br>
+                <i>Доступен в VisualVM Plugins Center</i>
+                </p>
+                
+                <hr/>
+
+                <p><a href="images/crash.jpg" rel="lightbox[plugins]" title="CRaSH Plugin."><img src="images/crash_thumb.jpg"/></a><b>CRaSH Plugin.</b>
+                Плагин для поддержки открытой оболочки CRaSH для платформы Java в VisualVM. Подробное описание и инструкции по установке — на <a href="http://www.crashub.org/#visualvm">plugin page</a> (странице плагина).<br>
+                <i>Доступен в Plugins Center поставщика</i>
+                </p>
+                
+                <hr/>
+
+                <p style="margin-bottom: 10px;"><a href="images/coherence.jpg" rel="lightbox[plugins]" title="Coherence Plugin."><img src="images/coherence_thumb.jpg"/></a><b>Coherence Plugin.</b>
+                Плагин Coherence позволяет разработчикам смотреть сводную статистику и сведения при подключении к кластеру Coherence с включённым JMX. Подробное описание и инструкции по установке — на <a href="http://coherence-community.github.io/coherence-incubator/12.1.0/jvisualvm/index.html">plugin page</a> (странице плагина).<br>
+                <i>Доступен на странице плагина поставщика</i>
+                </p>
+
+            </div>
+            
+            <a name="write_plugin"></a>
+            <h3 style="clear: both;">Написать плагин</h3>
+            <div>
+                <p style="margin-top: 5px;">Для разработчиков плагинов VisualVM сейчас доступны такие ресурсы:
+                </p>
+                
+                <ul>
+                    <li><a href="api-quickstart.html">Developer Documentation</a> (документация для разработчиков)
+                    </li>
+                    
+                    <li><a href="http://java.net/projects/visualvm/sources/svn/show">Sources</a> (исходный код)
+                    </li>
+                    
+                    <li><a href="build.html">Build Guide</a> (руководство по сборке)
+                    </li>
+                    
+                    <li><a href="http://java.dzone.com/announcements/visualvm-sample-collection-10">Sample Projects</a> (примеры проектов)
+                    </li>
+                    
+                    <li><a href="nonav/apidocs/137/index.html">API Documentation</a> (документация API)
+                    </li>
+                </ul>
+                
+                <p style="margin-bottom: 15px;">Много сведений и примеров плагинов VisualVM есть в <a href="https://blogs.oracle.com/geertjan">Geertjan's Blog</a> (блог Гертьяна Виленги).
+                Вопросы можно задавать и получать помощь в списке рассылки <a href="mailto:users@visualvm.java.net">users@visualvm.java.net</a> (чтобы пользоваться списком рассылки, нужно зарегистрироваться).
+                </p>
+            </div>
+            
+        </div>
+    </div>
+    
+    <div id="contents_hints">
+        
+        <h3 class="first">На этой странице</h3>
+        <div>
+            <a href="#get_plugins">Get Plugin</a> (получить плагин)
+            <a href="#available_plugins">Available Plugins</a> (доступные плагины)
+            <a href="#write_plugin">Write Plugin</a> (написать плагин)
+        </div>
+        
+        <h3>Быстрые ссылки</h3>
+        <div>
+            <a href="features.html">Features</a> (возможности)
+            <a href="api-quickstart.html">Developer Documentation</a> (документация для разработчиков)
+            <a href="http://java.net/jira/secure/CreateIssue.jspa?pid=10598&issuetype=2">Request a Feature</a> (предложить возможность)
+            <a href="mailto:feedback@visualvm.java.net">Send Feedback</a> (отправить отзыв)
+        </div>
+        
+    </div>
+    
+    <div id="contents_clear"></div>
+
+</div>
+
+</body>
+</html>

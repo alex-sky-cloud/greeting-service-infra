@@ -1,0 +1,44 @@
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Работа с Core Dumps в VisualVM</title>
+    </head>
+    <body>
+        <h1>Работа с Core Dumps</h1>
+        <p>Когда вы запускаете <strong>VisualVM</strong>, слева в окне VisualVM видно окно <strong>Applications</strong> (Приложения).
+        Окно Applications позволяет быстро просмотреть работающие локальные и удалённые приложения.
+        В нём также отображаются <strong>core dumps</strong> (дампы ядра) и снимки профилирования (<strong>profiling snapshots</strong>), сохранённые на вашем компьютере.</p>
+        
+        <p>Узел <strong>Core Dump</strong> (дамп ядра) виден в окне Applications, если VisualVM запущен на Solaris или Linux.
+        Как правило, VisualVM может открыть core dump только если он был снят на той же машине.
+        Core dump содержит сведения о <strong>JDK</strong> (Java Development Kit, комплект разработки Java) и ядре той машины, на которой он был создан.
+        Чтобы открыть core dump в VisualVM, эти сведения должны совпадать с JDK и ядром локальной системы.        </p>
+        
+        <p>Core dump — это двоичный файл, в котором зафиксировано всё содержимое кучи (<strong>heap</strong>) в момент снятия дампа.
+        Когда вы загружаете core dump в VisualVM, под узлом Core Dump появляется узел этого дампа.</p>
+        
+        <img src="images/docs/coredump-app-window.png" style="border:1px solid;" alt="снимок окна Applications с узлом Core Dump" 
+        title="окно Applications с развёрнутым узлом Core Dump" />
+        
+        <p>Чтобы посмотреть обзор core dump, щёлкните правой кнопкой узел дампа и выберите <strong>Open</strong> (Открыть).
+        (Либо дважды щёлкните узел.)</p>
+        <img src="images/docs/coredump-overview.png" style="border:1px solid;" alt="снимок вкладки Overview дампа ядра" 
+        title="вкладка Overview дампа ядра" />
+        
+        
+        
+        <p>Можно щёлкнуть правой кнопкой узел core dump и выбрать <strong>Heap Dump</strong> (дамп кучи) или <strong>Thread Dump</strong> (дамп потоков),
+        чтобы просмотреть дамп кучи и дамп потоков из этого core dump.</p>
+        <img src="images/docs/coredump-threaddump.png" style="border:1px solid;" alt="снимок вкладки Overview дампа ядра" 
+        title="вкладка thread dump дампа ядра" />
+        
+        <p>Затем дамп потоков и дамп кучи можно сохранить на локальный диск.
+        </p>
+        
+        <hr/>
+        <p><a href="docindex.html">Return to the VisualVM Documentation index</a> (вернуться к оглавлению документации VisualVM)</p>
+
+            
+            
+    </body>
+</html>

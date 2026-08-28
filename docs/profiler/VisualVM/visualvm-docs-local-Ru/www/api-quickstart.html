@@ -1,0 +1,708 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <!-- -*- xhtml -*- -->
+        <title>Начало работы с расширением VisualVM</title>
+        <link rel="stylesheet" type="text/css" href="http://www.netbeans.org/netbeans.css">
+        <meta name="author" content="gwielenga@netbeans.org">
+        <meta name="indexed" content="y">
+        <meta name="description" content="Краткое руководство по использованию API VisualVM.">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <style type="text/css">
+            <!--
+            table.ct {width: 850px;}
+            
+            th.ct {
+                padding: 10px;
+                background-color: #cad7f0;
+            }
+            
+            td.ct {
+                padding: 10px;
+                background-color: #f2f2f2;
+            }
+
+        #contents_main_doc p {
+            margin: 0px;
+            padding: 8px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            clear: both;
+        }
+
+        #contents_main_doc hr {
+            border: 1px dashed #cccccc;
+            border-collapse: collapse;
+            clear: both;
+        }
+
+        #contents_main_doc p img {
+            float: left;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            padding: 2px;
+            border: 1px solid #cccccc;
+        }
+
+        ol li, ul li {
+            padding-bottom: 3px;
+        }
+
+        #loginbox {
+            padding: 0px !important;
+        }
+            -->
+        </style>
+        
+        
+    </head>
+    <body>
+
+  <div id="contents_div">
+    <div id="contents_contents">
+        <div id="contents_main_doc">
+
+        <h1>Начало работы с расширением VisualVM</h1>
+        
+        
+<table class="tablebg" align="right">
+  <tr> 
+    <td class="tblheader">Загрузка руководства</td>
+  </tr>
+  <tr> 
+    <td class="tbltd0"> 
+      <p><a href="http://plugins.netbeans.org/PluginPortal/faces/PluginDetailPage.jsp?pluginid=6416">Загрузить образец</a></p>
+    </td>
+  </tr>
+</table>
+    
+        <p>VisualVM — инструмент для визуализации источников данных. По умолчанию он визуализирует
+        следующие типы источников данных&#8212;приложения, узлы (hosts), снимки, дампы ядра,
+        дампы кучи (Heap Dump) и дампы потоков (Thread Dump). Эти источники данных визуализируются в VisualVM, чтобы
+        их можно было контролировать в целях анализа, управления и устранения неполадок.
+        
+        <p>В этом руководстве вы познакомитесь
+        с API VisualVM, чтобы добавлять в VisualVM дополнительные
+        возможности. В основном будет показано, как начать
+        их использовать, и даны ссылки на дополнительные ресурсы, такие
+        как шаблоны и образцы. 
+        
+        <p>В целом есть два типа причин,
+        по которым вы можете захотеть расширить VisualVM:
+        
+        <ul>
+        <p><li><b>Ориентация на инструмент.</b> В этом сценарии у вас есть инструмент мониторинга
+        или управления, который
+        вы хотите сделать доступным в VisualVM. Например, у вас может быть
+        инструмент, который показывает потоки приложения или скорость обработки
+        новым интересным способом. В этом случае вы создадите плагин,
+        который сделает ваш инструмент доступным в VisualVM через новые вкладки и пункты
+        меню, чтобы пользователи VisualVM могли
+        воспользоваться набором возможностей вашего инструмента. 
+        <p><li><b>Ориентация на приложение.</b> В этом сценарии у вас
+        есть приложение со специфическими потребностями мониторинга и управления. Например,
+        если ваше приложение — сервер развёртывания, вы можете захотеть
+        дать пользователям графический обзор приложений, развёрнутых
+        на этом сервере. В этом случае нужно представить VisualVM новый тип
+        приложения. По умолчанию все ваши приложения будут обрабатываться
+        одинаково, и если у приложения есть одна или несколько
+        уникальных характеристик и вы хотите, чтобы они поддерживались
+        в VisualVM, вам нужно предоставить плагин для уникального типа
+        приложения таким образом.
+    </ul>
+        <h3>Содержание</h3>
+        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tbody><tr>
+                    <td align="left" valign="top">
+                        <ul>
+                            <li><a href="#entry">Точки входа VisualVM</a>
+                            <li><a href="#preparing">Подготовка к расширению VisualVM</a></li>
+                            <li><a href="#hello">Создание плагина «Hello World»</a></li>
+                            <li><a href="#trouble">Устранение неполадок</a></li>
+                            <li>Приложение A: <a href="#wizard">Шаблоны файлов VisualVM</a></li>
+                            <li>Приложение B: <a href="#sample">Образцы API VisualVM</a></li>
+                            <li>Приложение C: <a href="#api">Справочник API VisualVM</a>
+                            <li>Приложение D: <a href="#further">Дополнительное чтение</a></li>
+                        </ul> 
+                    </td>
+                </tr>
+        </tbody></table>
+        
+        <h2 class="tutorial"><a name="entry"></a>Точки входа VisualVM</h2>
+        
+        <p>Точки входа в VisualVM относятся к
+        следующим категориям:
+        
+        <ul>
+            <li><b>Расширение вкладки.</b> По умолчанию VisualVM предоставляет вкладки
+            с подписями вроде «Overview» (Обзор), «Monitor» (Монитор) и «Threads» (Потоки). Вы можете
+            создавать новые вкладки, такие же как эти. При желании ваши вкладки могут быть
+            расширяемыми, чтобы другие могли вставлять в них вложенные вкладки.
+            Ваши вкладки могут быть доступны
+            либо для всех источников данных в VisualVM, либо для конкретных типов источников данных.
+            <li><b>Расширение вложенной вкладки.</b> Внутри вкладок,
+            таких как перечисленные выше, можно предоставлять
+            новые вложенные вкладки. Однако это возможно, только если вкладка
+            определена как «подключаемая» (pluggable), что объясняется ниже. Следующие вкладки являются подключаемыми:
+            «Overview», «Monitor», «Threads», «Heap Dump» и «Host». При создании новой вложенной вкладки
+            можно указать её положение относительно других вложенных вкладок внутри вкладки.
+            Вложенные вкладки могут быть доступны для всех источников данных или для конкретных
+            источников данных.
+            <li><b>Расширение меню.</b> К источнику данных и его подоузлам
+            можно добавить один или несколько пунктов в контекстные меню.
+            <li><b>Расширение типа приложения.</b> По умолчанию все приложения,
+            визуализируемые в VisualVM, обрабатываются одинаково, то есть у них одни и те же значки
+            и вкладки, если только не предоставлен плагин с дополнительной функциональностью.
+            Вы также можете захотеть предоставить функциональность для конкретного приложения,
+            что означает, что нужно определить новый тип приложения.
+            Это можно сделать для чего-то простого, например чтобы предоставить отличительный значок для
+            запущенного экземпляра вашего приложения. Или вы можете
+            предоставить много функциональности, включая графики, чтобы показать
+            обработку вашего конкретного приложения.
+            <li><b>Расширение источника данных.</b> Источник данных «Application» — лишь
+            один из типов источников данных, которые можно контролировать и которыми можно управлять
+            в VisualVM. Другой источник данных — «Host»,
+            который позволяет контролировать и управлять локальными и удалёнными узлами.
+            Вы можете захотеть создать новые источники данных, когда нужно
+            контролировать и управлять типом источника данных, который VisualVM по умолчанию
+            не обслуживает.
+        </ul>    
+        
+        <p>Наглядное представление точек входа в VisualVM:
+        
+        <p><p><img src="images/big-entrypoints-diagram.png" border="1"/>
+        
+        <p>Точки входа в VisualVM реализуются через шаблон
+        фабрики. В этом свете основные API VisualVM таковы:
+        
+        <ul>
+            <li><b>Вкладки</b>
+            <br><tt>com.sun.tools.visualvm.core.ui.DataSourceViewProvider</tt>
+            <br>/<tt>com.sun.tools.visualvm.core.ui.DataSourceView</tt>
+            <p>Чтобы вкладки можно было расширять, нужно расширить следующий API
+            вместо com.sun.tools.visualvm.core.ui.DataSourceViewProvider:
+            <br><tt>com.sun.tools.visualvm.core.ui.PluggableDataSourceViewProvider</tt>
+            <li><b>Вложенные вкладки</b>
+            <br><tt>com.sun.tools.visualvm.core.ui.DataSourceViewPluginProvider</tt>
+            <br>/<tt>com.sun.tools.visualvm.core.ui.DataSourceViewPlugin</tt>
+            <li><b>Пункты меню</b>
+            <br><tt>com.sun.tools.visualvm.core.ui.actions.SingleDataSourceAction</tt>
+            <li><b>Типы приложений</b>
+            <br><tt>com.sun.tools.visualvm.application.type.MainClassApplicationTypeFactory</tt>
+            <br>/<tt>com.sun.tools.visualvm.application.type.ApplicationType</tt>
+            <li><b>Источники данных</b>
+            <br><tt>com.sun.tools.visualvm.core.model.AbstractModelProvider</tt>
+            <br>/<tt>com.sun.tools.visualvm.core.datasource.descriptor.DataSourceDescriptor</tt>
+            <br>/<tt>com.sun.tools.visualvm.core.datasource.DataSource</tt>
+        </ul>    
+        
+        <p><p>Жизненный цикл плагина VisualVM определяется классом <tt>ModuleInstall</tt>,
+        который входит в API NetBeans. Всякий раз, когда вы реализуете новую точку входа в
+        VisualVM, нужно предоставить код регистрации и отмены регистрации реализации точки входа.
+        Соответствующий код инициализации должен быть в классе <tt>ModuleInstall</tt>.
+        Когда плагин загружается в VisualVM, метод <tt>ModuleInstall.restored</tt>
+        — первый метод, вызываемый из вашего плагина. Именно этот метод
+        должен инициализировать точки входа. Когда плагин удаляется или когда VisualVM
+        завершает работу, точки входа плагина нужно снять с регистрации из метода
+        <tt>ModuleInstall.uninstalled</tt>. Типичный код
+        регистрации и отмены регистрации будет показан в следующем сценарии «Hello World».
+        
+        <h2><a name="preparing"></a>Подготовка к расширению VisualVM</h2>
+        
+        <p>Планируя расширять VisualVM, нужно
+        сделать следующее:
+        
+        <ul>
+            
+            <li><b>Установить JDK 7.</b> Сама VisualVM 1.3.7+ работает на JDK 7, даже
+            если она может контролировать и управлять приложениями, работающими
+            на более ранних версиях JDK. Создаваемые плагины
+            поэтому также должны использовать JDK 7, а
+            не более раннюю версию JDK.
+            
+            <li><b>Установить NetBeans IDE 6.x.</b> Хотя вы можете использовать
+            любой редактор или IDE для разработки плагинов VisualVM, NetBeans IDE
+            оптимизирована для разработки плагинов VisualVM. Например,
+            структуру проекта плагина VisualVM, а также несколько
+            полезных шаблонов может сгенерировать NetBeans IDE. На момент
+            написания аналогичные средства генерации кода для VisualVM
+            другими IDE не поддерживаются.
+            
+            <li><b>Зарегистрировать VisualVM в NetBeans IDE.</b> Вы будете
+            собирать плагины VisualVM относительно VisualVM, чтобы её
+            плагины (и API, предоставляемые этими плагинами) были доступны
+            вашим собственным плагинам. Когда вы поместите двоичный файл VisualVM в
+            NetBeans Platform Manager, вы позволите NetBeans IDE компилировать
+            плагин относительно VisualVM. Тогда API VisualVM будут доступны
+            вашему плагину. В меню <strong>Tools</strong> (Сервис) выберите <strong>NetBeans Platform
+            Manager</strong> и укажите корневой каталог установки VisualVM.
+            Нажмите <strong>Next</strong> (Далее), затем <strong>Finish</strong> (Готово). Позже, создавая
+            проект плагина VisualVM, вы сможете указать, что
+            плагин должен собираться относительно двоичного файла VisualVM, который вы
+            зарегистрировали выше.
+            
+            <li><b>Получить Javadoc VisualVM.</b> Документацию API для VisualVM 1.3.7
+            можно найти <a href="nonav/apidocs/137/index.html">здесь</a>.</li>
+            
+        </ul>
+        
+        <h2><a name="hello"></a>Создание плагина «Hello World»</h2>
+        
+        <p>Теперь скажем «Hello World». Мы создадим новую вкладку, которая выглядит так:
+        
+        <p><p><img src="images/api-quickstart/final-result.png" border="1"/>
+        
+        <p>На вкладке не будет данных: мы просто создадим её и добавим
+        заполнители для содержимого. 
+        
+        <ol>
+            <p><li>В NetBeans IDE выберите <strong>File</strong> (Файл) &gt; <strong>New Project</strong> (Новый проект), затем
+            выберите <strong>NetBeans Modules</strong> &gt; <strong>Module</strong>. Нажмите <strong>Next</strong> (Далее). Создайте новый модуль NetBeans
+            с именем «HelloVisualVM» и обязательно укажите, что
+            сборка должна идти относительно двоичного файла VisualVM, который вы зарегистрировали <a href="#preparing">ранее</a>:
+            
+            <p><p><img src="images/api-quickstart/new-module-1.png" border="1"/>
+            
+            <p>Нажмите <strong>Next</strong> (Далее) и заполните следующий шаг так:
+            
+            <p><p><img src="images/api-quickstart/new-module-2.png" border="1"/>
+            
+            <p>Нажмите <strong>Finish</strong> (Готово).
+            
+            <p><li>Щёлкните правой кнопкой узел проекта «HelloVisualVM» и выберите <strong>New</strong> (Создать) &gt; <strong>Other</strong> (Другое).
+            В диалоге New File воспользуйтесь мастером «Module Installer», который создаст класс, вызываемый
+            при установке плагина в VisualVM. Вот где находится мастер
+            в диалоге New File:
+            
+            <p><p><img src="https://blogs.oracle.com/geertjan/resource/extend-visualvm-5.png" border="1"/>
+            
+            <p><li>После завершения мастера реализуйте методы <tt>ModuleInstall.restored</tt>
+            и <tt>ModuleInstall.uninstalled</tt> следующим образом:
+            
+            <p><pre>@Override
+public void restored() {
+    HelloWorldViewProvider.initialize();
+}
+
+@Override
+public void uninstalled() {
+    HelloWorldViewProvider.unregister();
+}</pre>
+            
+            <p>Как видите, два метода выше мы определим в классе «HelloWorldViewProvider»,
+            который определим позже. Поэтому красные строки ошибок можно игнорировать: методы
+            вы создадите позже.
+            
+            <p><li>Теперь добавьте зависимость от «VisualVM-Core», который предоставляет API VisualVM.
+            Для этого щёлкните правой кнопкой узел проекта, выберите «Properties» (Свойства) и задайте
+            зависимость на вкладке «Libraries» (Библиотеки).
+            
+            <p><li>Создайте класс «HelloWorldViewProvider» следующим образом:
+            
+            <p><pre>class HelloWorldViewProvider extends DataSourceViewProvider&lt;Application&gt; {
+
+    private static DataSourceViewProvider&lt;Application&gt; instance =  new HelloWorldViewProvider();
+
+    <b>@Override</b>
+    public boolean supportsViewFor(Application application) {
+        //Always shown:
+        return true;
+    }
+
+    <b>@Override</b>
+    public synchronized DataSourceView createView(final Application application) {
+        return new HelloWorldView(application);
+
+    }
+    
+    static void initialize() {
+        DataSourceViewsManager.sharedInstance().addViewProvider(instance, Application.class);
+    }
+    
+    static void unregister() {
+        DataSourceViewsManager.sharedInstance().removeViewProvider(instance);
+    }
+    
+}</pre>
+            
+            <p>Прочитав Javadoc, который вы загрузили <a href="#preparing">ранее</a>, вы
+            узнаете, для чего нужны два переопределённых метода выше.
+            
+            <p><li>Наконец, создадим класс <tt>HelloWorldView</tt>, который создаётся нашим провайдером выше:
+            
+            <p><pre>class HelloWorldView extends DataSourceView {
+
+    private DataViewComponent dvc;
+    //Reusing an image from the sources:
+    private static final String IMAGE_PATH = "com/sun/tools/visualvm/coredump/resources/coredump.png"; // NOI18N
+
+    public HelloWorldView(Application application) {
+        super(application, "Hello World", new ImageIcon(Utilities.loadImage(IMAGE_PATH, true)).getImage(), 60, false);
+    }
+
+    <b>@Override</b>
+    protected DataViewComponent createComponent() {
+
+        <b>//Data area for master view:</b>
+        JEditorPane generalDataArea = new JEditorPane();
+        generalDataArea.setBorder(BorderFactory.createEmptyBorder(14, 8, 14, 8));
+
+        <b>//Panel, which we'll reuse in all four of our detail views for this sample:</b>
+        JPanel panel = new JPanel();
+
+        <b>//Master view:</b>
+        DataViewComponent.MasterView masterView = new DataViewComponent.MasterView
+                ("Hello World Overview", null, generalDataArea);
+
+        <b>//Configuration of master view:</b>
+        DataViewComponent.MasterViewConfiguration masterConfiguration = 
+                new DataViewComponent.MasterViewConfiguration(false);
+
+        <b>//Add the master view and configuration view to the component:</b>
+        dvc = new DataViewComponent(masterView, masterConfiguration);
+
+        <b>//Add configuration details to the component, which are the show/hide checkboxes at the top:</b>
+        dvc.configureDetailsArea(new DataViewComponent.DetailsAreaConfiguration(
+                "Hello World Details 1", true), DataViewComponent.TOP_LEFT);
+        dvc.configureDetailsArea(new DataViewComponent.DetailsAreaConfiguration(
+                "Hello World Details 2", true), DataViewComponent.TOP_RIGHT);
+        dvc.configureDetailsArea(new DataViewComponent.DetailsAreaConfiguration(
+                "Hello World Details 3 & 4", true), DataViewComponent.BOTTOM_RIGHT);
+
+        <b>//Add detail views to the component:</b>
+        dvc.addDetailsView(new DataViewComponent.DetailsView(
+                "Hello World Details 1", null, 10, panel, null), DataViewComponent.TOP_LEFT);
+        dvc.addDetailsView(new DataViewComponent.DetailsView(
+                "Hello World Details 2", null, 10, panel, null), DataViewComponent.TOP_RIGHT);
+        dvc.addDetailsView(new DataViewComponent.DetailsView(
+                "Hello World Details 3", null, 10, panel, null), DataViewComponent.BOTTOM_RIGHT);
+        dvc.addDetailsView(new DataViewComponent.DetailsView(
+                "Hello World Details 4", null, 10, panel, null), DataViewComponent.BOTTOM_RIGHT);
+
+        return dvc;
+
+    }
+    
+}</pre>
+            
+            <p><li>Щёлкните правой кнопкой узел проекта и выберите «Run» (Запустить).
+            Это установит плагин в новый экземпляр VisualVM,
+            и вы увидите новую вкладку для всех типов приложений:
+            
+        <p><p><img src="images/api-quickstart/final-result.png" border="1"/>
+            
+        </ol>
+        <p>Поздравляем, вы завершили сценарий Hello World!
+        
+        <h2><a name="trouble"></a>Устранение неполадок</h2>
+        
+        <p>Если инструкции для образца Hello World, описанные выше,
+        у вас не работают, сделайте следующее:
+        
+        <ol>
+        <li>Воспользуйтесь ссылкой «Download Sample» (Загрузить образец) вверху этой страницы, чтобы
+        загрузить образец.
+        <p><li>Установите загруженный файл NBM в NetBeans IDE через <strong>Tools</strong> (Сервис) | <strong>Plugins</strong> (Плагины) | <strong>Downloaded</strong> (Загруженные).
+        <p><li>Откройте мастер New Project (Ctrl-Shift-N) и найдите
+        образец в категории Samples | NetBeans Modules, как
+        показано здесь:
+        <p><p><img src="images/api-quickstart/trouble-1.png" border="1"/>
+        <p><li>Завершите мастер и, если вы не задали VisualVM как
+        платформу NetBeans, вы увидите проект вместе с
+        значками ошибок, как показано здесь:
+        <p><p><img src="images/api-quickstart/trouble-2.png" border="1"/>
+        <p><li>Выберите <strong>Tools</strong> (Сервис) | <strong>NetBeans Platforms</strong>, нажмите <strong>Add Platform</strong> (Добавить платформу) и укажите каталог
+        установки VisualVM, чтобы зарегистрировать её:
+        <p><p><img src="images/api-quickstart/trouble-3.png" border="1"/>
+        <p>Нажмите <strong>Next</strong> (Далее), затем <strong>Finish</strong> (Готово).
+        <li>Щёлкните правой кнопкой узел проекта «HelloVisualVM» в окне Projects
+        и выберите Properties (Свойства). На панели Libraries выберите VisualVM как
+        платформу NetBeans. Когда вы закроете диалог Project Properties,
+        пометки об ошибках должны исчезнуть.
+        <li>Запустите проект: результат должен совпасть с последним шагом
+        предыдущего раздела.
+        </ol>  
+        <p>Теперь просмотрите исходный код образца и сравните его со своим,
+        чтобы найти проблему.
+        
+        <h2><a name="wizard"></a>Приложение A: шаблоны файлов VisualVM</h2>
+        
+        <p>NetBeans Plugin Portal предоставляет мастеры, которые могут быть
+        полезны при начале расширения VisualVM:
+        
+        <ul>
+            <li><a href="http://plugins.netbeans.org/PluginPortal/faces/PluginDetailPage.jsp?pluginid=6503">VisualVM View Template.</a>
+             Даёт классы Java, нужные для создания новой вкладки для указанного
+             источника данных, вместе с применимыми
+             зависимостями проекта.</li>
+            <li><a href="http://plugins.netbeans.org/PluginPortal/faces/PluginDetailPage.jsp?pluginid=6664">VisualVM Application Type Template.</a>
+            Даёт классы Java, нужные VisualVM, чтобы распознать новое приложение Java по
+            его главному классу, чтобы был создан новый узел с уникальным отображаемым именем и значком
+            для указанного приложения, вместе с применимыми зависимостями проекта.</li>
+            <li><a href="http://plugins.netbeans.org/PluginPortal/faces/PluginDetailPage.jsp?pluginid=9962">VisualVM Action Template.</a>
+            Даёт класс Java, записи layer.xml и зависимости проекта для
+            нового пункта меню в обозревателе для указанного источника данных.</li>
+        </ul>
+        
+        <p>В каждом случае страница Plugin Portal описывает шаги при
+        использовании шаблона и также показывает большую часть кода, который генерируется для вас.
+        
+         <h2><a name="sample"></a>Приложение B: образцы API VisualVM</h2>
+        
+        <p>NetBeans Plugin Portal предоставляет коллекцию из 7 образцов, охватывающих
+        наиболее распространённые способы подключения к VisualVM:
+        
+        <p><img src="http://plugins.netbeans.org/nbpluginportal/files/images/1212076297454_vvm-samples-0.png" border="1"/>
+        
+        <p>Перейдите <a href="http://plugins.netbeans.org/PluginPortal/faces/PluginDetailPage.jsp?pluginid=10000">сюда, чтобы получить образцы</a>,
+        которые <a href="http://java.dzone.com/announcements/visualvm-sample-collection-10">описаны здесь на Javalobby</a>.
+        
+        <h2 class="tutorial"><a name="api"></a>Приложение C: справочник API VisualVM</h2>
+        <p>Когда вы получите исходный код VisualVM,
+        вы обнаружите, что приложение составляют
+        следующие модули. Каждый предоставляет набор API,
+        которыми можно расширять соответствующий модуль:
+        <p><img src="images/api-quickstart/vvm-sources.png" border="1"/>
+        <p>Краткий обзор пакетов, связанных с API, предоставляемых
+        модулями VisualVM, которые вы видите выше, вместе
+        с вопросами FAQ, которые могут возникнуть по концепциям,
+        относящимся к соответствующим пакетам:
+        <br>
+        <table class="ct">
+            <tbody>
+                <tr>
+                    <th class="ct">Пакет</th>
+                    <th class="ct">Описание</th>
+                    <th class="ct">Связанные FAQ</th>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.datasource</td>
+                    <td class="ct">Предоставляет классы, представляющие
+                        <tt>DataSources</tt>. <tt>DataSource</tt> может быть
+                        <tt>Application</tt>, <tt>Host</tt>, <tt>CoreDump</tt>, <tt>SnapShot</tt>
+                        или пользовательским <tt>DataSource</tt>, внесённым
+                    сторонним плагином.</td>
+                    <td class="ct"><ul>
+                        <li><a href="api-faq.html#what-is-datasource">Что такое <tt>DataSource</tt>?</a>
+                        <li><a href="api-faq.html#default-datasource">Каковы источники данных <tt>DataSources</tt> по умолчанию?</a>
+                            <li><a href="api-faq.html#why-create-datasource">Зачем создавать собственный <tt>DataSource</tt></a>?
+                    <li><a href="api-faq.html#how-create-datasource">Как создать собственный <tt>DataSource</tt>?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.datasupport</td>
+                    <td class="ct">Предоставляет слушатели и интерфейсы для
+                    поддержки источников данных.</td>
+                    <td class="ct"></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.application.views.monitor</td>
+                    <td class="ct">Предоставляет точку входа во вкладку «Monitor».</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#how-create-tabs">Как расширить вкладку Monitor?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.application.views.overview</td>
+                    <td class="ct">Предоставляет точку входа во вкладку «Overview».</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#how-create-tabs">Как расширить вкладку Overview?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.application.views.threads</td>
+                    <td class="ct">Предоставляет точку входа во вкладку «Threads».</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#how-create-tabs">Как расширить вкладку Threads?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.explorer</td>
+                    <td class="ct">Предоставляет точки входа в представление обозревателя.
+                        Например, можно создавать новые пункты меню на узле в
+                        обозревателе, слушать изменения и указывать,
+                    что должно происходить при развёртывании или свёртывании узла.</td>
+                    <td class="ct">
+                        <ul><li><a href="api-faq.html#how-add-menu-items">Как добавить пункты контекстного меню к типу приложения?</a>
+                            <li><a href="api-faq.html#how-add-menu-items-sub">Как добавить пункты контекстного меню к подоузлам типа приложения?</a>
+                </ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.heapdump</td>
+                    <td class="ct">Предоставляет точку входа во вкладку «Heap Dump».</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#how-create-tabs">Как расширить вкладку Heap Dump?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.model</td>
+                    <td class="ct">Предоставляет классы, определяющие базовую модель
+                        новых <tt>DataSources</tt>. Например, эти классы
+                    используются для синхронизации.</td>
+                    <td class="ct"></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.application.type</td>
+                    <td class="ct">Предоставляет предопределённые универсальные типы приложений.
+                        Например, тип приложения предоставляется для приложений Java Web Start,
+                        так что когда приложение развёртывается через
+                        Java Web Start, в VisualVM показывается отличительный текст, чтобы легко
+                        идентифицировать развёрнутое приложение. Есть также тип приложения
+                        по умолчанию, чтобы все приложения так или иначе
+                    распознавались.</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#what-apptype">Что такое тип приложения?</a>
+                    <li><a href="api-faq.html#default-apptype">Каковы типы приложений по умолчанию?</a>
+                    <li><a href="api-faq.html#why-create-apptype">Зачем создавать собственные типы приложений?</a>
+                    <li><a href="api-faq.html#how-create-apptype">Как создать собственные типы приложений?</a>
+                    <li><a href="api-faq.html#how-create-subnodes">Как добавить подоузлы к типу приложения?</a>
+                    <li><a href="api-faq.html#how-add-menu-items">Как добавить пункты контекстного меню к типу приложения?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.datasource.descriptor</td>
+                    <td class="ct">Предоставляет классы, которые нужно использовать при
+                    создании новых источников данных, таких как новые типы приложений.</td>
+                    <td class="ct"></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.host</td>
+                    <td class="ct">Предоставляет общий интерфейс для
+                        <tt>DataSources</tt>, представляющих узел, то есть localhost или удалённый узел.
+                    </td>
+                    <td class="ct"><ul><li><a href="api-faq.html#what-is-host">Что такое узел (host)?</a>
+                        <li><a href="api-faq.html#how-extend-host">Как добавить дополнительные представления для источника данных Host?</a>
+                <li><a href="api-faq.html#how-extend-host-overview">Как расширить вкладку Host «Overview»?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.jmx</td>
+                    <td class="ct">Предоставляет классы для работы с Java
+                        Management Extensions (JMX). Например, можно проверить,
+                        включён ли JMX для приложения, и затем
+                    включить или отключить функциональность, предоставляемую плагином.</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#ensure-jmx">Как убедиться, что JMX включён
+                    для приложения?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.jvm</td>
+                    <td class="ct">Предоставляет классы, позволяющие определять
+                        функциональность для конкретных версий JVM. Например,
+                        есть класс «SunJVM_6» и класс «SunJVM_7». Для каждого класса
+                        можно проверить, включены ли возможности, такие как мониторинг JVM,
+                    и затем включить или отключить функциональность, предоставляемую плагином.</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#ensure-jvm">Как проверить версию JVM, используемую источником данных?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.scheduler</td>
+                    <td class="ct">Предоставляет службы планировщика. Например,
+                        предоставляет службу планировщика на основе интервалов, которую можно
+                    использовать для выполнения задач через заданные интервалы.</td>
+                    <td class="ct"></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.application.snapshot</td>
+                    <td class="ct">Предоставляет точки входа в снимки.
+                        Например, можно получить список зарегистрированных
+                    снимков.</td>
+                    <td class="ct"></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.threaddump</td>
+                    <td class="ct">Предоставляет точку входа во вкладку «Thread Dump».</td>
+                    <td class="ct"><ul><li><a href="api-faq.html#how-create-tabs">Как расширить вкладку Thread Dump?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.ui</td>
+                    <td class="ct">Предоставляет точки входа, позволяющие
+                        создавать новые вкладки и вложенные вкладки. Например, помимо
+                        создания вкладок и вложенных вкладок можно определить, где
+                        они должны отображаться относительно существующих вкладок
+                        и вложенных вкладок, и определить, являются ли они подключаемыми.
+                    </td>
+                    <td class="ct"><ul><li><a href="api-faq.html#how-create-tabs">Как создавать новые вкладки и вложенные вкладки?</a></ul></td>
+                </tr>
+                <tr>
+                    <td class="ct">com.sun.tools.visualvm.core.ui.components</td>
+                    <td class="ct">Предоставляет компоненты, которые можно использовать
+                        для определения вкладок и вложенных вкладок. Например, каждая вкладка
+                        делится на главную область и четыре области сведений,
+                        у каждой из которых могут быть области конфигурации для показа и скрытия.
+                    </td>
+                    <td class="ct"><ul><li><a href="api-faq.html#how-layout-view">Какие компоненты можно использовать для оформления представления?</a></ul></td>
+                </tr>
+        </tbody></table>
+      
+        
+        <h2><a name="further"></a>Приложение D: дополнительное чтение</h2>
+        
+        <p>Чтобы продолжить изучение API VisualVM, рекомендуется
+        обратиться к следующим ресурсам:
+        
+        <ol>
+            <li><b>Получить Javadoc VisualVM.</b> Документацию API для VisualVM 1.3.7
+            можно найти <a href="nonav/apidocs/137/index.html">здесь</a>.</li>
+            <li><b>FAQ разработчика VisualVM.</b> <a href="api-faq.html">Полный список типичных вопросов</a>
+            по API VisualVM вместе со многими образцами кода,
+            которые на них отвечают.
+            <li><b>Исходный код VisualVM.</b> Если вы читаете исходный код VisualVM, вы сможете
+            ответить на несколько вопросов по реализации API. Например,
+            в исходном коде можно найти несколько подключаемых представлений, на которых можно учиться
+            при создании собственных подключаемых представлений. 
+            <li><b>Плагины VisualVM.</b> Когда вы загружаете исходный код VisualVM,
+                вы также загружаете исходный код
+                набора плагинов. Их можно изучать и учиться
+                на них. Относитесь к ним как к образцам. На момент написания с исходным кодом поставляются
+                следующие плагины:
+                <p><ul>
+                    <li><b>GlassFish.</b> Этот плагин предоставляет новый тип приложения
+                        для сервера GlassFish. Для каждого запущенного экземпляра GlassFish создаётся
+                        узел нового типа приложения. Все развёрнутые
+                        приложения представлены подоузлами, с дальнейшими подоузлами
+                        для каждого сервлета в приложении. Кроме того, предоставляются вкладки,
+                        специфичные для каждого экземпляра сервера, приложения и сервлета.</li>
+                    <li><b>MBeans.</b> Этот плагин предоставляет новую вкладку для всех
+                    приложений с включённым JMX. Сведения на вкладке
+                    точно такие же, как на вкладке MBeans в приложении JConsole из JDK.
+                    <li><b>JConsole.</b> Этот плагин делает VisualVM восприимчивым
+                    к плагинам JConsole, так что вложения в плагины JConsole не теряются
+                    при переходе с JConsole на VisualVM.
+                </ul>
+                
+            </li> 
+            <li><b>Записи в блоге Гертьяна Виленги (Geertjan Wielenga).</b> Гертьян —
+                технический писатель, отвечающий за документирование API VisualVM.
+                Изучая API VisualVM, он написал серию записей в блоге
+                об API VisualVM, которые изучал. 
+                
+                <p><b>Примечание:</b> с момента написания этих записей несколько API
+                изменились, но они хотя бы дают представление о том, что
+                входит в каждый описанный сценарий.
+                <p>Соответствующие
+                записи в блоге:
+                <p><ul>
+                    <li><b><a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm"> Getting Started Extending VisualVM (Part 1)</a>.</b>
+                    Здесь вы создаёте первое расширение вкладки. Вы узнаёте, что вкладки VisualVM
+                    делятся на главные представления, конфигурации главных представлений
+                    и представления сведений. Эта запись воспроизведена в разделе «Hello World»
+                    данного руководства.
+                    <li><b><a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part">Getting Started Extending VisualVM (Part 2)</a>.</b>
+                    Здесь вы создаёте расширение типа приложения с расширением вложенной вкладки
+                    внутри вкладки Overview и расширением меню, оба специально
+                    для типа приложения.
+                    <li><b><a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part1">Getting Started Extending VisualVM (Part 3)</a>.</b>
+                    Здесь вы знакомитесь с подоузлами типа приложения и
+                    направляетесь к плагину GlassFish за соответствующим исходным кодом.
+                    <li><b><a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part2">Getting Started Extending VisualVM (Part 4)</a>.</b>
+                    Здесь подчёркивается расширяемость вкладок «Overview», «Monitor» и «Threads».
+                    Кроме того, показано, как сделать собственные вкладки
+                    расширяемыми.
+                    <li><b><a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part3">Getting Started Extending VisualVM (Part 5)</a>.</b>
+                    Здесь обсуждается расширяемость источника данных «Host». Приведён код
+                    для добавления вкладки в представление Localhost и вложенной вкладки на его вкладку Overview.
+                    <li><b><a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part4">Getting Started Extending VisualVM (Part 6)</a>.</b>
+                    Здесь вы многое узнаёте о главных акторах VisualVM&#8212;источниках данных. Кроме того, показан
+                    весь код, нужный для создания собственного источника данных.
+                    <li><b><a href="https://blogs.oracle.com/geertjan/entry/comparing_data_sources_in_visualvm">Getting Started Extending VisualVM (Part 7)</a>.</b>
+                    Здесь вы узнаёте, как создать вкладку для сравнения данных из нескольких экземпляров одного типа источника данных.
+                    В этом случае вкладка содержит системные свойства (или аргументы JVM)
+                    всех запущенных приложений Java одновременно.
+                </ul>    
+            </li>
+            
+        </ol>
+        
+    </div>
+  </div>
+  <div id="contents_clear"></div>
+</div>
+        
+    </body>
+</html>

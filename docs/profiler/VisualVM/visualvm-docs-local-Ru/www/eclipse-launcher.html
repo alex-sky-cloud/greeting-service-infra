@@ -1,0 +1,142 @@
+<html>
+    <head>
+
+        <meta charset="utf-8" />
+        <title>Eclipse launcher для VisualVM</title>
+
+        <style>
+
+                                    #contents_main p, #contents_main h4 {
+                                        margin: 0px;
+                                        padding: 8px;
+                                        padding-top: 5px;
+                                        padding-bottom: 5px;
+                                        clear: both;
+                                    }
+
+                                    #contents_main hr {
+                                        border: 1px dashed #cccccc;
+                                        border-collapse: collapse;
+                                        clear: both;
+                                    }
+
+                                    #contents_main p img {
+                                        float: left;
+                                        margin-right: 8px;
+                                        margin-bottom: 8px;
+                                        padding: 2px;
+                                        border: 1px solid #cccccc;
+                                    }
+
+                                    ol li, ul li {
+                                        padding-bottom: 3px;
+                                    }
+
+        </style>
+
+        <link rel="stylesheet" type="text/css" href="https://visualvm.java.net/shadowbox/shadowbox.css">
+        <script type="text/javascript" src="https://visualvm.java.net/shadowbox/shadowbox.js"></script>
+        <script type="text/javascript">
+        Shadowbox.init();
+        </script>
+
+    </head>
+
+    <body>
+
+        <div id="contents_div">
+
+            <div id="contents_contents">
+                <div id="contents_main">
+
+                    <h1>Eclipse launcher для VisualVM</h1>
+
+                    <p>
+                        Eclipse launcher для <strong>VisualVM</strong> — это <strong>plugin</strong> (плагин) <strong>Eclipse</strong>, который делает мониторинг и профилирование проектов Eclipse с помощью
+                        VisualVM удобнее для пользователей IDE. Он запускает VisualVM вместе с наблюдаемым приложением и
+                        после старта VisualVM автоматически открывает вкладку приложения.
+                    </p>
+
+                    <p style="margin-bottom: 15px;">
+                        <b>Примечание: </b> Eclipse launcher для VisualVM поддерживает VisualVM 1.1 и новее; со старыми выпусками инструмента он работает некорректно.
+                    </p>
+
+                    <a name="download"></a>
+                    <h3>Загрузка</h3>
+                    <div style="background: #f0f1f2; padding: 10px; padding-left: 20px; margin-bottom: 10px;">
+                        <div><a href="http://java.net/projects/visualvm/downloads/download/release133/visualvm_launcher_u1_eclipse_36.zip"><span style="font-size: 14px; font-weight: bold;">VisualVM Launcher (Eclipse 3.6+)</span></a> (.zip, 39.7KB)</div>
+                        <div><a href="http://java.net/downloads/visualvm/release11/visualvm-launcher.zip"><span style="font-size: 10px; font-weight: bold;">VisualVM Launcher (Eclipse 3.5)</span></a> (.zip, 42KB)</div>
+                    </div>
+
+                    <a name="installation"></a>
+                    <h3>Установка</h3>
+                    <div>
+                        <ul>
+                           <li> <span style="font-size: 14px; font-weight: bold;">Eclipse 3.6+</span>
+                              <ol>
+                                <li>Распакуйте архив в каталог по вашему выбору</li>
+	                        <li>Добавьте локальный update site, указывающий на выбранный каталог</li>
+                                <li>Установите VisualVM Launcher Feature</li>
+                              </ol>
+                           </li>
+                           <li> <span style="font-size: 14px; font-weight: bold;">Eclipse 3.5</span>
+                              <ol>
+                                 <li>Распакуйте архив в каталог установки Eclipse</li>
+                              </ol>
+                           </li>
+                        </ul>
+                    </div>
+
+                    <a name="preferences"></a>
+                    <h3>Настройка</h3>
+                    <p>
+                        Перейдите в <b>Run/Debug-Launching-VisualVM Configuration</b> (Запуск/Отладка — Запуск — Конфигурация VisualVM) <a href="images/eclipse/preferences.png" rel="lightbox[eclipselauncher]" title="Настройка VisualVM launcher." target="_new">preferences section</a> (раздел параметров)<br>
+                        Здесь можно изменить:
+                    </p>
+                    <ul>
+                        <li>JDK Home, который будет использовать VisualVM (нужен <strong>JDK</strong> (Java Development Kit, комплект разработки Java), а не JRE)</li>
+                        <li>Путь к исполняемому файлу VisualVM (поддерживается VisualVM 1.1+)</li>
+                    </ul>
+
+                    <a name="usage"></a>
+                    <h3>Использование</h3>
+                    <div>
+                        <ol>
+                            <li>
+                                Создайте новую <a href="images/eclipse/configuration.png" rel="lightbox[eclipselauncher]" title="Создание новой конфигурации приложения." target="_new">application configuration</a> (конфигурацию приложения)
+                            </li>
+                            <li>
+                                Выберите <b>"VisualVM Launcher"</b> как <a href="images/eclipse/launcher.png" rel="lightbox[eclipselauncher]" title="Настройка запускателя приложения." target="_new">application launcher</a> (запускатель приложения)
+                            </li>
+                            <li>Запустите или отладьте приложение с созданной конфигурацией — VisualVM запустится автоматически</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            <div id="contents_hints">
+
+                <h3 class="first">На этой странице</h3>
+                <div>
+                    <a href="#download">Download</a> (загрузка)
+                    <a href="#installation">Installation</a> (установка)
+                    <a href="#preferences">Configuration</a> (настройка)
+                    <a href="#usage">Usage</a> (использование)
+                </div>
+
+                <h3>Быстрые ссылки</h3>
+                <div>
+                    <a href="features.html">VisualVM Features</a> (возможности VisualVM)
+                    <a href="download.html">Download VisualVM</a> (загрузить VisualVM)
+                    <a href="http://java.net/jira/secure/CreateIssue.jspa?pid=10598&issuetype=2">Request a Feature</a> (предложить возможность)
+                    <a href="mailto:feedback@visualvm.java.net">Send Feedback</a> (отправить отзыв)
+                </div>
+
+            </div>
+
+            <div id="contents_clear"></div>
+
+        </div>
+
+    </body>
+</html>

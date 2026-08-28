@@ -1,0 +1,32 @@
+/* Локальная оболочка: без шапки Oracle, боковой панели и подвала. */
+header, footer, noscript,
+a.accessibility-top, .zz-skip-header,
+#ohc-header, #ohc-footer, #LEFT, #leftnav, aside.left,
+.footer-container, .headersearch, #signin {
+  display: none !important;
+}
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+}
+.row {
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+.IND, .IND.large-9.medium-8.columns {
+  width: auto !important;
+  max-width: 48rem;
+  margin: 0 auto !important;
+  padding: 1.25rem 1.25rem 3rem !important;
+  float: none !important;
+}
+.local-top {
+  font-size: 14px;
+  margin: 0 0 1.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid #d6dfe6;
+}
+.local-top a { color: #1d5aab; text-decoration: none; }
+.local-top a:hover { text-decoration: underline; }

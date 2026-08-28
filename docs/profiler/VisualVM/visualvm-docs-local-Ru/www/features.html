@@ -1,0 +1,210 @@
+<html>
+<head>
+    
+    <meta charset="utf-8" />
+    <title>Возможности</title>
+    
+    <style>            
+            
+        #contents_main p {
+            margin: 0px;
+            padding: 8px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            clear: both;
+        }
+
+        #contents_main h3 {
+            clear: both;
+        }
+        
+        #contents_main hr {
+            border: 1px dashed #cccccc;
+            border-collapse: collapse;
+            clear: both;
+        }
+
+        #contents_main p img {
+            float: left;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            padding: 2px;
+            border: 1px solid #cccccc;
+        }
+
+    </style>
+
+    <link rel="stylesheet" type="text/css" href="https://visualvm.java.net/shadowbox/shadowbox.css">
+    <script type="text/javascript" src="https://visualvm.java.net/shadowbox/shadowbox.js"></script>
+    <script type="text/javascript" src="https://visualvm.java.net/js/screenshots.js"></script>
+    <script type="text/javascript">
+      Shadowbox.init();
+    </script>
+    
+</head>
+
+<body>
+
+<div id="contents_div">
+    
+    <div id="contents_contents">
+        <div id="contents_main">
+            
+            <h1>Возможности</h1>
+            
+            <p>
+                <strong>VisualVM</strong> — инструмент для мониторинга и устранения неполадок приложений Java. Он работает на Oracle/Sun <strong>JDK</strong> (Java Development Kit, комплект разработки Java) 7+ (или JDK 6+ для VisualVM 1.3.6 и более ранних версий), но умеет мониторить приложения, работающие на JDK 1.4 и выше. Он использует
+                различные доступные технологии: jvmstat, <strong>JMX</strong>, Serviceability Agent (SA) и Attach API — чтобы получать данные и автоматически выбирает самую быструю и лёгкую технологию,
+                чтобы минимально нагружать наблюдаемые приложения.
+            </p>
+            
+            <p style="margin-bottom: 15px;">
+                Встроенных возможностей достаточно для разработчиков приложений, системных администраторов, инженеров по качеству и — не в последнюю очередь —
+                пользователей приложений, которые отправляют отчёты об ошибках со всеми нужными сведениями.
+            </p>
+
+            <a name="demo"></a>
+            <h3>Демонстрация</h3>
+            <div style="background: #f0f1f2; padding: 5px; padding-left: 0px; padding-bottom: 0px; margin-bottom: 10px;">
+                <p><a href="http://youtu.be/z8n7Bg7-A4I" target="blank" title="Скринкаст VisualVM."><img src="images/screencast_small.png"/></a><b>Посмотрите скринкаст, чтобы узнать самые важные возможности VisualVM!</b>
+                </p>
+                <hr style="border: 0px; padding: 0px; margin: 0px; height: 0px; color: #f0f1f2; visibility: hidden;"><!-- NOTE: the <hr> is a workaround for IE -->
+            </div>
+            
+            <a name="features"></a>
+            <h3>Возможности</h3>
+            <div>                
+                <p style="margin-top: 5px;"><a href="images/localremoteapps.jpg" rel="lightbox[screenshots]" title="Отображение локальных и удалённых приложений Java."><img src="images/localremoteapps_thumb.jpg"/></a><b>Отображение локальных и удалённых приложений Java.</b> VisualVM автоматически обнаруживает и перечисляет локально и удалённо работающие приложения Java (на удалённом узле должен работать <code>jstatd</code>).
+                    Приложения также можно задать вручную через подключение JMX. Так легко увидеть, какие приложения Java работают в вашей системе, или проверить, жив ли процесс удалённого сервера J2EE.
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/overview.jpg" rel="lightbox[screenshots]" title="Отображение конфигурации приложения и среды выполнения."><img src="images/overview_thumb.jpg"/></a><b>Отображение конфигурации приложения и среды выполнения.</b> Для каждого приложения VisualVM показывает основные сведения о выполнении: PID, главный класс, аргументы, переданные процессу <code>java</code>, версия <strong>JVM</strong> (Java Virtual Machine, виртуальная машина Java), каталог JDK, флаги и аргументы JVM и системные свойства.
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/monitor.jpg" rel="lightbox[screenshots]" title="Мониторинг производительности приложения и потребления памяти."><img src="images/monitor_thumb.jpg"/></a><b>Мониторинг производительности приложения и потребления памяти.</b> VisualVM мониторит использование <strong>CPU</strong> (процессора) приложением, активность <strong>GC</strong> (Garbage Collection, сборка мусора), память кучи и постоянного поколения (permanent generation), число загруженных классов и работающих потоков.
+                    Легко обнаружить подозрительное потребление памяти и действовать — вызвать сборку мусора в приложении или снять <strong>Heap Dump</strong> (дамп кучи) и просмотреть содержимое кучи приложения.
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/threads.jpg" rel="lightbox[screenshots]" title="Мониторинг потоков приложения."><img src="images/threads_thumb.jpg"/></a><b>Мониторинг потоков приложения.</b> Все потоки, работающие в процессе Java, отображаются на временной шкале и в таблице.
+                    Можно отслеживать активность потоков и находить неэффективные шаблоны: заблокированный Event Dispatch Thread или неиспользуемые рабочие потоки.
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/profiler.jpg" rel="lightbox[screenshots]" title="Профилирование производительности приложения или анализ выделения памяти."><img src="images/profiler_thumb.jpg"/></a><b>Профилирование производительности приложения или анализ выделения памяти.</b>
+                    В VisualVM есть встроенный <strong>Profiler</strong> (профилировщик) приложения, который одним щелчком мыши без дополнительной настройки показывает, где тратится больше всего времени или какие объекты потребляют больше всего памяти.
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/threaddump.jpg" rel="lightbox[screenshots]" title="Снятие и отображение дампов потоков."><img src="images/threaddump_thumb.jpg"/></a><b>Снятие и отображение дампов потоков.</b> Снять и показать <strong>Thread Dump</strong> (дамп потоков) так же просто, как нажать кнопку мыши.
+                    Чтобы понять, что сейчас происходит в приложении, командная строка вообще не нужна. Более того, дампы потоков нескольких приложений можно снять одновременно, чтобы начать искать распределённые взаимные блокировки (deadlocks).
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/heapdump.jpg" rel="lightbox[screenshots]" title="Снятие и просмотр дампов кучи."><img src="images/heapdump_thumb.jpg"/></a><b>Снятие и просмотр дампов кучи.</b> Когда нужно просмотреть содержимое памяти приложения или найти утечку памяти, встроенный инструмент HeapWalker очень удобен.
+                    Он читает файлы в формате <code>hprof</code> и умеет просматривать дампы кучи, созданные JVM при OutOfMemoryException.
+                </p>
+                
+                <hr/>
+                
+                <p><a href="images/coredump.jpg" rel="lightbox[screenshots]" title="Анализ дампов ядра."><img src="images/coredump_thumb.jpg"/></a><b>Анализ дампов ядра.</b> Когда процесс Java аварийно завершается, JVM может создать core dump с важными сведениями о состоянии приложения в момент сбоя.
+                    VisualVM умеет показывать конфигурацию приложения и среду выполнения и извлекать дампы потоков и кучи из core dump.
+                </p>
+                
+                <hr/>
+                
+                <p style="margin-bottom: 10px;"><a href="images/appsnapshot.jpg" rel="lightbox[screenshots]" title="Анализ приложений в автономном режиме."><img src="images/appsnapshot_thumb.jpg"/></a><b>Анализ приложений в автономном режиме.</b> VisualVM умеет сохранять конфигурацию приложения и среду выполнения вместе со всеми снятыми дампами потоков, дампами кучи и снимками профилировщика в один <strong>snapshot</strong> (снимок) приложения, который затем можно обрабатывать автономно.
+                    Это особенно полезно для отчётов об ошибках: пользователь может предоставить один файл со всеми сведениями, нужными, чтобы определить среду выполнения и состояние приложения.
+                </p>
+            </div>
+            
+            <a name="extensibility"></a>
+            <h3>Расширяемость</h3>
+            <div>
+                <p style="margin-top: 5px;"><a href="images/plugins.jpg" rel="lightbox[screenshots]" title="VisualVM легко расширяется плагинами."><img src="images/plugins_thumb.jpg"/></a>
+                    Поскольку VisualVM построен на <a href="http://platform.netbeans.org">NetBeans Platform</a>, его архитектура модульная и легко расширяется <strong>plugin</strong> (плагинами). В VisualVM Plugin Center доступны различные
+                    плагины, включая сторонние; другие плагины можно получить отдельной загрузкой у их авторов. Список
+                    сейчас доступных плагинов — на странице <a href="plugins.html">Plugins</a> (плагины).
+                </p>
+                
+                <p style="margin-bottom: 10px;">
+                    Если нужна особая возможность или поддержка проприетарного инструмента, можно написать свой плагин. Это несложно: для API NetBeans Platform и VisualVM есть много сведений и примеров кода. Хорошая отправная точка — страница <a href="https://visualvm.java.net/api-quickstart.html">Developer Documentation</a> (документация для разработчиков).
+                </p>
+            </div>
+
+            <a name="ideintegration"></a>
+            <h3>Интеграция с IDE</h3>
+            <div>
+                <p style="margin-top: 5px; margin-bottom: 10px;">
+                    VisualVM можно интегрировать с IDE, чтобы мониторить и анализировать код итеративно во время разработки. Интеграция доступна для этих IDE:
+                    <ul>
+                        <li style="margin-bottom: 5px;"><b>Eclipse IDE: </b>VisualVM запускается вместе с наблюдаемым приложением и автоматически открывает его после старта, чтобы мониторинг или профилирование было удобнее. См. <a href="eclipse-launcher.html">Eclipse launcher for VisualVM page</a> (страница Eclipse launcher для VisualVM) для сведений и получения плагина.</li>
+                        <li><b>NetBeans IDE: </b>используйте профилировщик NetBeans! NetBeans уже даёт базовые возможности мониторинга и предлагает полнофункциональный профилировщик, плотно встроенный в рабочий процесс IDE. Дополнительно к VisualVM есть поддержка JDK 5, удалённое профилирование, профилирование Java EE, автоматический анализ кучи,
+                        интеграция с проектами/исходниками и многое другое. См. <a href="http://profiler.netbeans.org">profiler module home</a> (домашняя страница модуля профилировщика) для подробностей.</li>
+                    </ul>
+                </p>
+
+                <!--p style="margin-bottom: 10px;">
+                    If you need a special feature or support for a proprietary tool, you can implement your own plugin. It's easy and there is plenty of information and sample code available for both the NetBeans Platform and VisualVM APIs. A good place to start is the <a href="https://visualvm.java.net/api-quickstart.html">Developer Documentation</a> page.
+                </p-->
+            </div>
+            
+            <a name="feature_matrix"></a>
+            <h3>Матрица возможностей</h3>
+            <div>
+                <center style="margin-top: 15px; margin-bottom: 15px;">
+                    <table border="1" cellspacing="0" width="95%">
+                        <tr><td style="vertical-align: middle;"><b>Возможность</b></td><td style="text-align:center;" width="15%"><b>JDK 1.4.2<br><small>локально/удалённо</small></b></td><td style="text-align:center;" width="15%"><b>JDK 5<br><small>локально/удалённо</small></b></td><td style="text-align:center;" width="15%"><b>JDK 6<br><small>локально</small></b></td><td style="text-align:center;" width="15%"><b>JDK 6<br><small>удалённо</small></b></td></tr>
+                        <tr><td>Overview</td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td></tr>
+                        <tr><td>System Properties (in Overview)</td><td style="text-align:center;">&nbsp</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td>&nbsp</td></tr>
+                        <tr><td>Monitor</td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td></tr>
+                        <tr><td>Threads</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td></tr>
+                        <tr><td>Profiler</td><td>&nbsp</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td>&nbsp</td></tr>
+                        <tr><td>Thread Dump</td><td>&nbsp</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td>&nbsp</td></tr>
+                        <tr><td>Heap Dump</td><td>&nbsp</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td>&nbsp</td></tr>
+                        <tr><td>Enable Heap Dump on OOME</td><td>&nbsp</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td>&nbsp</td></tr>
+                        <tr><td>MBean Browser (plugin)</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td></tr>
+                        <tr><td>Wrapper for JConsole plugins (plugin)</td><td>&nbsp</td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td><td style="text-align:center;"><img src="images/check.png"/></td></tr>
+                    </table>
+                </center>
+            </div>
+            
+        </div>
+    </div>
+    
+    <div id="contents_hints">
+        
+        <h3 class="first">На этой странице</h3>
+        <div>
+            <a href="#demo">Demo</a> (демонстрация)
+            <a href="#features">Features</a> (возможности)
+            <a href="#extensibility">Extensibility</a> (расширяемость)
+            <a href="#ideintegration">IDE Integration</a> (интеграция с IDE)
+            <a href="#feature_matrix">Feature Matrix</a> (матрица возможностей)
+        </div>
+        
+        <h3>Быстрые ссылки</h3>
+        <div>
+            <a href="javascript:showScreenshots();">Screenshots</a> (снимки экрана)
+            <a href="plugins.html">Plugins</a> (плагины)
+            <a href="relnotes.html#system_requirements">System Requirements</a> (системные требования)
+            <a href="http://java.net/jira/secure/CreateIssue.jspa?pid=10598&issuetype=2">Request a Feature</a> (предложить возможность)
+            <a href="mailto:feedback@visualvm.java.net">Send Feedback</a> (отправить отзыв)
+        </div>
+        
+    </div>
+    
+    <div id="contents_clear"></div>
+
+</div>
+
+</body>
+</html>

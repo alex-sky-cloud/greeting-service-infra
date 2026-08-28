@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Запуск Java Flight Recorder</title>
+<meta name="description" content="В этой главе описывается, как запускать Java Flight Recorder.">
+<link rel="stylesheet" href="../../dcommon/css/fusiondoc.css">
+<link rel="stylesheet" href="../../nav/css/html5.css">
+<link rel="stylesheet" href="../../dcommon/css/local-clean.css">
+</head>
+<body>
+<div class="row" id="CONTENT">
+<div class="IND" dir="ltr">
+<a id="BEGIN" name="BEGIN"></a>
+<p class="local-top"><a href="toc.htm">Содержание</a></p>
+<div id="JFRUH164" class="chapter"><a id="CHDEHEAC"></a>
+<h1 class="chapter"><span class="secnum">2</span> Запуск Java Flight Recorder</h1>
+<p><a id="JFRUH175"></a>В этой главе описывается, как запускать Java Flight Recorder.</p>
+<div class="infobox-note">
+<p class="notep1">Примечание:</p>
+Для использования Java Flight Recorder в производственной среде требуется коммерческая лицензия. Подробнее о коммерческих функциях и о том, как их включить, см. по адресу <code dir="ltr"><a href="http://www.oracle.com/technetwork/java/javaseproducts/">http://www.oracle.com/technetwork/java/javaseproducts/</a></code>.</div>
+<p>Можно одновременно выполнять несколько записей (recordings) и настраивать каждую запись с помощью различных параметров; в частности, разные записи можно настроить на захват разных наборов событий. Однако, чтобы внутренняя логика Java Flight Recorder была как можно более простой, итоговая запись всегда содержит объединение всех событий всех записей, активных в данный момент. Это означает, что если выполняется более одной записи, в ней может оказаться больше сведений, чем требовалось. Это может вызывать путаницу, но иных отрицательных последствий не имеет.</p>
+<p>Самый простой и наглядный способ использовать <strong>JFR</strong> (Java Flight Recorder, журнал полёта Java) — через плагин Flight Recorder, встроенный в Java Mission Control. Этот плагин открывает доступ к возможностям <strong>JFR</strong> через наглядный <strong>GUI</strong>. Подробнее об управлении <strong>JFR</strong> с помощью клиента <strong>JMC</strong> (Java Mission Control) см. в разделе о плагине Flight Recorder справки Java Mission Control.</p>
+<p>В этой главе рассматриваются более сложные способы запуска и управления записями <strong>JFR</strong> и содержатся следующие разделы:</p>
+<ul>
+<li>
+<p><a href="run.htm#CHDIDCHG">Использование командной строки</a></p>
+</li>
+<li>
+<p><a href="run.htm#A1118227">Использование диагностических команд</a></p>
+</li>
+<li>
+<p><a href="run.htm#CHDCHAFF">Настройка записей</a></p>
+</li>
+<li>
+<p><a href="run.htm#CHDICEAE">Автоматическое создание записей</a></p>
+</li>
+<li>
+<p><a href="run.htm#A1118624">Безопасность</a></p>
+</li>
+<li>
+<p><a href="run.htm#A1092559">Устранение неполадок</a></p>
+</li>
+</ul>
+<a id="CHDIDCHG"></a>
+<div id="JFRUH176" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">2.1</span> Использование командной строки</h2>
+<p>Запись можно запустить и настроить из командной строки с помощью параметра <code dir="ltr">-XX:StartFlightRecording</code> команды <code dir="ltr">java</code> при запуске приложения. Чтобы разрешить использование <strong>JFR</strong>, укажите параметр <code dir="ltr">-XX:+FlightRecorder</code>. Поскольку <strong>JFR</strong> является коммерческой функцией, необходимо также указать параметр <code dir="ltr">-XX:+UnlockCommercialFeatures</code>. В следующем примере показано, как запустить приложение <code dir="ltr">MyApp</code> и сразу начать 60-секундную запись, которая будет сохранена в файл с именем <code dir="ltr">myrecording.jfr</code>:</p>
+<pre dir="ltr">
+java -XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:StartFlightRecording=duration=60s,filename=myrecording.jfr MyApp
+</pre>
+<p>Для настройки <strong>JFR</strong> можно использовать параметр <code dir="ltr">-XX:FlightRecorderOptions</code>. Подробнее см. в <a href="comline.htm#BABHIICD">приложении A, «Параметры командной строки»</a>.</p>
+</div>
+<!-- class="sect1" -->
+<a id="A1118227"></a>
+<div id="JFRUH177" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">2.2</span> Использование диагностических команд</h2>
+<p>Записями также можно управлять с помощью диагностических команд (diagnostic commands), специфичных для Java. Более подробное описание диагностических команд см. в <a href="comline.htm#BABBGJCF">приложении A, «Справочник диагностических команд»</a>.</p>
+<p>Простейший способ выполнить диагностическую команду — использовать средство <code dir="ltr">jcmd</code> (оно находится в каталоге установки Java). Чтобы выдать команду, необходимо передать идентификатор процесса <strong>JVM</strong> (Java Virtual Machine, виртуальная машина Java) (или имя главного класса) и саму команду в качестве аргументов <code dir="ltr">jcmd</code>. Например, чтобы начать 60-секундную запись для выполняющегося процесса Java с идентификатором 5368 и сохранить её в файл <code dir="ltr">myrecording.jfr</code> в текущем каталоге, используйте следующее:</p>
+<pre dir="ltr">
+jcmd 5368 JFR.start duration=60s filename=myrecording.jfr
+</pre>
+<p>Чтобы увидеть список всех выполняющихся процессов Java, выполните команду <code dir="ltr">jcmd</code> без аргументов. Чтобы увидеть полный список команд, доступных выполняющемуся приложению Java, укажите <code dir="ltr">help</code> в качестве диагностической команды после идентификатора процесса (или имени главного класса). Команды, относящиеся к Java Flight Recorder:</p>
+<ul>
+<li>
+<p><code dir="ltr">JFR.start</code></p>
+<p>Начать запись.</p>
+</li>
+<li>
+<p><code dir="ltr">JFR.check</code></p>
+<p>Проверить состояние всех записей, выполняющихся для указанного процесса, включая идентификационный номер записи, имя файла, длительность и так далее.</p>
+</li>
+<li>
+<p><code dir="ltr">JFR.stop</code></p>
+<p>Остановить запись с заданным идентификационным номером (по умолчанию останавливается запись 1).</p>
+</li>
+<li>
+<p><code dir="ltr">JFR.dump</code></p>
+<p>Выгрузить данные, собранные к текущему моменту записью с заданным идентификационным номером (по умолчанию выгружаются данные записи 1).</p>
+</li>
+</ul>
+<div class="infobox-note">
+<p class="notep1">Примечание:</p>
+Эти команды доступны, только если приложение Java было запущено с включённым Java Flight Recorder, то есть со следующими параметрами:
+<pre dir="ltr">
+-XX:+UnlockCommercialFeatures -XX:+FlightRecorder
+</pre></div>
+</div>
+<!-- class="sect1" -->
+<a id="CHDCHAFF"></a>
+<div id="JFRUH178" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">2.3</span> Настройка записей</h2>
+<p>Явную запись можно настроить и другими способами. Эти приёмы работают одинаково независимо от того, как запускается запись (то есть с помощью командной строки или диагностических команд).</p>
+<a id="CHDCJHGF"></a>
+<div id="JFRUH179" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">2.3.1</span> Задание максимального размера и возраста</h3>
+<p>Для явной записи можно задать максимальный размер или возраст с помощью следующих параметров:</p>
+<ul>
+<li>
+<pre dir="ltr">
+maxsize=<span class="italic">size</span>
+</pre>
+<p>Добавьте букву <code dir="ltr">k</code> или <code dir="ltr">K</code> для килобайтов, <code dir="ltr">m</code> или <code dir="ltr">M</code> для мегабайтов, <code dir="ltr">g</code> или <code dir="ltr">G</code> для гигабайтов либо не указывайте суффикс, чтобы задать размер в байтах.</p>
+</li>
+<li>
+<pre dir="ltr">
+maxage=<span class="italic">age</span>
+</pre>
+<p>Добавьте букву <code dir="ltr">s</code> для секунд, <code dir="ltr">m</code> для минут, <code dir="ltr">h</code> для часов или <code dir="ltr">d</code> для суток.</p>
+</li>
+</ul>
+<p>Если заданы и ограничение размера, и возраст, данные удаляются при достижении любого из пределов.</p>
+</div>
+<!-- class="sect2" -->
+<a id="CHDHBCDE"></a>
+<div id="JFRUH180" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">2.3.2</span> Задание задержки</h3>
+<p>При планировании записи может потребоваться добавить задержку (delay) перед фактическим началом записи; например, при запуске из командной строки может быть нужно, чтобы приложение загрузилось или вышло на установившийся режим до начала записи. Для этого используйте параметр <code dir="ltr">delay</code>:</p>
+<pre dir="ltr">
+delay=<span class="italic">delay</span>
+</pre>
+<p>Добавьте букву <code dir="ltr">s</code> для секунд, <code dir="ltr">m</code> для минут, <code dir="ltr">h</code> для часов или <code dir="ltr">d</code> для суток.</p>
+</div>
+<!-- class="sect2" -->
+<a id="CHDGJDGH"></a>
+<div id="JFRUH181" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">2.3.3</span> Задание сжатия</h3>
+<p>Хотя формат файла записи весьма компактен, его можно дополнительно сжать, поместив в архив <strong>ZIP</strong>. Чтобы включить сжатие, используйте следующий параметр:</p>
+<pre dir="ltr">
+compress=true
+</pre>
+<p>Учтите, что для сжатия требуются ресурсы <strong>CPU</strong>, что может отрицательно сказаться на производительности.</p>
+</div>
+<!-- class="sect2" --></div>
+<!-- class="sect1" -->
+<a id="CHDICEAE"></a>
+<div id="JFRUH182" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">2.4</span> Автоматическое создание записей</h2>
+<p>При работе с записью по умолчанию (default recording) можно настроить Java Flight Recorder так, чтобы текущие данные записи из памяти автоматически сохранялись в файл при наступлении определённых условий. Если используется дисковое хранилище, в файл также будут включены текущие сведения из дискового хранилища.</p>
+<a id="CHDFFBBB"></a>
+<div id="JFRUH183" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">2.4.1</span> Создание записи при выходе</h3>
+<p>Чтобы сохранять данные записи по указанному пути каждый раз при выходе <strong>JVM</strong>, запустите приложение со следующим параметром:</p>
+<pre dir="ltr">
+-XX:FlightRecorderOptions=defaultrecording=true,dumponexit=true,dumponexitpath=<span class="italic">path</span>
+</pre>
+<p>Задайте в <span class="italic">path</span> расположение, в котором следует сохранить запись. Если указать каталог, в нём будет создан файл с именем из даты и времени. Если указать имя файла, будет использовано это имя. Если путь не указан, запись будет сохранена в текущем каталоге.</p>
+</div>
+<!-- class="sect2" -->
+<a id="CHDJGAHG"></a>
+<div id="JFRUH184" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">2.4.2</span> Создание записи с помощью триггеров (triggers)</h3>
+<p>В консоли Java Mission Control можно задавать <span class="italic">триггеры</span> (triggers). Триггер (trigger) — это правило, которое выполняет действие всякий раз, когда истинно указанное в правиле условие. Например, можно создать правило, которое запускает запись полёта, когда размер кучи превышает 100 МБ. Триггеры в Java Mission Control могут использовать в качестве входных данных правила любое свойство, предоставляемое через <strong>JMX</strong> <strong>MBeans</strong>. Они могут запускать и многие другие действия, а не только дампы Flight Recorder.</p>
+<p>Триггеры задаются на вкладке <span class="bold"><strong>Triggers</strong></span> (триггеры) в <strong>JMX Console</strong> (консоль JMX). Подробнее о создании триггеров см. в справке Java Mission Control.</p>
+</div>
+<!-- class="sect2" --></div>
+<!-- class="sect1" -->
+<a id="A1118624"></a>
+<div id="JFRUH185" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">2.5</span> Безопасность</h2>
+<p>Java Flight Recorder предназначен только для диагностических целей. Файл записи потенциально может содержать конфиденциальные сведения, например параметры командной строки Java и переменные среды. Храните и передавайте файлы записей с такой же осторожностью, как диагностические файлы дампа ядра (core files) или снимки кучи (heap dumps).</p>
+<p><a href="run.htm#BABHIGGE">Таблица 2-1</a> описывает разрешения безопасности для различных способов использования <strong>JFR</strong>.</p>
+<div id="JFRUH186" class="tblformal">
+<p class="titleintable"><a id="sthref10"></a><a id="BABHIGGE"></a>«Таблица 2-1. Разрешения безопасности»</p>
+<table class="cellalignment302" title="Разрешения безопасности" summary="Двухстолбцовая таблица. В левом столбце указан тип команды, в правом — разрешения безопасности для соответствующего типа команды." dir="ltr">
+<thead>
+<tr class="cellalignment289">
+<th class="cellalignment301" id="r1c1-t4">Метод</th>
+<th class="cellalignment301" id="r1c2-t4">Безопасность</th>
+</tr>
+</thead>
+<tbody>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r2c1-t4" headers="r1c1-t4">
+<p>Командная строка</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t4 r1c2-t4">
+<p>Любой, у кого есть доступ к командной строке процесса Java, должен быть доверенным лицом.</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r3c1-t4" headers="r1c1-t4">
+<p>Диагностические команды</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t4 r1c2-t4">
+<p>Управлять процессом с помощью <code dir="ltr">jcmd</code> может только владелец процесса Java.</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r4c1-t4" headers="r1c1-t4">
+<p>Клиент Java Mission Control</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t4 r1c2-t4">
+<p>Клиент Java Mission Control использует <strong>JMX</strong> для доступа к <strong>JVM</strong>.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<br /></div>
+<!-- class="tblformal" --></div>
+<!-- class="sect1" -->
+<a id="A1092559"></a>
+<div id="JFRUH187" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">2.6</span> Устранение неполадок</h2>
+<p>Значительный объём диагностических сведений из Java Flight Recorder можно получить, запустив <strong>JVM</strong> с одним из следующих параметров:</p>
+<ul>
+<li>
+<p><code dir="ltr">-XX:FlightRecorderOptions=loglevel=debug</code></p>
+</li>
+<li>
+<p><code dir="ltr">-XX:FlightRecorderOptions=loglevel=trace</code>.</p>
+</li>
+</ul>
+</div>
+<!-- class="sect1" --></div>
+<!-- class="chapter" --></div>
+<!-- class="ind" -->
+</div>
+</div>
+</body>
+</html>

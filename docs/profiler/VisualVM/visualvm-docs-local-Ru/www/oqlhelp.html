@@ -1,0 +1,871 @@
+<!--
+Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+
+This code is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License version 2 only, as
+published by the Free Software Foundation.  Oracle designates this
+particular file as subject to the "Classpath" exception as provided
+by Oracle in the LICENSE file that accompanied this code.
+
+This code is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+version 2 for more details (a copy is included in the LICENSE file that
+accompanied this code).
+
+You should have received a copy of the GNU General Public License version
+2 along with this work; if not, write to the Free Software Foundation,
+Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+
+Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+or visit www.oracle.com if you need additional information or have any
+questions.
+-->
+
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Анализ Heap Dump (дамп кучи) с помощью Object Query Language (OQL)</title>
+    </head>
+    
+<body>
+<div id="contents_div">
+<div id="contents_contents">
+<div id="contents_main_doc">
+<h1>Анализ <strong>Heap Dump</strong> (дамп кучи) с помощью Object Query Language (<strong>OQL</strong>)</h1>
+
+<hr />
+
+<p>
+<strong>OQL</strong> (Object Query Language, язык запросов к объектам) — язык запросов, похожий на SQL, для запросов к куче Java. OQL позволяет фильтровать и выбирать
+нужные сведения из кучи Java. Предопределённые запросы вроде "show all instances of class X"
+уже поддерживаются <strong>VisualVM</strong>, а OQL даёт больше гибкости. OQL основан на языке выражений JavaScript.
+</p>
+
+<p>
+Запрос OQL имеет следующий вид:
+</p>
+
+<pre>
+<code>
+         <span class="key">select</span> &lt;JavaScript expression to select&gt;
+         [ <span class="key">from</span> [<span class="key">instanceof</span>] &lt;class name&gt; &lt;identifier&gt;
+         [ <span class="key">where</span> &lt;JavaScript boolean expression to filter&gt; ] ]
+</code>
+</pre>
+<p>где имя класса — полное имя класса Java (пример: java.net.URL) или имя класса массива.
+char[] (или [C) — имя массива char, java.io.File (или [Ljava.io.File;) — имя java.io.File[] и так далее.
+Учтите, что полное имя класса не всегда однозначно идентифицирует 
+класс Java во время выполнения. Может быть больше одного класса Java с одним и тем же 
+именем, но загруженных разными загрузчиками. Поэтому имя класса может быть
+строковым id объекта класса.
+
+Если использовано ключевое слово <span class="key">instanceof</span>, выбираются объекты подтипов. Если это 
+ключевое слово не указано, выбираются только экземпляры точно указанного класса. Оба предложения
+<span class="key">from</span> и <span class="key">where</span> необязательны.
+</p>
+
+
+<p>
+В предложениях <span class="key">select</span> и (необязательном) <span class="key">where</span> используется выражение 
+на языке выражений JavaScript. Объекты кучи Java обёрнуты удобными объектами сценария, чтобы 
+к полям можно было обращаться естественным синтаксисом. Например, к полям Java можно обращаться синтаксисом obj.field_name, 
+а к элементам массива — синтаксисом array[index]. Каждый выбранный объект Java 
+привязывается к переменной JavaScript с именем идентификатора, указанным в предложении <span class="key">from</span>.
+</p>
+
+<h3>Примеры OQL</h3>
+
+<ul>
+<li>выбрать все String длины 100 или больше
+<pre>
+<code>
+    select s from java.lang.String s where s.count >= 100
+</code>
+</pre>
+</li>
+<li>выбрать все массивы int длины 256 или больше
+<pre>
+<code>
+    select a from int[] a where a.length >= 256
+</code>
+</pre>
+</li>
+<li>показать содержимое String, которые соответствуют регулярному выражению
+<pre>
+<code>
+    select {instance: s, content: s.toString()} from java.lang.String s
+    where /java/.test(s.toString())
+</code>
+</pre>
+</li>
+<li>показать значение path всех объектов File
+<pre>
+<code>
+    select file.path.toString() from java.io.File file
+</code>
+</pre>
+</li>
+<li>показать имена всех классов ClassLoader
+<pre>
+<code>
+    select <a href="#classof">classof</a>(cl).name 
+    from instanceof java.lang.ClassLoader cl
+</code>
+</pre>
+</li>
+<li>показать экземпляры Class, идентифицированного данной строкой id
+<pre>
+<code>
+    select o from instanceof 0xd404b198 o
+</code>
+</pre>
+Учтите, что 0xd404b198 — id класса (в сеансе). Его находят,
+глядя на id, показанный на странице этого класса.
+</li>
+</ul>
+
+<h2>Встроенные объекты и функции OQL</h2>
+
+<h4>объект heap</h4>
+
+<p>Встроенный объект <b>heap</b> поддерживает следующие методы:</p>
+
+<ul> 
+<li><b>heap.forEachClass</b> — вызывает функцию обратного вызова для каждого класса Java
+<pre>
+<code>
+    heap.forEachClass(callback);
+</code>
+</pre>
+</li>
+<li><b>heap.forEachObject</b> — вызывает функцию обратного вызова для каждого объекта Java
+<pre>
+<code>
+    heap.forEachObject(callback, clazz, includeSubtypes);
+</code>
+</pre>
+<code>clazz</code> — класс, экземпляры которого выбираются. Если не указан, по умолчанию java.lang.Object. <code>includeSubtypes</code> — логический флаг, 
+который указывает, включать ли экземпляры подтипов. Значение по умолчанию 
+этого флага — true.</li>
+
+<li><a name="findClass"></a><b>heap.findClass</b> — находит класс Java с данным именем
+<pre>
+<code>
+    heap.findClass(className);
+</code>
+</pre>
+где <code>className</code> — имя класса, который нужно найти. У результирующего объекта Class 
+есть следующие свойства:
+<ul>
+<li>name — имя класса.</li>
+<li>superclass — объект Class для суперкласса (или null, если java.lang.Object).</li>
+<li>statics — пары имя, значение для статических полей класса.</li>
+<li>fields — массив объектов полей. У объекта поля есть свойства name, signature.</li>
+<li>loader — объект ClassLoader, который загрузил этот класс.</li>
+<!--
+<li><i>signers - signers that signed this class. (Not implemented in 6.7M2)</i>
+<li><i>protectionDomain - protection domain to which this class belongs. (Not implemented in 6.7M2)</i>
+-->
+</ul>
+<p>У объектов Class есть следующие методы:</p>
+<ul>
+<li>isSubclassOf — проверяет, является ли данный класс прямым или косвенным 
+подклассом этого класса.</li>
+<li>isSuperclassOf — проверяет, является ли данный Class прямым или косвенным
+суперклассом этого класса.</li>
+<li>subclasses — возвращает массив прямых и косвенных подклассов.</li>
+<li>superclasses — возвращает массив прямых и косвенных суперклассов.</li>
+</ul>
+
+</li>
+<li><a name="findObject"></a><b>heap.findObject</b> — находит объект по данному id объекта
+<pre>
+<code>
+    heap.findObject(stringIdOfObject);
+</code>
+</pre>
+</li>
+<li><a name="classes"></a><b>heap.classes</b> — возвращает перечисление всех классов Java
+</li>
+<li><a name="objects"></a><b>heap.objects</b> — возвращает перечисление объектов Java
+<pre>
+<code>
+    heap.objects(clazz, [includeSubtypes], [filter])
+</code>
+</pre>
+<code>clazz</code> — класс, экземпляры которого выбираются. Если не указан, по умолчанию java.lang.Object. <code>includeSubtypes</code> — логический флаг, 
+который указывает, включать ли экземпляры подтипов. Значение по умолчанию 
+этого флага — true. Этот метод принимает необязательное выражение фильтра, чтобы отфильтровать
+результирующий набор объектов.
+</li>
+<li><a name="finalizables"></a><b>heap.finalizables</b> — возвращает перечисление объектов Java, которые
+ожидают финализации.
+</li>
+<li><b>heap.livepaths</b> — возвращает массив путей, по которым данный объект 
+жив. Этот метод принимает необязательный второй параметр — логический
+флаг. Этот флаг указывает, включать ли пути со слабыми ссылками (weak reference) или нет.
+По умолчанию пути со слабыми ссылками не включаются.
+<pre>
+<code>
+    select heap.livepaths(s) from java.lang.String s
+</code>
+</pre>
+Каждый элемент этого массива сам является другим массивом. Последний массив 
+содержит объекты, которые входят в «цепочку ссылок» пути.
+</li>
+<li><b>heap.roots</b> — возвращает Enumeration корней кучи. 
+<a name="rootobj"></a>
+У каждого объекта Root есть следующие свойства:
+<ul>
+<li>id — строковый id объекта, на который ссылается этот корень</li>
+<li>type — описательный тип Root (JNI Global, JNI Local, Java Static и т. д.)</li>
+<li>description — строковое описание Root</li>
+<li>referrer — объект Thread или Class, ответственный за этот корень, или null</li>
+</ul>
+</li>
+</ul>
+
+Примеры:
+<ul>
+<li>доступ к статическому полю 'props' класса java.lang.System
+<pre>
+<code>
+    select heap.findClass("java.lang.System").statics.props
+    select heap.findClass("java.lang.System").props
+</code>
+</pre>
+<li>получить число полей класса java.lang.String 
+<pre>
+<code>
+    select heap.findClass("java.lang.String").fields.length
+</code>
+</pre>
+<li> найти объект, id которого задан
+<pre>
+<code>
+    select heap.findObject("0xf3800b58")
+</code>
+</pre>
+<li>выбрать все классы с шаблоном имени java.net.*
+<pre>
+<code>
+    select <a href="#filter">filter</a>(heap.classes(), "/java.net./.test(it.name)")
+</code>
+</pre>
+</ul>
+
+<h4>функции для отдельных объектов</h4>
+
+<ul>
+<li><a href="#allocTrace">allocTrace(jobject)</a>
+<li><a href="#classof">classof(jobject)</a>
+<li><a href="#forEachReferrer">forEachReferrer(callback, jobject)</a>
+<li><a href="#identical">identical(o1, o2)</a>
+<li><a href="#objectid">objectid(jobject)</a>
+<li><a href="#reachables">reachables(jobject, excludedFields)</a>
+<li><a href="#referrers">referrers(jobject)</a>
+<li><a href="#referees">referees(jobject)</a>
+<li><a href="#refers">refers(jobject)</a>
+<li><a href="#root">root(jobject)</a>
+<li><a href="#sizeof">sizeof(jobject)</a>
+<li><a href="#rsizeof">rsizeof(jobject)</a>
+<li><a href="#toHtml">toHtml(obj)</a>
+</ul>
+
+<a name="allocTrace"></a>
+<h5>функция allocTrace</h5>
+
+Возвращает трассировку места выделения данного объекта Java, если она доступна.
+allocTrace возвращает массив объектов кадров (frame). У каждого объекта кадра есть следующие
+свойства:
+<ul>
+<li>className — имя класса Java, чей метод выполняется в кадре.
+<li>methodName — имя метода Java, выполняющегося в кадре.
+<li>methodSignature — сигнатура метода Java, выполняющегося в кадре.
+<li>sourceFileName — имя исходного файла класса Java, выполняющегося в кадре.
+<li>lineNumber — номер строки исходника внутри метода.
+</ul>
+
+<a name="classof"></a>
+<h5>функция classof</h5>
+
+Возвращает объект Class данного объекта Java. Результирующий объект поддерживает
+следующие свойства:
+<ul>
+<li>name — имя класса.
+<li>superclass — объект Class для суперкласса (или null, если java.lang.Object).
+<li>statics — пары имя, значение для статических полей класса.
+<li>fields — массив объектов полей. У объектов полей есть свойства name, signature.
+<li>loader — объект ClassLoader, который загрузил этот класс.
+<!--
+<li>signers - signers that signed this class.
+<li>protectionDomain - protection domain to which this class belongs.
+-->
+
+</ul>
+У объектов Class есть следующие методы:
+<ul>
+<li>isSubclassOf — проверяет, является ли данный класс прямым или косвенным 
+подклассом этого класса.
+<li>isSuperclassOf — проверяет, является ли данный Class прямым или косвенным
+суперклассом этого класса.
+<li>subclasses — возвращает массив прямых и косвенных подклассов.
+<li>superclasses — возвращает массив прямых и косвенных суперклассов.
+</ul>
+
+Примеры:
+<ul>
+<li>показать имя класса каждого объекта типа Reference
+<pre>
+<code>
+    select classof(o).name from instanceof java.lang.ref.Reference o
+</code>
+</pre>
+<li>показать все подклассы java.io.InputStream
+<pre>
+<code>
+    select heap.findClass("java.io.InputStream").subclasses()
+</code>
+</pre>
+<li>показать все суперклассы java.io.BufferedInputStream
+<pre>
+<code>
+    select heap.findClass("java.io.BufferedInputStream").superclasses()
+</code>
+</pre>
+</ul>
+
+<a name="forEachReferrer"></a>
+<h5>функция forEachReferrer</h5>
+
+вызывает функцию обратного вызова для каждого ссылающегося (referrer) данного объекта Java.
+
+<a name="identical"></a>
+<h5>функция identical</h5>
+<p>
+Возвращает, идентичны ли два данных объекта Java.
+</p>
+Пример:
+<pre>
+<code>
+    select identical(heap.findClass("Foo").statics.bar, heap.findClass("AnotherClass").statics.bar)
+</code>
+</pre>
+
+<a name="objectid"></a>
+<h5>функция objectid</h5>
+
+<p>
+Возвращает строковый id данного объекта Java. Этот id можно передать в
+<a href="#findObject">heap.findObject</a> и также использовать для сравнения
+объектов на идентичность.
+</p>
+Пример:
+<pre>
+<code>
+    select objectid(o) from java.lang.Object o
+</code>
+</pre>
+
+<a name="reachables"></a>
+<h5>функция reachables</h5>
+<p>
+Возвращает массив объектов Java, на которые транзитивно ссылается
+данный объект Java. Необязательно принимает второй параметр — имена полей через
+запятую, которые нужно исключить из вычисления достижимости.
+Поля записываются в шаблоне class_name.field_name.
+</p>
+Примеры: 
+<ul>
+<li>напечатать все достижимые объекты из каждого экземпляра Properties.
+<pre>
+<code>
+    select reachables(p) from java.util.Properties p
+</code>
+</pre>
+<li>напечатать все достижимые из каждого java.net.URL, но опустить объекты, достижимые
+через указанные поля.
+<pre>
+<code>
+    select reachables(u, 'java.net.URL.handler') from java.net.URL u
+</code>
+</pre>
+</ul>
+
+<a name="referrers"></a>
+<h5>функция referrers</h5>
+<p>
+Возвращает перечисление объектов Java, которые держат ссылку на данный объект
+Java.
+</p>
+Примеры:
+<ul>
+<li> напечатать число ссылающихся для каждого экземпляра java.lang.Object
+<pre>
+<code>
+    select count(referrers(o)) from java.lang.Object o
+</code>
+</pre>
+<li>напечатать ссылающихся для каждого объекта java.io.File
+<pre>
+<code>
+    select referrers(f) from java.io.File f
+</code>
+</pre>
+<li>напечатать объекты URL только если на них ссылаются 2 или больше 
+<pre>
+<code>
+    select u from java.net.URL u where count(referrers(u)) > 2
+</code>
+</pre>
+</ul>
+
+<a name="referees"></a>
+<h5>функция referees</h5>
+<p>
+Возвращает массив объектов Java, на которые данный объект Java
+напрямую ссылается.
+</p>
+Пример: напечатать все статические поля-ссылки класса java.io.File
+<pre>
+<code>
+    select referees(<a href="#findClass">heap.findClass</a>("java.io.File"))
+</code>
+</pre>
+
+<a name="refers"></a>
+<h5>функция refers</h5>
+<p>
+Возвращает, ссылается ли первый объект Java на второй объект Java.
+</p>
+
+<a name="root"></a>
+<h5>функция root</h5>
+<p>
+Если данный объект входит в корневое множество объектов, эта функция возвращает
+описательный <a href="#rootobj">Root object</a> (объект Root), объясняющий почему.
+Если данный объект не корень, функция возвращает null.
+</p>
+
+<a name="sizeof"></a>
+<h5>функция sizeof</h5>
+
+Возвращает размер данного объекта Java в байтах
+Пример: 
+<pre>
+<code>
+    select sizeof(o) from int[] o
+</code>
+</pre>
+
+<a name="rsizeof"></a>
+<h5>функция retainedsize</h5>
+
+Возвращает размер сохранённого множества (retained set) данного объекта Java в байтах
+<b>Предупреждение! Первое использование этой функции на heap dump может занять
+значительное время</b>
+Пример:
+<pre>
+<code>
+    select rsizeof(o) from instanceof java.lang.HashMap o
+</code>
+</pre>
+
+<a name="toHtml"></a>
+<h5>функция toHtml</h5>
+
+Возвращает HTML-строку для данного объекта Java. Учтите, что это вызывается
+автоматически для объектов, выбранных выражением select. Но это может быть полезно,
+чтобы печатать более сложный вывод.
+
+Пример: напечатать гиперссылку жирным шрифтом
+<pre>
+<code>
+    select "&lt;b&gt;" + toHtml(o) + "&lt;/b&gt;" from java.lang.Object o
+</code>
+</pre>
+
+<h4>Выбор нескольких значений</h4>
+<p>
+Несколько значений можно выбрать с помощью литералов объектов JavaScript или массивов.
+</p>
+
+Пример: показать имя и поток для каждого объекта потока
+<pre>
+<code>
+    select { name: t.name? t.name.toString() : "null", thread: t } 
+    from instanceof java.lang.Thread t
+</code>
+</pre>
+
+<h4>функции работы с array/iterator/enumeration</h4>
+
+<p>
+Эти функции принимают массив/итератор/перечисление и 
+строку выражения [или функцию обратного вызова] на вход. Эти функции перебирают 
+массив/итератор/перечисление и применяют выражение (или функцию) к 
+каждому элементу. Учтите, что объекты JavaScript — ассоциативные массивы. Поэтому 
+эти функции можно также использовать с произвольными объектами JavaScript.
+</p>
+
+<ul>
+<li><a href="#concat">concat(array1/enumeration1, array2/enumeration2)</a>
+<li><a href="#contains">contains(array/enumeration, expression)</a>
+<li><a href="#count">count(array/enumeration, expression)</a>
+<li><a href="#filter">filter(array/enumeration, expression)</a>
+<li><a href="#length">length(array/enumeration)</a>
+<li><a href="#map">map(array/enumeration, expression)</a>
+<li><a href="#max">max(array/enumeration, [expression])</a>
+<li><a href="#min">min(array/enumeration, [expression])</a>
+<li><a href="#sort">sort(array/enumeration, [expression])</a>
+<li><a href="#top">top(array/enumeration, [expression], [top])</a>
+<li><a href="#sum">sum(array/enumeration, [expression])</a>
+<li><a href="#toArray">toArray(array/enumeration)</a>
+<li><a href="#unique">unique(array/enumeration, [expression])</a>
+</ul>
+
+<a name="concat"></a>
+<h5>функция concat</h5>
+<p>
+Объединяет два массива или перечисления (то есть возвращает составное
+перечисление).
+</p>
+
+<a name="contains"></a>
+<h5>функция contains</h5>
+<p>
+Возвращает, содержит ли данный массив/перечисление элемент,
+для которого истинно данное логическое выражение, указанное в коде. Вычисляемый код
+может ссылаться на следующие встроенные переменные.
+</p>
+<ul>
+<li>it -> currently visited element
+<li>index -> index of the current element
+<li>array -> array/enumeration that is being iterated
+</ul>
+Пример: выбрать все объекты Properties, на которые ссылается 
+какое-то статическое поле какого-то класса.
+<pre>
+<code>
+    select p from java.util.Properties p
+    where contains(<a href="#referrers">referrers</a>(p), "<a href="#classof">classof</a>(it).name == 'java.lang.Class'")
+</code>
+</pre>
+
+<a name="count"></a>
+<h5>функция count</h5>
+<p>
+функция count возвращает число элементов входного массива/перечисления, 
+которые удовлетворяют данному логическому выражению. Код логического выражения может 
+ссылаться на следующие встроенные переменные.
+</p>
+<ul>
+<li>it -> currently visited element
+<li>index -> index of the current element
+<li>array -> array/enumeration that is being iterated
+</ul>
+Пример: напечатать число классов с конкретным шаблоном имени
+<pre>
+<code>
+    select count(<a href="#classes">heap.classes()</a>, "/java.io./.test(it.name)")
+</code>
+</pre>
+
+<a name="filter"></a>
+<h5>функция filter</h5>
+<p>
+функция filter возвращает массив/перечисление, которое содержит элементы 
+входного массива/перечисления, удовлетворяющие данному логическому 
+выражению. Код логического выражения может ссылаться на следующие встроенные
+переменные.
+</p>
+<ul>
+<li>it -> currently visited element
+<li>index -> index of the current element
+<li>array -> array/enumeration that is being iterated
+<li>result -> result array/enumeration
+</ul>
+Примеры:
+<ul>
+<li>показать все классы с шаблоном имени java.io.*
+<pre>
+<code>
+    select filter(<a href="#classes">heap.classes</a>(), "/java.io./.test(it.name)")
+</code>
+</pre>
+<li> показать всех ссылающихся объекта URL, у которых ссылающийся не из
+пакета java.net
+<pre>
+<code>
+    select filter(<a href="#referrers">referrers</a>(u), "! /java.net./.test(<a href="#classof">classof</a>(it).name)")
+    from java.net.URL u
+</code>
+</pre>
+</ul>
+
+<a name="length"></a>
+<h5>функция length</h5>
+<p>
+функция length возвращает число элементов массива/перечисления.
+</p>
+
+<a name="map"></a>
+<h5>функция map</h5>
+<p>
+Преобразует данный массив/перечисление, вычисляя данный код
+на каждом элементе. Вычисляемый код может ссылаться на следующие встроенные 
+переменные.
+</p>
+<ul>
+<li>it -> currently visited element
+<li>index -> index of the current element
+<li>array -> array/enumeration that is being iterated
+<li>result -> result array/enumeration
+</ul>
+<p>
+функция map возвращает массив/перечисление значений, созданных повторным
+вызовом кода на каждом элементе входного массива/перечисления.
+</p>
+Пример: показать все статические поля java.io.File с именем и значением
+<pre>
+<code>
+    select map(<a href="#findClass">heap.findClass</a>("java.io.File").statics, "index + '=' + <a href="#toHtml">toHtml</a>(it)")
+</code>
+</pre>
+
+<a name="max"></a>
+<h5>функция max</h5>
+<p>
+возвращает максимальный элемент данного массива/перечисления. 
+Необязательно принимает выражение кода для сравнения элементов массива. 
+По умолчанию используется числовое сравнение. Выражение сравнения может 
+использовать следующие встроенные переменные:
+</p>
+<ul>
+<li>lhs -> left side element for comparison
+<li>rhs -> right side element for comparison
+</ul>
+Примеры:
+<ul>
+<li>найти максимальную длину любого экземпляра String
+<pre>
+<code>
+    select max(map(heap.objects('java.lang.String', false), 'it.count'))
+</code>
+</pre>
+<li>найти экземпляр string с максимальной длиной
+<pre>
+<code>
+    select max(heap.objects('java.lang.String'), 'lhs.count > rhs.count')
+</code>
+</pre>
+</ul>
+
+<a name="min"></a>
+<h5>функция min</h5>
+<p>
+возвращает минимальный элемент данного массива/перечисления. Необязательно 
+принимает выражение кода для сравнения элементов массива. По умолчанию используется числовое
+сравнение. Выражение сравнения может использовать следующие встроенные 
+переменные:
+</p>
+<ul>
+<li>lhs -> left side element for comparison
+<li>rhs -> right side element for comparison
+</ul>
+Примеры:
+<ul>
+<li>найти минимальный размер любого экземпляра Vector
+<pre>
+<code>
+    select min(map(heap.objects('java.util.Vector', false), 'it.elementData.length'))
+</code>
+</pre>
+<li>найти экземпляр Vector с максимальной длиной
+<pre>
+<code>
+    select min(heap.objects('java.util.Vector'), 'lhs.elementData.length &lt; rhs.elementData.length')
+</code>
+</pre>
+</ul>
+
+<a name="sort"></a>
+<h5>функция sort</h5>
+<p>
+сортирует данный массив/перечисление. Необязательно принимает выражение кода для
+сравнения элементов массива. По умолчанию используется числовое сравнение.
+Выражение сравнения может использовать следующие встроенные переменные:
+</p>
+<ul>
+<li>lhs -> left side element for comparison
+<li>rhs -> right side element for comparison
+</ul>
+Примеры:
+<ul>
+<li> напечатать все объекты char[] в порядке размера.
+<pre>
+<code>
+    select sort(<a href="#objects">heap.objects</a>('char[]'), '<a href="#sizeof">sizeof</a>(lhs) - sizeof(rhs)')
+</code>
+</pre>
+<li> напечатать все объекты char[] в порядке размера, но напечатать
+также размер.
+<pre>
+<code>
+    select <a href="#map">map</a>(sort(<a href="#objects">heap.objects</a>('char[]'), '<a href="#sizeof">sizeof</a>(lhs) - sizeof(rhs)'), '{ size: sizeof(it), obj: it }')
+</code>
+</pre>
+</ul>
+
+<a name="top"></a>
+<h5>функция top</h5>
+<p>
+возвращает верхние N элементов данного массива/перечисления. Необязательно принимает выражение кода для
+сравнения элементов массива и число верхних элементов. По умолчанию возвращаются первые 10 элементов
+в порядке появления.
+Выражение сравнения может использовать следующие встроенные переменные:
+</p>
+<ul>
+<li>lhs -> left side element for comparison
+<li>rhs -> right side element for comparison
+</ul>
+Примеры:
+<ul>
+<li> напечатать 5 самых длинных строк
+<pre>
+<code>
+    select top(<a href="#objects">heap.objects</a>('java.lang.String'), 'rhs.count - lhs.count', 5)
+</code>
+</pre>
+<li> напечатать 5 самых длинных строк, но напечатать
+также размер.
+<pre>
+<code>
+    select <a href="#map">map</a>(top(<a href="#objects">heap.objects</a>('java.lang.String'), 'rhs.count - lhs.count', 5), '{ length: it.count, obj: it }')
+</code>
+</pre>
+</ul>
+
+<a name="sum"></a>
+<h5>функция sum</h5>
+<p>
+Эта функция возвращает сумму всех элементов данного входного массива или
+перечисления. Необязательно принимает выражение как второй параметр. Оно используется,
+чтобы отобразить входные элементы перед суммированием.
+</p>
+Пример: вернуть сумму размеров достижимых объектов из каждого объекта Properties
+<pre>
+<code>
+    select sum(<a href="#map">map</a>(<a href="#reachables">reachables</a>(p), '<a href="#sizeof">sizeof</a>(it)')) 
+    from java.util.Properties p
+
+    // or omit the map as in ...
+    select sum(<a href="#reachables">reachables</a>(p), '<a href="#sizeof">sizeof</a>(it)') 
+    from java.util.Properties p
+</code></pre>
+
+<a name="toArray"></a>
+<h5>функция toArray</h5>
+<p>
+Эта функция возвращает массив, который содержит элементы входного
+массива/перечисления.
+</p>
+
+<a name="unique"></a>
+<h5>функция unique</h5>
+<p>
+Эта функция возвращает массив/перечисление, содержащее уникальные элементы 
+данного входного массива/перечисления
+</p>
+Пример: выбрать уникальные экземпляры char[], на которые ссылаются String. Учтите, что
+больше одного экземпляра String могут совместно использовать один и тот же char[] для содержимого.
+<pre>
+<code>
+   // number of unique char[] instances referenced from any String
+   select count(unique(map(heap.objects('java.lang.String'), 'it.value')))
+
+   // total number of Strings
+   select count(heap.objects('java.lang.String'))
+</code>
+</pre>
+    
+<h4>Более сложные примеры</h4>
+
+<h4>Напечатать гистограмму каждого загрузчика классов и числа классов, загруженных им</h4>
+
+<pre>
+<code>
+   select <a href="#map">map</a>(<a href="#sort">sort</a>(map(heap.objects('java.lang.ClassLoader'), 
+   '{ loader: it, count: it.classes.elementCount }'), 'rhs.count - lhs.count'),
+   'toHtml(it) + "&lt;br&gt;"')
+</code>
+</pre>
+<p>
+Приведённый выше запрос использует тот факт, что у <b>java.lang.ClassLoader</b> есть закрытое 
+поле с именем <b>classes</b> типа <b>java.util.Vector</b>, а у Vector есть 
+закрытое поле с именем <b>elementCount</b> — число элементов в 
+векторе. Мы выбираем несколько значений (loader, count) с помощью литерала объекта JavaScript 
+и функции map. Мы сортируем результат по count (то есть числу загруженных классов) 
+с помощью функции sort с выражением сравнения.
+</p>
+
+<h5>Показать цепочку родитель–потомок для каждого экземпляра загрузчика классов</h5>
+
+<pre>
+<code>
+   select <a href="#map">map</a>(heap.objects('java.lang.ClassLoader'),
+      function (it) {
+         var res = '';
+         while (it != null) {
+            res += toHtml(it) + "-&gt;";
+            it = it.parent;
+         }
+         res += "null";
+         return res + "&lt;br&gt;";
+      })
+</code>
+</pre>
+<p>
+Учтите, что мы используем поле <b>parent</b> класса <b>java.lang.ClassLoader</b>
+и идём, пока parent не станет null, с помощью функции обратного вызова в вызове map.
+</p>
+
+<h5>Печать значений всех системных свойств</h5>
+
+<pre>
+<code>
+   select <a href="#map">map</a>(<a href="#filter">filter</a>(<a href="#findClass">heap.findClass</a>('java.lang.System').props.table, 'it != null && it.key != null && it.value != null'),
+            function (it) {
+                var res = it.key.toString() + ' = ' + it.value.toString();
+                return res;
+            });
+</code>
+</pre>
+<p>
+Приведённый выше запрос использует следующие факты:
+<ul>
+<li>у java.lang.System есть статическое поле с именем 'props' типа java.util.Properties.
+<li>у java.util.Properties есть поле 'table' типа java.util.Hashtable$Entry
+(это поле унаследовано от java.util.Hashtable). Это массив корзин хеш-таблицы.
+<li>у java.util.Hashtable$Entry есть поля 'key', 'value' и 'next'. Каждая
+запись указывает на следующую запись (или null) в той же корзине хеш-таблицы.
+<li>у класса java.lang.String есть поле 'value' типа char[].
+</ul>
+<p>
+<b>Учтите, что этот запрос (и многие другие запросы) может быть нестабильным — потому что
+закрытые поля классов платформы Java могут быть изменены/удалены без какого-либо
+уведомления! (деталь реализации)</b>. Но использование таких запросов на пользовательских 
+классах может быть безопасным — если пользователь контролирует классы.
+</p>
+
+        <hr/>
+        <p><a href="docindex.html">Return to the VisualVM Documentation index</a> (вернуться к оглавлению документации VisualVM)</p>
+        
+</div>
+</div>
+</div>
+
+    </body>
+</html>

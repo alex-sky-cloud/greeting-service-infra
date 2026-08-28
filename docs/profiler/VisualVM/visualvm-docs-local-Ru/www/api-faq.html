@@ -1,0 +1,385 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <!-- -*- xhtml -*- -->
+        <title>Часто задаваемые вопросы разработчика VisualVM</title>
+        <link rel="stylesheet" type="text/css" href="http://www.netbeans.org/netbeans.css">
+        <meta name="author" content="gwielenga@netbeans.org">
+        <meta name="indexed" content="y">
+        <meta name="description" content="Краткое руководство по использованию API VisualVM.">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <style type="text/css">
+        </style>
+        
+        
+    </head>
+    <body>
+    <div id="contents_div">
+    <div id="contents_contents">
+    <div id="contents_main">
+        <h1>Часто задаваемые вопросы разработчика VisualVM</h1>
+        
+        <p>Это FAQ VisualVM, ориентированный на разработчиков. Разработчик в этом контексте означает 
+        «человек, пишущий плагины для VisualVM». 
+        
+        <h2>Начало работы</h2>
+        
+        <h3><a name="what-status"></a>Каков текущий статус API VisualVM?</h3>
+        
+        <p>В разработке. Вы можете создавать плагины, но должны понимать, что
+        в ближайшие месяцы обязательно будут несовместимые изменения. Однако
+        все такие изменения будут ясно задокументированы к моменту соответствующего выпуска.
+        
+        <h3><a name="how-to-start"></a>Как начать расширять VisualVM?</h3>
+        
+        <p>Прочитайте <a href="https://visualvm.java.net/api-quickstart.html">«Начало работы с расширением VisualVM»</a>,
+        где даны сведения о расширениях VisualVM, показано, как
+        настроить среду, проведён сценарий «Hello World» и дан
+        обзор всех открытых пакетов VisualVM.
+        
+        <h3><a name="where-javadoc"></a>Где находится Javadoc VisualVM?</h3>
+        
+        <p>См. <a href="https://visualvm.java.net/">http://visualvm.java.net/</a>.
+        
+        <h3><a name="only-netbeans"></a>Нужно ли использовать NetBeans IDE, чтобы расширять VisualVM?</h3>
+        
+        <p>Нет. Однако NetBeans IDE предоставляет мастеры и шаблоны для разработки плагинов VisualVM,
+        тогда как в других IDE такой поддержки (пока) нет.
+        
+        <h2>Жизненный цикл</h2>
+        
+        <h3><a name="what-is-lifecycle"></a>Каков жизненный цикл плагина VisualVM?</h3>
+        
+        <p>Жизнь плагина начинается, когда он устанавливается в VisualVM. Его можно установить
+        через VisualVM Plugin Manager (диспетчер плагинов, доступен из меню Tools (Сервис)) или при запуске
+        из NetBeans IDE.
+        
+        <p>Точки входа, реализованные в плагине, должны инициализироваться в
+        классе, расширяющем <tt>org.openide.modules.ModuleInstall</tt>. Они также должны
+        удаляться через этот класс. Инициализация происходит в методе
+        <tt>ModuleInstall.restored</tt>, удаление — в методе
+        <tt>ModuleInstall.uninstalled</tt>. 
+        
+        <p>Каждый пример точек расширения VisualVM включает
+        пример инициализации и удаления точек входа,
+        как в документе
+        <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part">Getting Started Extending VisualVM</a>.
+        
+        
+        <h3><a name="what-about-layer"></a>Что насчёт файла <tt>layer.xml</tt>?</h3>
+        
+        <p>Если вы уже создавали модули поверх NetBeans Platform,
+        вам знаком файл конфигурации <tt>layer.xml</tt>. Этот файл
+        используется для инициализации точек входа в NetBeans Platform. Однако API,
+        специфичные для VisualVM,
+        этот подход не используют. Вместо этого они используют класс <tt>org.openide.modules.ModuleInstall</tt>,
+        как описано выше.
+        
+        <p>Однако, поскольку VisualVM основан на NetBeans Platform, VisualVM может
+        повторно использовать несколько
+        API NetBeans Platform. Например, VisualVM повторно использует API NetBeans, отвечающие за
+        пункты главного меню и
+        главные панели инструментов и кнопки на них. Поэтому вам понадобится
+        NetBeans Actions API, когда вы захотите добавить новые пункты меню и панели инструментов
+        в VisualVM.
+        NetBeans Actions API использует файл <tt>layer.xml</tt>, и поэтому
+        в этом случае вы всё же воспользуетесь файлом <tt>layer.xml</tt>. Однако,
+        если вы используете NetBeans IDE, достаточно мастера «New Action», и тогда
+        мастер заполнит файл <tt>layer.xml</tt> за вас. Если у вас есть вопросы
+        об API NetBeans Platform, см. <a href="http://wiki.netbeans.org/NetBeansDeveloperFAQ">NetBeans Developer FAQ</a>.
+        
+        <h2>Источники данных</h2>
+        
+        <h3><a name="what-is-datasource"></a>Что такое <tt>DataSource</tt>?</h3>
+        
+        <p>Источник данных — основной актор в API VisualVM. Всё, что происходит
+        в VisualVM, происходит в связи с источником данных. 
+        
+        <p>Самый важный источник данных с точки зрения пользователя — <tt>Application</tt>.
+        Этот источник данных представляет приложения, которые контролируются и управляются
+        в VisualVM. Остальные существующие источники данных существуют для поддержки
+        источника данных <tt>Application</tt>.
+        
+        <p>В VisualVM каждый узел в представлении обозревателя (слева от приложения)
+        предоставляется источником данных (и его вспомогательными классами).
+        
+        <h3><a name="default-datasource"></a>Каковы источники данных <tt>DataSource</tt> по умолчанию?</h3>
+        
+        <p>Ниже перечислены источники данных по умолчанию:
+        
+        <ul>
+            <li>AbstractApplication
+            <li>AbstractCoreDump
+            <li>AbstractDataSource
+            <li>AbstractHeapDump
+            <li>AbstractHost
+            <li>AbstractSnapshot
+            <li>AbstractThreadDump
+            <li>Application
+            <li>CoreDump
+            <li>DataSource
+            <li>DataSourceContainer
+            <li>DataSourceProvider
+            <li>DataSourceRepository
+            <li>DataSourceRoot
+            <li>DefaultDataSourceContainer
+            <li>DefaultDataSourceProvider
+            <li>HeapDump
+            <li>Host
+            <li>Snapshot
+            <li>ThreadDump
+        </ul>
+        
+        <h3><a name="why-create-datasource"></a>Зачем создавать новый <tt>DataSource</tt>?</h3>
+        
+        <p>Возможно, вы хотите, чтобы пользователь мог контролировать, устранять неполадки или управлять источником
+        данных, для которого VisualVM не предоставляет поддержку «из коробки». По сути VisualVM —
+        просто инструмент отображения данных, поэтому вы можете создать один или несколько следующих
+        источников данных:
+        
+        <ul>
+            <li>Photo
+            <li>ShoppingList
+            <li>Task
+            <li>Reminder
+        </ul>
+        
+        <p>Однако VisualVM создан специально для мониторинга, устранения неполадок
+        и управления. Поэтому новые источники данных вы, скорее всего, захотите создать
+        именно для этих целей. В целом необходимость
+        создавать новый источник данных возникает лишь в очень небольшом числе случаев.
+        
+        <h3><a name="how-create-datasource"></a>Как создать новый <tt>DataSource</tt>?</h3>
+        
+        <p>Объект <tt>DataSource</tt> определяется, когда вы расширяете эти классы:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.datasource.AbstractDataSource
+            <li>com.sun.tools.visualvm.core.datasource.DefaultDataSourceProvider
+            <li>com.sun.tools.visualvm.core.model.dsdescr.DataSourceDescriptor
+            <li>com.sun.tools.visualvm.core.model.AbstractModelProvider
+        </ul>
+        
+        <p>Полный пример можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part4">здесь</a>.
+        Кроме того, можно читать исходный код VisualVM: все предопределённые
+        источники данных определены там.
+        
+        <h2>Представления</h2>
+        
+        <h3><a name="what-is-view"></a>Что такое представление?</h3>
+        
+        <p>Представление в VisualVM состоит из вкладки и одной или нескольких вложенных вкладок, отображаемых
+        в основной области приложения, когда для источника данных в обозревателе выбирается
+        «Open» (Открыть).
+        <ul><li><b>Вкладка</b> — это, например, «Overview» (Обзор), «Monitor» (Монитор) и «Threads» (Потоки).
+            <li><b>Вложенная вкладка</b> — это, например, «JVM Arguments» (Аргументы JVM) и «System Properties» (Системные свойства) внутри
+        вкладки «Overview».</ul>
+        
+        <h3><a name="how-create-tabs"></a>Как создавать новые представления (вкладки, подключаемые вкладки, вложенные вкладки)?</h3>
+        
+        <p>Новые <b>вкладки</b> создаются расширением этих классов:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.ui.DataSourceView
+            <li>com.sun.tools.visualvm.core.ui.DataSourceViewProvider
+        </ul>
+        
+        <p>Полный пример создания новых вкладок можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm">здесь</a>.
+        
+        <p>Чтобы вкладки можно было расширять, нужно расширить следующий API:
+        <ul><li>com.sun.tools.visualvm.core.ui.PluggableViewSupport</ul>
+        
+        <p>Полный пример создания подключаемого представления можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part2">здесь</a>.
+        
+        <p>Новые <b>вложенные вкладки</b> создаются расширением этих классов:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.ui.ViewPlugin
+            <li>com.sun.tools.visualvm.core.ui.ViewPlugin.ViewDescriptor
+        </ul>
+        
+        <p>Вложенную вкладку можно добавить к вкладке, только если вкладка создана как
+        подключаемая, то есть только если вкладка использует <tt>com.sun.tools.visualvm.core.ui.PluggableViewSupport</tt>.
+        В случае предопределённых вкладок VisualVM нужно инициализировать
+        класс поддержки, относящийся к подключаемому представлению, которое вы хотите расширить:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.dataview.monitor.MonitorViewSupport
+            <li>com.sun.tools.visualvm.core.dataview.overview.OverviewViewSupport
+            <li>com.sun.tools.visualvm.core.dataview.threads.ThreadsViewSupport
+            <li>com.sun.tools.visualvm.core.heapdump.HeapDumpSupport
+            <li>com.sun.tools.visualvm.core.threaddump.ThreadDumpSupport 
+        </ul>
+        
+        <p>Полный пример добавления вложенной вкладки на вкладку «Overview» можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part">здесь</a>.
+        
+        <h3><a name="how-layout-view"></a>Какие компоненты можно использовать для оформления представления?</h3>
+        
+        <p>API VisualVM предоставляет набор компонентов, которые
+        упрощают интеграцию ваших инструментов в VisualVM:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.ui.components.DataViewComponent.MasterView
+            <li>com.sun.tools.visualvm.core.ui.components.DataViewComponent.MasterViewConfiguration
+            <li>com.sun.tools.visualvm.core.ui.components.DataViewComponent.DetailsView
+            <li>com.sun.tools.visualvm.core.ui.components.DataViewComponent.DetailsAreaConfiguration
+            <li>com.sun.tools.visualvm.core.ui.components.DataViewComponent.DisplayArea
+            <li>com.sun.tools.visualvm.core.ui.components.DataViewComponent.ScrollableContainer
+        </ul>   
+        
+        <p>Полный пример, работающий с большинством компонентов интерфейса VisualVM, можно
+        найти в документе
+        <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part">Getting Started Extending VisualVM</a>.
+        
+        <h2>Типы приложений</h2>
+        
+        <h3><a name="what-apptype"></a>Что такое тип приложения?</h3>
+        
+        <p>Тип приложения — модель, которую нужно создать, когда вы
+        хотите, чтобы VisualVM обслуживал новый вид приложения. Например,
+        плагин GlassFish создаёт новый тип приложения для приложений, у которых
+        главный класс — <tt>com.sun.enterprise.server.PELaunch</tt>. Поскольку это
+        главный класс сервера приложений GlassFish, тип приложения
+        создаётся всякий раз, когда запускается экземпляр GlassFish. 
+        
+        <h3><a name="default-apptype"></a>Каковы типы приложений по умолчанию?</h3>
+        
+        <p>Ниже перечислены предопределённые типы приложений:
+        
+        <ul>
+            <li>DefaultApplicationType
+            <li>JavaPluginApplicationType
+            <li>JavaWebStartApplicationType
+            <li>MainClassApplicationType
+            <li>NetBeans3xApplicationType
+            <li>NetBeansApplicationType
+            <li>NetBeansBasedApplicationType
+            <li>VisualVMApplicationType
+        </ul>
+        
+        <h3><a name="why-create-apptype"></a>Зачем создавать собственные типы приложений?</h3>
+        
+        <p>Собственный тип приложения стоит создать, если у вас есть приложение, которое
+        вы хотите обрабатывать в VisualVM особым образом. По умолчанию для обработки приложения будет использоваться
+        <tt>DefaultApplicationType</tt>. Однако, если ваше приложение — сервер развёртывания,
+        вы, вероятно, захотите отображать узлы развёрнутых приложений
+        как подоузлы узла приложения в обозревателе. В этом случае нужно
+        смоделировать новый тип приложения и затем создавать его через класс-фабрику. Чаще всего,
+        как в случае GlassFish, фабрика создаёт
+        ваш тип приложения, если у запущенного приложения главный класс совпадает
+        с главным классом, определённым в реализации типа приложения.
+        
+        <h3><a name="how-create-apptype"></a>Как создать собственные типы приложений?</h3>
+        
+        <p>Новые типы приложений создаются расширением этих классов:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.model.apptype.ApplicationType
+            <li>com.sun.tools.visualvm.core.model.apptype.ApplicationTypeFactory
+        </ul>
+        
+        <p>Полный пример создания нового типа приложения можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part">здесь</a>.
+        
+        
+        <h3><a name="how-create-subnodes"></a>Как добавить подоузлы к типу приложения?</h3>
+        
+        <p>предстоит описать
+        
+        <h3><a name="how-add-menu-items"></a>Как добавить пункты контекстного меню к типу приложения?</h3>
+        
+        <p>Новые пункты контекстного меню создаются расширением этих классов:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.explorer.ExplorerActionsProvider
+            <li>javax.swing.AbstractAction
+        </ul>
+        
+        <p><b>Примечание:</b> если <tt>DataSourceViewProvider</tt> возвращает true из метода <tt>supportsViewFor()</tt>, 
+        пункт меню «Open» (Открыть) создаётся автоматически, как объясняется <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part4">здесь</a>. 
+        
+        <p>Полный пример создания новых пунктов меню можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part">здесь</a>.
+        
+        <h3><a name="how-add-menu-items-sub"></a>Как добавить пункты контекстного меню к подоузлам типа приложения?</h3>
+        
+        <p>предстоит описать
+        
+        <h2>Узлы (Hosts)</h2>
+        
+        <h3><a name="what-is-host"></a>Что такое узел (host)?</h3>
+        
+        <p>Класс <tt>Host</tt> предоставляет общий интерфейс 
+        для источников данных, представляющих localhost или удалённый узел. Это источник данных,
+        так же как <tt>Application</tt> — источник данных. Однако для конечного пользователя он не так важен,
+        как источник данных <tt>Application</tt>. По умолчанию VisualVM
+        предоставляет вкладку для каждого узла, показывая сведения, специфичные для узла, такие как статистика CPU и
+        памяти, а также IP узла и операционную систему.
+        
+        <h3><a name="how-extend-host"></a>Как добавить дополнительные представления для источника данных Host?</h3>
+        
+        <p>Новые вкладки для источника данных Host создаются расширением этих классов:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.ui.DataSourceView
+            <li>com.sun.tools.visualvm.core.ui.DataSourceViewProvider&lt;Host&gt;
+        </ul>
+        
+        <p>Полный пример создания новых вкладок 
+        для источника данных Host можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part3">здесь</a>.
+        
+        
+        <h3><a name="how-extend-host-overview"></a>Как расширить вкладку Host «Overview»?</h3>
+        
+        <p>Новые вкладки для источника данных Host создаются расширением этих классов:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.ui.ViewPlugin.ViewDescriptor
+            <li>com.sun.tools.visualvm.core.ui.ViewPlugin&lt;Host&gt;
+        </ul>
+        
+        <p>Полный пример создания новых вкладок 
+        для источника данных Host можно найти <a href="https://blogs.oracle.com/geertjan/entry/getting_started_extending_visualvm_part3">здесь</a>.
+        
+        
+        <h2>Включение и отключение функциональности</h2>
+        
+        <h3><a name="ensure-jmx"></a>Как убедиться, что у приложения включён JMX?</h3>
+        
+        <p>Возможно, вы хотите, чтобы представление показывалось, только если включён JMX.
+        Для этого у вас есть два класса:
+        
+        <ul>
+            <li>com.sun.tools.visualvm.core.model.jmx.JmxModel
+            <li>com.sun.tools.visualvm.core.model.jmx.JmxModelFactory
+        </ul>
+        
+        <p>Для этих целей используйте <tt>DataSourceViewProvider.supportsViewFor</tt> так:
+        
+        <p><pre>public boolean supportsViewFor(Application application) {
+    JmxModel jmx = JmxModelFactory.getJmxModelFor(application);
+    MBeanServerConnection mbsc = jmx.getMBeanServerConnection();
+    return mbsc != null;
+}</pre>
+
+<p>Если возвращается <tt>false</tt>, JMX не включён и представление не будет показано.
+        
+        
+        <h3><a name="ensure-jvm"></a>Как убедиться, что используется подходящая JVM?</h3>
+        
+        <p>предстоит описать
+        
+        <h2>Распространение</h2>
+        
+        <h3>Как распространять плагины VisualVM?</h3>
+        
+        <p>Если вы создаёте плагин VisualVM в NetBeans IDE, можно
+        щёлкнуть проект правой кнопкой и выбрать «Create NBM». Вы получите файл NBM,
+        который является ZIP-файлом, понятным VisualVM. Этот файл NBM можно
+        установить в VisualVM через Plugin Manager (диспетчер плагинов). Файл NBM можно распространять
+        по электронной почте или разместив его на сервере и сообщив пользователям,
+        откуда его взять. Можно также создать так называемый «update center» (центр обновлений) —
+        XML-файл, определяющий расположение и описание файла NBM, который
+        пользователи регистрируют в своём Plugin Manager и затем используют для
+        доступа к вашим плагинам VisualVM.
+        <p><p>
+    </body>
+    
+</html>

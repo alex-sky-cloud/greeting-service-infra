@@ -1,0 +1,54 @@
+<!-- Copyright (c) 2008, 2011, Oracle and/or its affiliates. All rights reserved.  -->
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Вкладка JConsole Plug-in Wrapper в VisualVM</title>
+<style type="text/css">
+<!--
+.style1 {font-family: "Courier New", Courier, monospace}
+-->
+</style>
+</head>
+
+<body>
+<div id="contents_div">
+<div id="contents_contents">
+<div id="contents_main_doc">
+<h1>Вкладка JConsole Plug-in Wrapper</h1>
+<hr />
+<p> Существует необязательный <strong>plugin</strong> (плагин) <strong>VisualVM</strong>, который позволяет добавить в VisualVM любые пользовательские вкладки, созданные вами для консоли мониторинга и управления платформы Java, Standard Edition (Java SE) — <strong>JConsole</strong>. Любые плагины, которые вы собирали для JConsole, можно легко подключить к VisualVM с помощью необязательной вкладки-обёртки JConsole plug-in wrapper. </p>
+<blockquote>
+  <p><strong>	Примечание</strong>: как создавать пользовательские вкладки-плагины для JConsole, см. в разделе <a href="http://java.sun.com/javase/6/docs/technotes/guides/management/jconsole.html#gdeje">Creating Custom Tabs</a> (создание пользовательских вкладок) руководства Java SE platform <a href="http://java.sun.com/javase/6/docs/technotes/guides/management/toc.html">Monitoring and Management Guide</a> (руководство по мониторингу и управлению). Если же вы пользуетесь VisualVM и никогда не создавали пользовательские вкладки для JConsole, лучше сразу писать свои плагины для VisualVM. См. <a href="https://visualvm.java.net/api-quickstart.html">Getting Started Extending VisualVM</a> (начало расширения VisualVM) и  <a href="https://visualvm.java.net/api-faq.html">VisualVM API FAQs</a> (часто задаваемые вопросы по API VisualVM) — там больше сведений о создании плагинов VisualVM.
+  </p>
+</blockquote>
+<h2>Добавление вкладки JConsole Plug-In Wrapper </h2>
+<p>Чтобы добавить вкладку-обёртку JConsole plug-in wrapper в VisualVM, выполните следующие шаги:</p>
+<ol>
+  <li>Выберите <strong>Tools</strong> (Инструменты), затем <strong>Plugins</strong> (плагины) в выпадающих меню VisualVM. Откроется следующее окно.
+    <p><img src="images/docs/adding-jconsole-plugins-tab.png" alt="Добавление вкладки-обёртки плагинов JConsole" width="843" height="557" /></p>
+  </li>
+  <li>Отметьте <strong>VisualVM-JConsole</strong> и нажмите <strong>Install</strong> (Установить). </li>
+  <li>Пройдите инструкции на экране.</li>
+  <li>Теперь, если выделить работающее Java-приложение, щёлкнуть правой кнопкой и выбрать <strong>Open</strong> (Открыть), в правой части окна VisualVM появится вкладка <strong>JConsole Plugins</strong> (плагины JConsole). Однако пока на вкладке ещё нет плагинов JConsole, как показано ниже.
+<p> <img src="images/docs/jconsole-plugins-tab.png" alt="Вкладка-обёртка плагинов JConsole." width="880" height="489" /></p></li>
+
+<li>Теперь пользовательские плагины JConsole можно импортировать через меню <strong>Tools</strong> (Инструменты) | <strong>Options</strong> (Параметры).</li>
+<li>Нажмите <strong>JConsole Plugins</strong> (плагины JConsole). </li>
+<li>Нажмите <strong>Add JAR/Folder</strong> (Добавить JAR/папку) и укажите Java-архив (JAR) вашего плагина JConsole. Пример плагина JConsole с именем JTop поставляется с платформой Java SE 6. Приложение JTop — демонстрация <strong>JDK</strong> (Java Development Kit, комплект разработки Java), которая показывает использование <strong>CPU</strong> (процессора) всеми потоками, работающими в приложении. Эта демонстрация полезна, чтобы находить потоки с высокой нагрузкой на CPU, и её обновили так, чтобы она работала и как плагин JConsole, и как отдельный GUI. JAR-файл плагина JTop находится <em>в <span class="style1">JDK_HOME</span></em><span class="style1">/demo/management/JTop/JTop.jar</span>, где <em><span class="style1">JDK_HOME</span></em> — каталог установки JDK.
+  <p><img src="images/docs/select-jconsole-plugin.png" alt="Выбор плагина JConsole." width="731" height="467" />    </li>
+<li>На панели <strong>JConsole Plugins Options</strong> (параметры плагинов JConsole) можно также задать период опроса (polling period). Этот параметр определяет, как часто вкладка JConsole Plugins будет обновлять сведения, которые показывают импортированные на вкладку плагины JConsole. 
+<li>Закройте панель Options, нажав <strong>OK</strong>. 
+<li>В правой панели VisualVM закройте вкладку процесса, который вы мониторите.
+<li>Снова начните мониторинг процесса: щёлкните процесс правой кнопкой в левой панели и выберите <strong>Open</strong> (Открыть). На вкладке JConsole Plugins должна появиться вкладка JTop.
+  <p><img src="images/docs/jtop-plugin.png" alt="Вкладка плагинов JConsole с плагином JTop."/>
+  <p>Добавлена вкладка JTop: на ней видно использование CPU различными работающими потоками.  
+</ol>
+<hr/>
+<p><a href="docindex.html">Return to the VisualVM Documentation index</a> (вернуться к оглавлению документации VisualVM)</p>
+
+</div>
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,254 @@
+<html>
+<head>
+
+    <meta charset="utf-8" />
+    <title>Руководство по устранению неполадок</title>
+
+    <style>
+
+        #contents_main p {
+            margin: 0px;
+            padding: 8px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            clear: both;
+        }
+
+        #contents_main hr {
+            border: 1px dashed #cccccc;
+            border-collapse: collapse;
+            clear: both;
+        }
+
+        #contents_main p img {
+            float: left;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            padding: 2px;
+            border: 1px solid #cccccc;
+        }
+
+        ol li, ul li {
+            padding-bottom: 3px;
+        }
+
+        h4 {
+            margin-bottom: 8px !important;
+            padding-bottom: 8px !important;
+        }
+
+        h4 + p {
+            margin-top: 0px !important;
+            padding-top: 0px !important;
+        }
+
+        h4 + p + p {
+            margin-top: 0px !important;
+            padding-top: 0px !important;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<div id="contents_div">
+
+    <div id="contents_contents">
+        <div id="contents_main">
+
+            <h1>Руководство по устранению неполадок VisualVM</h1>
+
+            <p style="margin-bottom: 15px;">
+                В этом документе описаны самые частые проблемы при использовании <strong>VisualVM</strong> и сведения, как их исправить или обойти.
+                Если проблема не описана здесь, обратитесь за помощью в <a href="mailto:users@visualvm.java.net">mailing list</a> (список рассылки) или <a href="http://java.net/jira/secure/CreateIssue.jspa?pid=10598&issuetype=1">file a bug report</a> (отправьте отчёт об ошибке) (чтобы пользоваться списком рассылки или отправлять отчёты об ошибках, нужно зарегистрироваться).
+            </p>
+
+            <a name="starting"></a>
+            <h3>Проблемы с запуском VisualVM</h3>
+
+            <a name="doesntstart"></a>
+            <h4>VisualVM Does Not Start</h4>
+            <p><b>Описание:&nbsp;</b>VisualVM вообще не запускается без видимой причины.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>есть несколько причин, из-за которых VisualVM может не запуститься:</p>
+            <ul>
+                <li><i>The download is broken</i> — убедитесь, что получили правильные файлы (менеджеры архивов обычно сообщают, если архив повреждён)</li>
+                <li><i>VisualVM waits for license confirmation</i> — убедитесь, что не пропустили диалог License Agreement (лицензионное соглашение)</li>
+                <li><i>Incorrect JDK is used for running VisualVM</i> — если вы не задали <strong>JDK</strong> (Java Development Kit, комплект разработки Java) для запуска VisualVM вручную, убедитесь, что
+                Java по умолчанию в системе — Oracle/Sun JDK 7+ (или JDK 6+ для VisualVM 1.3.6 и более ранних версий)</li>
+                <li><i>Incorrectly set JDK for running VisualVM</i> — если вы задали JDK для запуска VisualVM вручную, убедитесь, что путь к JDK правильный и не заканчивается слэшем</li>
+                <li><i>Incorrectly set VisualVM user directory</i> — если вы задали каталог пользователя VisualVM вручную, убедитесь, что он находится вне каталога установки VisualVM</li>
+            </ul>
+            <br>
+
+            <a name="compatwin"></a>
+            <h4>VisualVM has stopped working (Native Error Dialog During Startup)</h4>
+            <p><b>Описание:&nbsp;</b>во время запуска VisualVM операционная система показывает диалог 'VisualVM has stopped working', процесс VisualVM завершается.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>эта проблема возникает в системах Windows, когда процесс VisualVM запущен в Compatibility mode для Windows 95/98/ME. Убедитесь, что
+            Compatibility mode отключён для запускателя VisualVM, или при необходимости используйте Compatibility mode для самой новой возможной версии ОС.
+            Примечание: запускать VisualVM или наблюдаемые приложения Java в Compatibility mode настоятельно не рекомендуется: несовместимости виртуализированных сред
+            могут аварийно завершать процессы Java.</p><br>
+
+            <a name="d3dwin64"></a>
+            <h4>Java(TM) Platform SE binary has stopped working (Native Error Dialog During Startup)</h4>
+            <p><b>Описание:&nbsp;</b>во время запуска VisualVM операционная система показывает диалог 'Java(TM) Platform SE binary has stopped working', процесс VisualVM завершается.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>это известная ошибка JDK в конвейере отрисовки d3d, затрагивающая 64-разрядные системы Windows. Чтобы отключить ускорение d3d,
+            запускайте VisualVM командой <code>visualvm.exe -J-Dsun.java2d.d3d=false</code>. Либо обновите файл <code>&lt;visualvm_installdir&gt;\etc\visualvm.conf</code>,
+            чтобы включить переключатель <code>-J-Dsun.java2d.d3d=false</code> в раздел <code>default_options</code>. Подробности см. в <a href="http://bugs.sun.com/view_bug.do?bug_id=6772139">JDK bug #6772139</a>
+            (ошибка JDK №6772139).</p><br>
+
+            <a name="jrehost"></a>
+            <h4>Error Starting VisualVM (Error Dialog During Startup)</h4>
+            <p><b>Описание:&nbsp;</b>во время запуска VisualVM показывается диалог 'Error Starting VisualVM' с сообщением о неподдерживаемой версии Java.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>VisualVM работает только на JDK 7+ (или JDK 6+ для VisualVM 1.3.6 и более ранних версий) — не на JRE! Если запустить на JRE или неверной версии JDK, VisualVM показывает этот диалог и завершается. Чтобы задать, какой JDK будет использоваться для запуска VisualVM, следуйте шагам в
+            разделе Starting VisualVM документа <a href="gettingstarted.html#starting_visualvm">Getting Started with VisualVM</a> (начало работы с VisualVM).</p><br>
+
+            <a name="cleandir"></a>
+            <h4>Warning - could not install some modules (Error Dialog During Startup)</h4>
+            <p><b>Описание:&nbsp;</b>во время запуска VisualVM показывается диалог 'Warning - could not install some modules' со списком затронутых модулей.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>обычно так бывает, если распаковать новую версию VisualVM поверх уже существующей установки VisualVM.
+            Распаковывайте VisualVM в новый каталог.</p><br>
+
+            <a name="using"></a>
+            <h3>Проблемы при использовании VisualVM</h3>
+
+            <a name="jvmstat6u12"></a>
+            <h4>No Running Applications Detected, Exception Thrown After Startup</h4>
+            <p><b>Описание:&nbsp;</b>в дереве <strong>Applications</strong> (Приложения) не показаны работающие приложения, после запуска VisualVM выбрасывается исключение (<code>java.lang.NullPointerException at JvmJvmstatModelProvider.createModelFor(JvmJvmstatModelProvider)</code>).</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так бывает для VisualVM 1.1 и более ранних выпусков и для Java VisualVM 6u11 и более ранних выпусков, когда в системе работает хотя бы одно приложение Java
+            на JDK 6 Update 12 (включая сам VisualVM). Чтобы исправить проблему, скачайте и установите последний плагин VisualVM-Extensions из Plugin Center через
+            <strong>Tools</strong> (Инструменты) → <strong>Plugins</strong> (плагины). Подробности в <a href="https://blogs.oracle.com/nbprofiler/entry/visualvm_fixed_to_correctly_recognize">this blog post</a> (этой записи блога).</p><br>
+
+            <a name="jpswin"></a>
+            <h4>Local Applications Cannot Be Detected (Error Dialog On Startup)</h4>
+            <p><b>Описание:&nbsp;</b>сразу после запуска VisualVM показывается диалог ошибки о том, что локальные приложения не могут быть обнаружены.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так может случиться в системах Windows; причина — неправильно настроенная технология <code>jvmstat</code>, которая используется для обнаружения
+                работающих приложений. Есть две возможные причины:</p>
+            <ul>
+                <li><i>Insufficient permissions for <code>%TMP%\hsperfdata_username</code> folder</i> — убедитесь, что можете создать файл в каталоге, и при необходимости обновите права для полного доступа к папке. Либо просто заново создайте папку — тогда должны автоматически установиться правильные права доступа.
+                    Подробности см. в этой ветке <a href="http://forum.java.sun.com/thread.jspa?threadID=5133218&tstart=0">forums.sun.com thread</a>.</li>
+                <li><i>Having <code>%TMP%\hsperfdata_username</code> folder on a FAT disk</i> — по умолчанию <code>jvmstat</code> не работает на дисках FAT из-за ограничений безопасности. Проверку безопасности можно обойти, задав
+                    флаг <code>-XX:+PerfBypassFileSystemCheck</code> и для VisualVM, и для наблюдаемого приложения. Подробности см. в <a href="http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=5042659">JDK bug #5042659</a>
+                    (ошибка JDK №5042659).</li>
+            </ul>
+            <br>
+
+            <a name="jpswin2"></a>
+            <h4>Local Applications Cannot Be Monitored (Error Dialog On Startup)</h4>
+            <p><b>Описание:&nbsp;</b>сразу после запуска VisualVM показывается диалог ошибки о том, что локальные приложения не могут быть под наблюдением. Локально работающие приложения Java отображаются как &lt;Unknown Application&gt; (pid ###).</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так может случиться в системах Windows, если в имени пользователя есть заглавные буквы. В этом случае имя пользователя — <code>UserName</code>, но
+                каталог jvmstat, созданный JDK, — <code>%TMP%\hsperfdata_username</code>. Чтобы обойти проблему, закройте все приложения Java, удалите каталог <code>%TMP%\hsperfdata_username</code>
+                и создайте новый каталог <code>%TMP%\hsperfdata_UserName</code>.</p><br>
+
+            <a name="jstatdremote"></a>
+            <h4>No Running Remote Applications Detected</h4>
+            <p><b>Описание:&nbsp;</b>для удалённого узла в окне Applications слева не показаны работающие приложения.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>убедитесь, что на удалённом узле, который вы хотите мониторить, работает утилита <code>jstatd</code>.
+                Это необходимо, чтобы VisualVM мог обнаруживать и получать доступ к удалённым приложениям Java. Больше сведений о <code>jstatd</code>
+            в документе <a href="applications_remote.html">Working with Remote Applications</a> (работа с удалёнными приложениями).</p>
+            <p><b>Известное ограничение:&nbsp;</b>в этом выпуске VisualVM при запуске утилиты <code>jstatd</code> нужно использовать
+            <code>port</code> и <code>rminame</code> по умолчанию, то есть параметры <code>-p</code> и <code>-n</code> не поддерживаются.</p><br>
+
+            <a name="gtk12border"></a>
+            <h4>Cannot Add Or Edit Hosts On Linux</h4>
+            <p><b>Описание:&nbsp;</b>добавление удалённого узла и/или вызов Properties для существующего узла выбрасывает <code>java.lang.NullPointerException</code> на Linux/Solaris, новый узел добавить нельзя.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так бывает при запуске VisualVM 1.2 или новее на JDK 7 или OpenJDK 6 с GTK LaF. Причина — ошибка JDK, появившаяся в JDK 7 b10. Подробности в
+                <a href="http://java.net/jira/browse/VISUALVM-372">VisualVM bug #372</a> (ошибка VisualVM №372). Быстрый обходной путь — сменить оформление (look'n'feel) командой
+                <code>visualvm --laf Nimbus</code> или <code>visualvm --laf Metal</code> либо запускать VisualVM на Oracle JDK 7.</p><br>
+
+            <a name="6u17win"></a>
+            <h4>HeapWalker Throws Exceptions When Switching Views</h4>
+            <p><b>Описание:&nbsp;</b>переключение видов (Overview/Classes/Instances/OQL Console) в HeapWalker выбрасывает <code>java.lang.IncompatibleClassChangeError</code>, интерфейс не перерисовывается.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так бывает при запуске VisualVM на JDK 6 Update 17 и новее с Windows LaF. Подробности и исправление в
+                <a href="http://java.net/jira/browse/VISUALVM-333">VisualVM bug #333</a> (ошибка VisualVM №333). Быстрый обходной путь — сменить оформление командой
+                <code>visualvm.exe --laf Nimbus</code> или <code>visualvm.exe --laf Metal</code> либо запускать VisualVM на JDK 6 Update 16 (или более раннем).</p><br>
+
+            <a name="xshare"></a>
+            <h4>Profiler Tab Shows Warning About Class Sharing, Profiling Does Not Work</h4>
+            <p><b>Описание:&nbsp;</b>на вкладке <strong>Profiler</strong> (Профилировщик) в красной рамке показано предупреждение "Class sharing is enabled for this JVM", профилирование <strong>CPU</strong> (процессора) или Memory аварийно завершает локальные приложения, работающие на JDK 6 Update 6 и более ранних.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>есть известная проблема с динамическим attach, который используется для профилирования: целевая <strong>JVM</strong> (Java Virtual Machine, виртуальная машина Java) может
+                аварийно завершиться, если включено совместное использование классов (class sharing). Чтобы запустить приложение без class sharing, передайте аргумент <code>-Xshare:off</code>
+                команде <code>java</code>, запускающей приложение. Больше сведений в <a href="http://bugs.sun.com/view_bug.do?bug_id=6497639">JDK bug #6497639</a>
+                (ошибка JDK №6497639) и <a href="http://bugs.sun.com/view_bug.do?bug_id=6598065">JDK bug #6598065</a> (ошибка JDK №6598065).</p><br>
+            
+            <a name="xverify"></a>
+            <h4>CPU Profiling Fails With "Redefinition failed with error 62"</h4>
+            <p><b>Описание:&nbsp;</b>профилирование CPU на вкладке Profiler или с плагином Startup Profiler завершается ошибкой, VisualVM показывает сообщение "Redefinition failed with error 62".</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>перезапустите приложение с аргументом VM -Xverify:none, чтобы отключить проверку classfile. Чтобы отключить проверку classfile, приложение нужно перезапустить. Проверку нельзя отключить, пока приложение работает.</p><br>
+
+            <a name="calibration"></a>
+            <h4>Profiler Measures Incorrect Performance Results</h4>
+            <p><b>Описание:&nbsp;</b>результаты профилирования производительности неверны — нулевые или отрицательные времена и т. д.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>при первом запуске VisualVM выполняется калибровка, чтобы измерить накладные расходы профилирования на локальной системе. Данные калибровки
+            затем используются для точных результатов профилирования. Когда производительность системы меняется, данные калибровки больше не действительны, и результаты профилирования становятся смещёнными.
+            Чтобы заново откалибровать профилировщик, вручную удалите файл данных калибровки <code>&lt;system userdir&gt/.nbprofiler/machinedata.jdk1X</code>
+            и перезапустите VisualVM — калибровка будет выполнена снова при запуске VisualVM.</p><br>
+
+            <a name="plugins"></a>
+            <h3>Проблемы с плагинами VisualVM</h3>
+
+            <a name="pluginsaccess"></a>
+            <h4>Cannot Download VisualVM Plugins</h4>
+            <p><b>Описание:&nbsp;</b>вкладка <strong>Available Plugins</strong> (Доступные плагины) диалога Plugins отключена, плагины скачать нельзя.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>эта проблема возникает, когда VisualVM не может подключиться к онлайн Plugins Center. Есть несколько причин, из-за которых VisualVM
+                может не получить доступ к Plugins Center: нет интернета, неправильная настройка прокси, прокси блокирует нужный порт, нет сертификата для
+                dev.java.net и т. д. Убедитесь, что интернет работает и вы можете открыть файл дескриптора Plugins Center по адресу, заданному на вкладке <strong>Settings</strong> (Параметры) диалога Plugins.
+                Если подключение всё равно не устанавливается, плагины можно скачать на другой машине и установить вручную; подробности на странице <a href="pluginscenters.html">Plugins Centers</a> (центры плагинов).
+            </p><br/>
+
+            <a name="pluginsloading"></a>
+            <h4>Timeout While Installing a Plugin</h4>
+            <p><b>Описание:&nbsp;</b>диалог Plugin Installer показывает сообщение 'The Plugin Installer found problem timeout of loading &lt;module name&gt;'.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так иногда бывает при установке <strong>plugin</strong> (плагина) из Plugins Center. Плагин не удалось включить в
+                текущем сеансе VisualVM; перезапустите VisualVM, чтобы начать пользоваться плагином.
+            </p><br/>
+
+            <a name="pluginsvalidation"></a>
+            <h4>Validation Warning While Installing a Plugin</h4>
+            <p><b>Описание:&nbsp;</b>при установке плагина из VisualVM Plugin Center показывается диалог Validation Warning с сообщением Validation failed.</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так бывает при установке любого плагина из VisualVM Plugin Center. На самом деле плагины действительны и заслуживают доверия: можно
+            просто пропустить диалог и продолжить установку плагина. Проблема вызвана отсутствующим ключом в инструменте VisualVM для распознавания действительности сертификата плагина.
+            </p><br/>
+
+            <a name="gfstatsdisabled"></a>
+            <h4>Cannot Get The List Of Web Applications From GlassFish</h4>
+            <p><b>Описание:&nbsp;</b>открытие подузла "Model" приложения GlassFish зависает с сообщением "Please Wait"</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>так бывает, когда на целевом сервере не разрешён мониторинг веб-приложений. Чтобы включить мониторинг,
+                в консоли администрирования GlassFish перейдите в <i>Application Server/Monitor/Runtime/Configure Monitoring</i> и задайте
+                <i>Web Container</i> в <i>High</i>. Можно также попробовать открыть настройку по этой <a href="http://localhost:4848/configuration/monitoringService.jsf?configName=server-config" target="_new">link</a>
+                (ссылке).
+            </p><br/>
+
+            <a name="gfnoservlets"></a>
+            <h4>No Servlets Displayed In The Runtime Area Of GlassFish Web Application Tab</h4>
+            <p><b>Описание:&nbsp;</b>в области runtime вкладки веб-приложения GlassFish не отображаются сервлеты (см. <a href="images/troubleshoot/visualvm_gf_noservlets.png" target="_new">here</a> (здесь))</p>
+            <p><b>Решение:&nbsp;&nbsp;</b>отображаются только сервлеты, для которых есть какая-то статистика. Чтобы сгенерировать статистику, дайте нагрузку на веб-приложение.</p>
+            <br/>
+
+        </div>
+    </div>
+
+    <div id="contents_hints">
+
+        <h3 class="first">На этой странице</h3>
+        <div>
+            <a href="#starting">Problems With Starting VisualVM</a> (проблемы с запуском VisualVM)
+            <a href="#using">Problems With Using VisualVM</a> (проблемы при использовании VisualVM)
+            <a href="#plugins">Problems With VisualVM Plugins</a> (проблемы с плагинами VisualVM)
+        </div>
+
+        <h3>Быстрые ссылки</h3>
+        <div>
+            <a href="http://java.net/jira/secure/CreateIssue.jspa?pid=10598&issuetype=1">Report a Bug</a> (сообщить об ошибке)
+            <a href="mailto:feedback@visualvm.java.net">Send Feedback</a> (отправить отзыв)
+        </div>
+
+    </div>
+
+    <div id="contents_clear"></div>
+
+</div>
+
+</body>
+</html>

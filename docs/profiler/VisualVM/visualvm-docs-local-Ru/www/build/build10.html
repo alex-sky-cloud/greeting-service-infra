@@ -1,0 +1,47 @@
+<html>
+<head>
+<title>Руководство по сборке VisualVM 1.0</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+</head>
+<body>
+<div id="contents_div">
+<div id="contents_contents">
+<div id="contents_main_doc">
+<p>В этом документе описана структура SVN проекта VisualVM и краткие инструкции по сборке <b>VisualVM 1.0</b>. </p>
+<p>
+Получите исходный код клиентом SVN следующей командой. <br>
+ 
+ 
+<code> svn checkout https://svn.java.net/svn/visualvm~svn/branches/release10</code><br>
+</p>
+<p>Есть два комплекта (suite):</p>
+<ul>
+<li><b>visualvm</b>: определяет основное приложение, и</li>
+<li><b>plugins</b>: содержит плагины, доступные в VisualVM Plugin Center (центре плагинов VisualVM).</li>
+</ul>
+
+<p>Структура в <a href="http://java.net/projects/visualvm/sources/svn/show/branches/release10">SVN</a> для выпуска VisualVM 1.0:</p>
+<ul>
+    <li>release10
+        <ul>
+            <li>visualvm&nbsp;&nbsp;&lt;--- комплект основного приложения</li>
+            <li>plugins&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- для центра плагинов (jconsole, mbeans, glassfish)</li>
+        </ul>
+    </li>
+</ul>
+<p>
+Чтобы собрать основное приложение visualvm, нужны двоичные файлы платформы и профилировщика NetBeans 6.0.1, доступные
+<a href="http://java.net/projects/visualvm/downloads/download/dev/nb_visualvm_30042008.zip">здесь</a>.
+Эти двоичные файлы нужно распаковать в каталог release10/visualvm. Для сборки или запуска VisualVM можно использовать <code>ant run</code>
+или <code>ant build-zip</code>.
+</p>
+<p>
+Чтобы собрать комплект плагинов, используйте <code>ant build</code> или <code>ant run</code>. Это автоматически
+соберёт zip-дистрибутив основного приложения visualvm в release10/visualvm/dist/visualvm.zip и распакует
+его в каталог release10/plugins/visualvm. После этого сборка комплекта плагинов продолжается и
+собирает каждый отдельный плагин.</p>
+</div>
+</div>
+</div>
+</body>
+</html>

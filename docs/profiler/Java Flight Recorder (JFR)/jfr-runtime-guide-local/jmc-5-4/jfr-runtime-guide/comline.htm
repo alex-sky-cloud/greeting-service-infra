@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Справочник команд</title>
+<meta name="description" content="Описывает реализацию среды выполнения Java Flight Recorder и содержит инструкции по использованию средства.">
+<link rel="stylesheet" href="../../dcommon/css/fusiondoc.css">
+<link rel="stylesheet" href="../../nav/css/html5.css">
+<link rel="stylesheet" href="../../dcommon/css/local-clean.css">
+</head>
+<body>
+<div class="row" id="CONTENT">
+<div class="IND" dir="ltr">
+<a id="BEGIN" name="BEGIN"></a>
+<p class="local-top"><a href="toc.htm">Содержание</a></p>
+<div id="JFRUH188" class="appendix"><a id="BABHCDCE"></a>
+<h1 class="appendix"><span class="secnum">A</span> Справочник команд</h1>
+<div class="infobox-note">
+<p class="notep1">Примечание:</p>
+Для использования Java Flight Recorder в производственной среде требуется коммерческая лицензия. Подробнее о коммерческих функциях и о том, как их включить, см. по адресу <code dir="ltr"><a href="http://www.oracle.com/technetwork/java/javaseproducts/">http://www.oracle.com/technetwork/java/javaseproducts/</a></code>.</div>
+<p>Это приложение служит кратким справочником команд, которые можно использовать с <strong>JFR</strong> (Java Flight Recorder, журнал полёта Java). Оно содержит следующие разделы:</p>
+<ul>
+<li>
+<p><a href="comline.htm#BABHIICD">раздел A.1, «Параметры командной строки»</a></p>
+</li>
+<li>
+<p><a href="comline.htm#BABBGJCF">раздел A.2, «Справочник диагностических команд»</a></p>
+</li>
+</ul>
+<a id="BABHIICD"></a>
+<div id="JFRUH189" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">A.1</span> Параметры командной строки</h2>
+<p>При запуске приложения Java командой <code dir="ltr">java</code> можно указать параметры, включающие Java Flight Recorder, задающие его настройки и начинающие запись (recording). Следующие параметры командной строки относятся к Java Flight Recorder:</p>
+<ul>
+<li>
+<p><code dir="ltr">-XX:+|-FlightRecorder</code></p>
+</li>
+<li>
+<p><code dir="ltr">-XX:FlightRecorderOptions</code></p>
+</li>
+<li>
+<p><code dir="ltr">-XX:StartFlightRecording</code></p>
+</li>
+</ul>
+<p>Эти параметры командной строки доступны только в коммерческой лицензии <strong>JDK</strong> (Java Development Kit, комплект разработки Java). Чтобы использовать их, необходимо также указать параметр <code dir="ltr">-XX:+UnlockCommercialFeatures</code>.</p>
+<div class="infobox-note">
+<p class="notep1">Примечание:</p>
+Параметры <code dir="ltr">-XX</code> следует использовать, только если вы хорошо понимаете устройство своей системы. Неправильное применение этих команд может повлиять на стабильность или производительность системы. Параметры <code dir="ltr">-XX</code> являются экспериментальными и могут быть изменены в любой момент.</div>
+</div>
+<!-- class="sect1" -->
+<a id="BABBGJCF"></a>
+<div id="JFRUH190" class="sect1"><!-- infolevel="all" infotype="General" -->
+<h2 class="sect1"><span class="secnum">A.2</span> Справочник диагностических команд</h2>
+<p>Ниже описываются диагностические команды (diagnostic commands), доступные для управления Java Flight Recorder, и параметры каждой команды. Эти сведения также можно получить, выполнив команду <code dir="ltr">jcmd</code> с указанным идентификатором процесса, затем параметром <code dir="ltr">help</code> и именем команды. Например, чтобы получить справку по команде <code dir="ltr">JFR.start</code> для выполняющегося процесса <strong>JVM</strong> (Java Virtual Machine, виртуальная машина Java) с идентификатором 5361, выполните следующее:</p>
+<pre dir="ltr">
+jcmd 5361 help JFR.start
+</pre>
+<p>Чтобы получить полный список диагностических команд, доступных <strong>JVM</strong>, не указывайте имя команды.</p>
+<p>Диагностические команды, связанные с Java Flight Recorder:</p>
+<ul>
+<li>
+<p><a href="comline.htm#BABGCBBA">JFR.start</a></p>
+</li>
+<li>
+<p><a href="comline.htm#CACBECAF">JFR.check</a></p>
+</li>
+<li>
+<p><a href="comline.htm#BABCGDCD">JFR.stop</a></p>
+</li>
+<li>
+<p><a href="comline.htm#BABIBHEI">JFR.dump</a></p>
+</li>
+</ul>
+<a id="BABGCBBA"></a>
+<div id="JFRUH191" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">A.2.1</span> JFR.start</h3>
+<p>Диагностическая команда <code dir="ltr">JFR.start</code> запускает запись полёта. В <a href="comline.htm#BABJEIEH">таблице A-1</a> перечислены параметры, которые можно использовать с этой командой.</p>
+<div id="JFRUH192" class="tblhruleformal">
+<p class="titleintable"><a id="sthref11"></a><a id="BABJEIEH"></a>«Таблица A-1. JFR.start»</p>
+<table class="cellalignment300" title="JFR.start" summary="Описательная таблица из четырёх столбцов. В крайнем левом столбце — имена параметров. В следующем столбце — описание соответствующего параметра. В следующем столбце — тип значения соответствующего параметра. В крайнем правом столбце — значение по умолчанию для соответствующего параметра, если оно задано." dir="ltr">
+<thead>
+<tr class="cellalignment289">
+<th class="cellalignment301" id="r1c1-t4">Параметр</th>
+<th class="cellalignment301" id="r1c2-t4">Описание</th>
+<th class="cellalignment301" id="r1c3-t4">Тип значения</th>
+<th class="cellalignment301" id="r1c4-t4">По умолчанию</th>
+</tr>
+</thead>
+<tbody>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r2c1-t4" headers="r1c1-t4">
+<p>name</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t4 r1c2-t4">
+<p>Имя записи</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t4 r1c3-t4">
+<p>String (строка)</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t4 r1c4-t4">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r3c1-t4" headers="r1c1-t4">
+<p>settings</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t4 r1c2-t4">
+<p>Шаблон на стороне сервера</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t4 r1c3-t4">
+<p>String</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t4 r1c4-t4">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r4c1-t4" headers="r1c1-t4">
+<p>defaultrecording</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t4 r1c2-t4">
+<p>Запускает запись по умолчанию</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t4 r1c3-t4">
+<p>Boolean (логический)</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t4 r1c4-t4">
+<p>False</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r5c1-t4" headers="r1c1-t4">
+<p>delay</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t4 r1c2-t4">
+<p>Задержка (delay) начала записи</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t4 r1c3-t4">
+<p>Time (время)</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t4 r1c4-t4">
+<p>0s</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r6c1-t4" headers="r1c1-t4">
+<p>duration</p>
+</td>
+<td class="cellalignment295" headers="r6c1-t4 r1c2-t4">
+<p>Длительность (duration) записи</p>
+</td>
+<td class="cellalignment295" headers="r6c1-t4 r1c3-t4">
+<p>Time</p>
+</td>
+<td class="cellalignment295" headers="r6c1-t4 r1c4-t4">
+<p>0s (означает «бесконечно»)</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r7c1-t4" headers="r1c1-t4">
+<p>filename</p>
+</td>
+<td class="cellalignment295" headers="r7c1-t4 r1c2-t4">
+<p>Имя файла результирующей записи</p>
+</td>
+<td class="cellalignment295" headers="r7c1-t4 r1c3-t4">
+<p>String</p>
+</td>
+<td class="cellalignment295" headers="r7c1-t4 r1c4-t4">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r8c1-t4" headers="r1c1-t4">
+<p>compress</p>
+</td>
+<td class="cellalignment295" headers="r8c1-t4 r1c2-t4">
+<p>Сжать результирующий файл записи с помощью <strong>GZip</strong></p>
+</td>
+<td class="cellalignment295" headers="r8c1-t4 r1c3-t4">
+<p>Boolean</p>
+</td>
+<td class="cellalignment295" headers="r8c1-t4 r1c4-t4">
+<p>False</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r9c1-t4" headers="r1c1-t4">
+<p>maxage</p>
+</td>
+<td class="cellalignment295" headers="r9c1-t4 r1c2-t4">
+<p>Максимальный возраст данных буфера</p>
+</td>
+<td class="cellalignment295" headers="r9c1-t4 r1c3-t4">
+<p>Time</p>
+</td>
+<td class="cellalignment295" headers="r9c1-t4 r1c4-t4">
+<p>0s (означает «без ограничения возраста»)</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r10c1-t4" headers="r1c1-t4">
+<p>maxsize</p>
+</td>
+<td class="cellalignment295" headers="r10c1-t4 r1c2-t4">
+<p>Максимальный размер буферов в байтах</p>
+</td>
+<td class="cellalignment295" headers="r10c1-t4 r1c3-t4">
+<p>Long (длинное целое)</p>
+</td>
+<td class="cellalignment295" headers="r10c1-t4 r1c4-t4">
+<p>0 (означает «без ограничения размера»)</p>
+</td>
+</tr>
+</tbody>
+</table>
+<br /></div>
+<!-- class="tblhruleformal" --></div>
+<!-- class="sect2" -->
+<a id="CACBECAF"></a>
+<div id="JFRUH193" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">A.2.2</span> JFR.check</h3>
+<p>Команда <code dir="ltr">JFR.check</code> показывает сведения о выполняющихся записях. В <a href="comline.htm#CACHCJBC">таблице A-2</a> перечислены параметры, которые можно использовать с этой командой.</p>
+<div id="JFRUH194" class="tblhruleformal">
+<p class="titleintable"><a id="sthref12"></a><a id="CACHCJBC"></a>«Таблица A-2. JFR.check»</p>
+<table class="cellalignment300" title="JFR.check" summary="Описательная таблица из четырёх столбцов. В крайнем левом столбце — имена параметров. В следующем столбце — описание соответствующего параметра. В следующем столбце — тип значения соответствующего параметра. В крайнем правом столбце — значение по умолчанию для соответствующего параметра, если оно задано." dir="ltr">
+<thead>
+<tr class="cellalignment289">
+<th class="cellalignment301" id="r1c1-t5">Параметр</th>
+<th class="cellalignment301" id="r1c2-t5">Описание</th>
+<th class="cellalignment301" id="r1c3-t5">Тип значения</th>
+<th class="cellalignment301" id="r1c4-t5">По умолчанию</th>
+</tr>
+</thead>
+<tbody>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r2c1-t5" headers="r1c1-t5">
+<p>name</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t5 r1c2-t5">
+<p>Имя записи</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t5 r1c3-t5">
+<p>String (строка)</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t5 r1c4-t5">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r3c1-t5" headers="r1c1-t5">
+<p>recording</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t5 r1c2-t5">
+<p>Идентификатор записи</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t5 r1c3-t5">
+<p>Long (длинное целое)</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t5 r1c4-t5">
+<p>1</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r4c1-t5" headers="r1c1-t5">
+<p>verbose</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t5 r1c2-t5">
+<p>Выводить подробные данные</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t5 r1c3-t5">
+<p>Boolean (логический)</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t5 r1c4-t5">
+<p>False</p>
+</td>
+</tr>
+</tbody>
+</table>
+<br /></div>
+<!-- class="tblhruleformal" --></div>
+<!-- class="sect2" -->
+<a id="BABCGDCD"></a>
+<div id="JFRUH195" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">A.2.3</span> JFR.stop</h3>
+<p>Диагностическая команда <code dir="ltr">JFR.stop</code> останавливает выполняющиеся записи полёта. В <a href="comline.htm#BABGCHHD">таблице A-3</a> перечислены параметры, которые можно использовать с этой командой.</p>
+<div id="JFRUH196" class="tblhruleformal">
+<p class="titleintable"><a id="sthref13"></a><a id="BABGCHHD"></a>«Таблица A-3. JFR.stop»</p>
+<table class="cellalignment300" title="JFR.stop" summary="Описательная таблица из четырёх столбцов. В крайнем левом столбце — имена параметров. В следующем столбце — описание соответствующего параметра. В следующем столбце — тип значения соответствующего параметра. В крайнем правом столбце — значение по умолчанию для соответствующего параметра, если оно задано." dir="ltr">
+<thead>
+<tr class="cellalignment289">
+<th class="cellalignment301" id="r1c1-t6">Параметр</th>
+<th class="cellalignment301" id="r1c2-t6">Описание</th>
+<th class="cellalignment301" id="r1c3-t6">Тип значения</th>
+<th class="cellalignment301" id="r1c4-t6">По умолчанию</th>
+</tr>
+</thead>
+<tbody>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r2c1-t6" headers="r1c1-t6">
+<p>name</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t6 r1c2-t6">
+<p>Имя записи</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t6 r1c3-t6">
+<p>String (строка)</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t6 r1c4-t6">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r3c1-t6" headers="r1c1-t6">
+<p>recording</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t6 r1c2-t6">
+<p>Идентификатор записи</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t6 r1c3-t6">
+<p>Long (длинное целое)</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t6 r1c4-t6">
+<p>1</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r4c1-t6" headers="r1c1-t6">
+<p>discard</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t6 r1c2-t6">
+<p>Отбрасывает данные записи</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t6 r1c3-t6">
+<p>Boolean (логический)</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t6 r1c4-t6">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r5c1-t6" headers="r1c1-t6">
+<p>copy_to_file</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t6 r1c2-t6">
+<p>Копировать данные записи в файл</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t6 r1c3-t6">
+<p>String</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t6 r1c4-t6">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r6c1-t6" headers="r1c1-t6">
+<p>compress_copy</p>
+</td>
+<td class="cellalignment295" headers="r6c1-t6 r1c2-t6">
+<p>Сжать с помощью <strong>GZip</strong> назначение &quot;copy_to_file&quot;</p>
+</td>
+<td class="cellalignment295" headers="r6c1-t6 r1c3-t6">
+<p>Boolean</p>
+</td>
+<td class="cellalignment295" headers="r6c1-t6 r1c4-t6">
+<p>False</p>
+</td>
+</tr>
+</tbody>
+</table>
+<br /></div>
+<!-- class="tblhruleformal" --></div>
+<!-- class="sect2" -->
+<a id="BABIBHEI"></a>
+<div id="JFRUH197" class="sect2"><!-- infolevel="all" infotype="General" -->
+<h3 class="sect2"><span class="secnum">A.2.4</span> JFR.dump</h3>
+<p>Диагностическая команда <code dir="ltr">JFR.dump</code> выгружает данные выполняющихся записей полёта. В <a href="comline.htm#BABJGJGB">таблице A-4</a> перечислены параметры, которые можно использовать с этой командой.</p>
+<div id="JFRUH198" class="tblhruleformal">
+<p class="titleintable"><a id="sthref14"></a><a id="BABJGJGB"></a>«Таблица A-4. JFR.dump»</p>
+<table class="cellalignment300" title="JFR.dump" summary="Описательная таблица из четырёх столбцов. В крайнем левом столбце — имена параметров. В следующем столбце — описание соответствующего параметра. В следующем столбце — тип значения соответствующего параметра. В крайнем правом столбце — значение по умолчанию для соответствующего параметра, если оно задано." dir="ltr">
+<thead>
+<tr class="cellalignment289">
+<th class="cellalignment301" id="r1c1-t7">Параметр</th>
+<th class="cellalignment301" id="r1c2-t7">Описание</th>
+<th class="cellalignment301" id="r1c3-t7">Тип значения</th>
+<th class="cellalignment301" id="r1c4-t7">По умолчанию</th>
+</tr>
+</thead>
+<tbody>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r2c1-t7" headers="r1c1-t7">
+<p>name</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t7 r1c2-t7">
+<p>Имя записи</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t7 r1c3-t7">
+<p>String (строка)</p>
+</td>
+<td class="cellalignment295" headers="r2c1-t7 r1c4-t7">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r3c1-t7" headers="r1c1-t7">
+<p>recording</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t7 r1c2-t7">
+<p>Идентификатор записи</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t7 r1c3-t7">
+<p>Long (длинное целое)</p>
+</td>
+<td class="cellalignment295" headers="r3c1-t7 r1c4-t7">
+<p>1</p>
+</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r4c1-t7" headers="r1c1-t7">
+<p>copy_to_file</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t7 r1c2-t7">
+<p>Копировать данные записи в файл</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t7 r1c3-t7">
+<p>String</p>
+</td>
+<td class="cellalignment295" headers="r4c1-t7 r1c4-t7">&nbsp;</td>
+</tr>
+<tr class="cellalignment289">
+<td class="cellalignment295" id="r5c1-t7" headers="r1c1-t7">
+<p>compress_copy</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t7 r1c2-t7">
+<p>Сжать с помощью <strong>GZip</strong> назначение &quot;copy_to_file&quot;</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t7 r1c3-t7">
+<p>Boolean (логический)</p>
+</td>
+<td class="cellalignment295" headers="r5c1-t7 r1c4-t7">
+<p>False</p>
+</td>
+</tr>
+</tbody>
+</table>
+<br /></div>
+<!-- class="tblhruleformal" --></div>
+<!-- class="sect2" --></div>
+<!-- class="sect1" --></div>
+<!-- class="appendix" --></div>
+<!-- class="ind" -->
+</div>
+</div>
+</body>
+</html>

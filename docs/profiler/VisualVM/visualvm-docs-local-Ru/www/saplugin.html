@@ -1,0 +1,151 @@
+<html>
+<head>
+    
+    <meta charset="utf-8" />
+    <title>SA-Plugin для VisualVM</title>
+    
+    <style>            
+
+        #contents_main {
+            margin-right: 0px !important;
+        }
+            
+        #contents_main p {
+            margin: 0px;
+            padding: 8px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            clear: both;
+        }
+        
+        #contents_main hr {
+            border: 1px dashed #cccccc;
+            border-collapse: collapse;
+            clear: both;
+        }
+
+        #contents_main p img {
+            float: left;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            padding: 2px;
+            border: 1px solid #cccccc;
+        }
+        
+        ol li, ul li {
+            padding-bottom: 3px;
+        }
+
+    </style>
+    
+</head>
+<body>
+<div id="contents_div">
+    
+    <div id="contents_contents">
+        <div id="contents_main">
+            
+            <h1>SA-Plugin для VisualVM</h1>
+<p>
+<strong>SA-Plugin</strong> делает ключевые возможности и утилиты Serviceability Agent доступными в <strong>VisualVM</strong>. Serviceability Agent — это внепроцессный отладчик снимков (snapshot debugger) для Hotspot <strong>JVM</strong> (Java Virtual Machine, виртуальная машина Java). С его помощью можно исследовать объекты Java и структуры данных Hotspot как в работающих процессах, так и в core files. Подробности здесь:
+<a href=http://www.usenix.org/events/jvm01/full_papers/russell/russell_html/index.html> http://www.usenix.org/events/jvm01/full_papers/russell/russell_html/index.html</a> </p>
+
+<p> SA-Plugin переносит эти мощные возможности Serviceability Agent в VisualVM — универсальный инструмент устранения неполадок Java. Этот <strong>plugin</strong> (плагин) делает утилиты SA доступными на следующих четырёх панелях VisualVM:</p>
+<p>
+<b>Java Threads / Java Stack Trace: </b>
+<ul>
+<li>Эта панель показывает все потоки Java в процессе. </li>
+<li> Двойной щелчок по любому потоку или нажатие значка <strong>Open Inspector</strong> (Открыть инспектор) на панели Java Threads открывает панель <strong>Oop Inspector</strong>, где видны внутренние детали объекта потока. </li>
+<li> Нажатие значка <strong>Show Stack Trace</strong> (Показать трассировку стека) на панели Java Threads показывает трассировку стека выбранного потока. </li>
+</ul>
+</p>
+
+<p>
+<b>Oop Inspector: </b>
+<ul>
+<li>Все объекты Java в Hotspot VM представлены как Oops — 'Ordinary Object Pointer' (обычный указатель на объект).  Панель <strong>Oop Inspector</strong> показывает детали Oops. Возможность видеть все внутренние поля любого объекта Java очень помогает при отладке. </li>
+</ul>
+</p>
+
+<p>
+<b>Code Viewer: </b>
+<ul>
+<li>Показывает объект method/klass, если данный адрес — methodOop/klassOop, и скомпилированный код, если данный адрес — PC в скомпилированном коде.</li>
+</ul>
+</p>
+
+<p>
+<b>Find Panel: </b>
+<ul>
+    <li>Find Pointer: показывает, где указатель лежит в памяти процесса, например
+</p>
+<p><i><center>
+Address 0x10100088: In new generation   eden [0x10010000,0x1001e950,0x100f0000) space capacity = 917504, 6.509835379464286 used
+  from [0x10100000,0x10110000,0x10110000) space capacity = 65536, 100.0 used
+  to   [0x100f0000,0x100f0000,0x10100000) space capacity = 65536, 0.0 used
+</p></i></center>
+</li>
+<li>Find Value in Heap: показывает все места, где данный адрес встречается в Java Heap (куче Java)</li>
+<li>Find Value in CodeCache :  показывает все места, где данный адрес встречается в codecache компилятора.</li>
+</ul>
+
+<p>
+<b> Как установить SAPlugin: </b>
+<ul>
+<li> В главном меню VisualVM выберите <strong>Tools</strong> (Инструменты) | <strong>Plugins</strong> (плагины) — откроется диалог Plugins. </li>
+<li> Перейдите на вкладку <strong>Available Plugins</strong> (Доступные плагины) и выберите SAPlugin. </li>
+<li> Нажмите кнопку <strong>Install</strong> (Установить), просмотрите и примите лицензию SAPlugin и дождитесь загрузки и установки плагина. </li>
+</ul>
+</p>
+
+<p>
+<b> Как пользоваться </b>
+<ul> 
+<li> Запустите процесс, который нужно исследовать с SAPlugin, используя <strong>JDK</strong> (Java Development Kit, комплект разработки Java), в котором есть двоичные файлы SA.<br>
+например, на Solaris-Sparc sa-jdi.jar и libsaproc.so должны быть в каталогах lib/ и jre/lib/sparc/ 
+соответственно. 
+</li>
+<li> Дважды щёлкните процесс в VisualVM. Если SAPlugin установлен, в VisualVM появится также вкладка <strong>SA Plugin</strong>.</li>
+<li> На вкладке <strong>SA Plugin</strong> нажмите <strong>Attach to Process</strong> (Подключиться к процессу). Это подключит Serviceability Agent к процессу и откроет панель <strong>Java Threads Panel</strong>, а также остальные три панели в скрытом режиме. Учтите, что это может занять несколько секунд.<br></li>
+<img src="images/saplugin_1.png"/>
+
+<li> Другие вкладки подключённого процесса будут недоступны, пока SAPlugin присоединён к процессу, поэтому перед использованием остальных вкладок в VisualVM нужно отсоединить SA Plugin от процесса. Когда SA Plugin подключается к процессу, появляется сообщение с этой информацией.<br>
+<img src="images/saplugin_2.png"/>
+</li>
+<li> Теперь можно смотреть Java Threads, их трассировки стека, любой Oop, искать любой адрес в куче и смотреть скомпилированный код по любому адресу и т. д. </li>
+<li> Нажмите <strong>Detach from Process</strong> (Отсоединиться от процесса), чтобы отключить агент от процесса. </li>
+<li>SAPlugin также работает с core dumps в VisualVM.</li>
+</ul>
+</p>
+
+<p>
+<b>Поддерживаемые версии JDK</b> <br>
+- 1.7.0 на всех платформах.   <br>
+- 6u17 и новее на Solaris и Linux (потому что двоичные файлы SA не поставляются с jdk6 на Windows)
+</p>
+<br>
+<b>Java Threads</b><br>
+<img src="images/saplugin_3.png" />
+<br><br>
+<b>Java Stack Trace</b><br>
+<img src="images/saplugin_4.png" />
+<br><br>
+<b>Oop Inspector</b><br>
+<img src="images/saplugin_5.png" />
+<br><br>
+<b>Code Viewer</b><br>
+<img src="images/saplugin_6.png" />
+<br><br>
+<b>Find Panel</b><br>
+<img src="images/saplugin_7.png" />
+
+           
+        </div>
+    </div>
+    
+    <div id="contents_clear"></div>
+
+</div>
+
+</body>
+</html>

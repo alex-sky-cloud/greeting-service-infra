@@ -1,0 +1,118 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+
+        <title>Введение в VisualVM</title>
+    </head>
+    <body>
+    <div id="contents_div">
+    <div id="contents_contents">
+    <div id="contents_main_doc">
+        <h1>Введение в <strong>VisualVM</strong> (средство VisualVM)</h1>
+        <hr />
+
+        <p>
+            <small>Примечание: эта страница также доступна на <a href="ja/intro.html">японском <img src="ja/images/japanese.png" style="border: 0px; vertical-align: bottom;"/></a>,
+            <a href="zh_CN/intro.html">упрощённом китайском <img src="zh_CN/images/simplified_chinese.png" style="border: 0px; vertical-align: bottom;"/></a> и
+            <a href="ko_KR/intro.html">корейском <img src="ko_KR/images/korean.png" style="border: 0px; vertical-align: bottom;"/></a>.</small>
+        </p>
+
+        <p><strong>VisualVM</strong> — это средство с визуальным интерфейсом для просмотра подробных сведений о приложениях на технологии Java 
+        (приложениях Java), пока они выполняются на <strong>JVM</strong> (Java Virtual Machine, виртуальная машина Java).
+        VisualVM упорядочивает данные о программном обеспечении JVM, которые получают инструменты <strong>JDK</strong> (Java Development Kit, комплект разработки Java), и представляет сведения так, чтобы
+        можно было быстро просматривать данные сразу по нескольким приложениям Java.
+        Можно просматривать данные о локальных приложениях и о приложениях, выполняющихся на удалённых узлах.
+        Кроме того, можно снимать данные об экземплярах программного обеспечения JVM, сохранять их на локальный компьютер и позднее просматривать
+        или передавать другим.</p>
+        <p>Чтобы воспользоваться всеми возможностями Java VisualVM, следует использовать платформу Java Platform, Standard Edition (Java SE) версии 6. </p>
+        <h3>Запуск VisualVM</h3>
+        <p>После загрузки и распаковки zip-архива VisualVM на локальный компьютер перейдите в каталог <tt>bin</tt> развёрнутого архива
+        и дважды щёлкните исполняемый файл VisualVM либо введите в командной строке (оболочке) следующее:
+        
+        <p><tt>visualvm</tt></p>
+        <p>При первом запуске VisualVM предлагается принять лицензионное соглашение.</p>
+        
+        <h3>Каталог пользователя VisualVM</h3>
+        <p>В Windows расположение <tt>userdir</tt> VisualVM по умолчанию такое: </p>
+        <p><tt>C:\Documents and Settings\<i>&lt;USER&gt;</i>\Application Data\.visualvm\FCS</tt></p>
+        <p>Чтобы узнать расположение <tt>userdir</tt> VisualVM, выберите в главном меню <strong>Help</strong> (Справка) &gt; <strong>About</strong> (О программе) и в окне <strong>About VisualVM</strong> (О программе VisualVM) нажмите <strong>Details</strong> (подробности).</p>
+        
+
+        <h2>Окна VisualVM</h2>
+        <p>При запуске VisualVM открывается главное окно VisualVM.
+        Главное окно VisualVM разделено на две области.
+        </p>
+        <img src="images/docs/vvm-start.png" style="border:1px solid;" alt="снимок окна VisualVM со стартовым экраном" 
+        title="снимок окна VisualVM со стартовым экраном" width="600" height="430" />
+        <p>При первом запуске VisualVM слева видно окно <strong>Applications</strong> (приложения), а справа в главном окне —
+        страница <strong>Start Page</strong> (стартовая страница). 
+        На стартовой странице собраны ссылки на веб-страницы документации VisualVM и дополнительные материалы.<br />
+        <b>Примечание:</b> страница Start Page по умолчанию открывается при каждом запуске VisualVM. 
+        Открыть Start Page в любой момент можно командой <strong>Help</strong> (Справка) &gt; <strong>Start Page</strong> (стартовая страница) в главном меню. Стартовую страницу можно скрыть, сняв флажок &quot;<strong>Show On Startup</strong> (показывать при запуске)&quot;. </p>
+   
+        <h3>Окно Applications</h3>
+        <p>Окно <strong>Applications</strong> (приложения) открывается слева в главном окне VisualVM при запуске программы.
+        Окно Applications — главная точка входа для изучения подробностей выполняющихся приложений.
+        Окно Applications использует древовидную структуру, чтобы можно было быстро увидеть приложения на локальной машине и на подключённых удалённых машинах.
+        Из окна Applications также доступны дампы ядра (Solaris/Linux) и сохранённые снимки.</p>
+
+        <p>Щелчок правой кнопкой по узлу в окне Applications открывает контекстное меню, в котором можно выполнять действия, связанные с этим узлом, в том числе
+        открывать вкладки приложения, снимать <strong>Heap Dump</strong> (снимок кучи) и <strong>Thread Dump</strong> (снимок потоков) и открывать снимки в главном окне.</p>
+        
+
+        <p>Подробнее о том, как с помощью окна Applications просматривать и сохранять данные, см. на следующих страницах:</p>
+        <ul>
+            <li><a href="applications_window.html">Работа с окном Applications</a> (приложения)</li>
+            <li><a href="applications_local.html">Работа с локальными приложениями</a></li>
+            <li><a href="applications_remote.html">Работа с удалёнными приложениями</a></li>
+            <li><a href="coredumps.html">Работа с VM Coredumps</a> (дампами ядра ВМ)</li>
+            <li><a href="snapshots.html">Работа со Snapshots</a> (снимками)</li>
+        </ul>
+
+        <h3>Главное окно</h3>
+        <p>Подробные сведения о приложениях отображаются в главном окне.
+        При просмотре данных о приложении каждое приложение представлено вкладкой в главном окне, 
+        что позволяет удобно просматривать данные и переходить между ними.
+        Сохранённые снимки потоков и снимки кучи также открываются в главном окне.</p>
+        
+        <p>Сведения о данных приложения, которые можно отобразить в главном окне, см. на следующих страницах:</p>
+        <ul>
+            <li><a href="overview_tab.html">Вкладка Overview приложения</a> (обзор)</li>
+            <li><a href="monitor_tab.html">Мониторинг приложения на вкладке Monitor</a> (мониторинг)</li>
+            <li><a href="threads.html">Мониторинг потоков на вкладке Threads</a> (потоки)</li>
+            <li><a href="heapdump.html">Просмотр Heap Dump</a> (снимка кучи)</li>
+            <li><a href="profiler.html">Профилирование приложения на вкладке Profiler</a> (профилировщик) (только локальные приложения)</li>
+            <li><a href="mbeans_tab.html">Вкладка MBeans</a> (управляемые компоненты) (требуется модуль MBeans)</li>
+        </ul>
+
+
+        <h2>Модули VisualVM</h2>
+        <p>Возможности VisualVM можно расширить, установив модули из центра модулей VisualVM с помощью диспетчера <strong>Plugins</strong> (модули).
+        Функциональность VisualVM также можно расширять, разрабатывая собственные модули и затем добавляя их в центр обновлений.</p>
+
+        <p>Например, установка модуля VisualVM-MBeans добавляет на вкладку приложения <a href="mbeans_tab.html">вкладку MBeans</a> (управляемые компоненты), 
+        с которой можно наблюдать за <strong>MBeans</strong> и управлять ими прямо из VisualVM.</p>
+        <p><b>Чтобы установить модуль VisualVM:</b></p>
+        <ol>
+            <li>В главном меню выберите <strong>Tools</strong> (Сервис) &gt; <strong>Plugins</strong> (модули).</li>
+            <li>На вкладке <strong>Available Plugins</strong> (доступные модули) отметьте флажок <strong>Install</strong> (установить) у нужного модуля. Нажмите <strong>Install</strong> (установить).</li>
+            <li>Пройдите шаги мастера установки модуля и завершите установку.<br/>
+        </ol>        
+        <img src="images/getstarted/vvm-plugins-window.png" alt="снимок окна Plugins" 
+        title="Снимок окна Plugins">
+        
+        
+
+        <p>Подробнее о создании модулей VisualVM см. в следующих документах:</p>        
+        <ul>
+            <!--<li><a href="plugins.html">Работа с модулями VisualVM</a></li>-->
+            <li><a href="api-quickstart.html">Начало расширения VisualVM</a></li>
+        </ul>
+        <hr/>
+        <p><a href="docindex.html">Вернуться к указателю документации VisualVM</a></p>
+
+    </div>
+    </div>
+    </div>
+    </body>
+</html>

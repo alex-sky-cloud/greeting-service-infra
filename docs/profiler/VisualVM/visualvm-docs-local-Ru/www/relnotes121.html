@@ -1,0 +1,419 @@
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <title>Примечания к выпуску VisualVM 1.2.1</title>
+    
+    <style>            
+            
+        #contents_main p {
+            margin: 0px;
+            padding: 8px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            clear: both;
+        }
+        
+        #contents_main hr {
+            border: 1px dashed #cccccc;
+            border-collapse: collapse;
+            clear: both;
+        }
+
+        #contents_main p img {
+            float: left;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            padding: 2px;
+            border: 1px solid #cccccc;
+        }
+        
+        ol li, ul li {
+            padding-bottom: 3px;
+        }
+
+    </style>
+    
+</head>
+
+<body>
+
+<div id="contents_div">
+    
+    <div id="contents_contents">
+        <div id="contents_main">
+            
+            <h1>Примечания к выпуску VisualVM 1.2.1</h1>
+            
+            <p>
+                VisualVM — визуальный инструмент, объединяющий несколько командных утилит JDK и лёгкие возможности профилирования. Предназначен как для производственной среды, так и для разработки; он расширяет возможности мониторинга и анализа производительности платформы Java SE.
+            </p>
+            
+            <p style="margin-bottom: 15px;">
+                VisualVM 1.2.1 — выпуск с исправлениями ошибок на базе VisualVM 1.2. Список изменений и исправлений с момента VisualVM 1.2 см. в разделе <a href="#changes">Изменения в 1.2.1</a>.
+                Подробный обзор всех выпусков VisualVM и Java VisualVM см. на странице <a href="releases.html">Обзор выпусков</a>.
+            </p>
+            
+            <a name="system_requirements"></a>
+            <h3>Системные требования</h3>
+            <div>                
+                <p style="margin-top: 5px;">
+                    <b>Поддерживаемые ОС:</b><br>
+                    <ul>
+                        <li>Microsoft Windows (7, Vista, XP, Server): 32bit &amp; 64bit
+                        </li>
+
+                        <li>Linux: платформа Intel, 32bit &amp; 64bit
+                        </li>
+
+                        <li>Sun Solaris: платформы Intel и Sparc, 32bit &amp; 64bit
+                        </li>
+
+                        <li>Mac OS X: платформа Intel, 32bit &amp; 64bit
+                        </li>
+
+                        <li>HP-UX 11i: платформа PA-RISC, 32bit &amp; 64bit
+                        </li>
+                    </ul>
+                </p>
+                
+                <p style="margin-bottom: 10px;">
+                    <b>Требуемое ПО:</b><br>
+                    <ul>
+                        <li>Sun JDK 6+
+                        </li>
+
+                        <li>OpenJDK 6+
+                        </li>
+
+                        <li>IcedTea 6+
+                        </li>
+
+                        <li>Apple JDK 6+
+                        </li>
+
+                        <li>HP-UX JDK 6.0.01+
+                        </li>
+                    </ul>
+                </p>
+            </div>
+            
+            <a name="changes"></a>
+            <h3>Изменения в 1.2.1</h3>
+            <div>                
+                <p style="margin-top: 5px; margin-bottom: 10px;">
+                    <b>Исправленные ошибки:</b><br>
+                    <ul>
+                        <li><a href="http://java.net/jira/browse/VISUALVM-333">Issue 333</a>: HeapWalker в VisualVM не работает с JDK 6 Update 17+
+                        </li>
+
+                        <li><a href="http://java.net/jira/browse/VISUALVM-327">Issue 327</a>: Максимальное значение на графиках Monitor равно Integer.MAX_VALUE
+                        </li>
+
+                        <li><a href="http://java.net/jira/browse/VISUALVM-332">Issue 332</a>: NPE в VisualVM-Sampler
+                        </li>
+                    </ul>
+                </p>
+            </div>
+            
+            <a name="known_problems"></a>
+            <h3>Известные проблемы</h3>
+            <div>                
+                <ul>
+                    <li><a href="http://java.net/jira/browse/VISUALVM-224">Issue 224</a>: Не удаётся профилировать память JBoss AS 4.2.3.GA
+                    </li>
+
+                    <li><a href="http://java.net/jira/browse/VISUALVM-148">Issue 148</a>: VisualVM зависает при потере удалённого соединения
+                    </li>
+
+                    <li><a href="http://java.net/jira/browse/VISUALVM-120">Issue 120</a>: Источник данных приложения JMX нельзя повторно использовать после перезапуска приложения
+                    </li>
+                    
+                    <li><a href="http://java.net/jira/browse/VISUALVM-72">Issue 72</a>: Запущенное приложение иногда не распознаётся
+                    </li>
+                </ul>
+
+                <p>
+                    <b>Предупреждение:</b> из-за ошибки JDK снятие дампа кучи может аварийно завершить целевую JVM, если она работает на JDK 6 Update 16+ со сборщиком мусора Concurrent Mark Sweep (CMS). Обходной путь — использовать другой GC (например, <code>-XX:+UseParallelGC</code>). Похожая проблема, судя по всему, затрагивает и devbuilds JDK 7.
+                </p>
+                
+                <p style="margin-bottom: 15px;">Чтобы просмотреть все известные проблемы, воспользуйтесь этим <a href="https://visualvm.dev.java.net/issues/buglist.cgi?Submit+query=Submit+query&issue_type=DEFECT&component=visualvm&subcomponent=code&issue_status=NEW&issue_status=STARTED&issue_status=REOPENED&email1=&emailtype1=exact&emailassigned_to1=1&email2=&emailtype2=exact&emailreporter2=1&issueidtype=include&issue_id=&changedin=&votes=&chfieldfrom=&chfieldto=Now&chfieldvalue=&short_desc=&short_desc_type=fulltext&long_desc=&long_desc_type=fulltext&issue_file_loc=&issue_file_loc_type=fulltext&status_whiteboard=&status_whiteboard_type=fulltext&field0-0-0=noop&type0-0-0=noop&value0-0-0=&cmdtype=doit&newqueryname=&order=Reuse+same+sort+as+last+time">запросом Issue Tracker</a>.
+                </p>
+            </div>
+
+            <br>
+            <hr>
+            <hr>
+            <br>
+            <br>
+
+            <a name="changeshistory"></a>
+            <h2>История изменений</h2>
+            <br>
+
+            <h3>Изменения в 1.2</h3>
+            <div>
+                <p style="margin-top: 5px;">
+                    <b>Возможности и улучшения:</b><br>
+                    <ul>
+                        <li>Плагин профилирования CPU и памяти методом сэмплирования (VisualVM-Sampler доступен в Plugins Center)
+                        </li>
+
+                        <li>Поддержка нескольких подключений <code>jstatd</code> на одном локальном/удалённом узле
+                        </li>
+
+                        <li>Новые графики с динамическими подсказками, открытый Charts API для плагинов
+                        </li>
+
+                        <li>Вкладки Monitor и Threads сохраняются в снимок приложения
+                        </li>
+
+                        <li>Снимки приложений можно открывать действием Load или параметром <code>--openfile</code> (открыть файл)
+                        </li>
+
+                        <li>Интерфейс свойств для Applications, Hosts и Snapshots, открытый Properties API для плагинов
+                        </li>
+
+                        <li>Настраиваемые параметры прокси в диалоге Options (Параметры)
+                        </li>
+
+                        <li>Интерфейс настройки сертификатов SSL в диалоге Options (VisualVM-Security доступен в Plugins Center)
+                        </li>
+
+                        <li>Расширенный JMX API, позволяющий плагинам настраивать среду/подключения JMX
+                        </li>
+
+                        <li>Отображаемое имя, задаваемое контролируемым приложением: свойство <code>visualvm.display.name</code>
+                        </li>
+
+                        <li>Улучшена производительность для удалённых сеансов X
+                        </li>
+
+                        <li>Автоматическое обнаружение повреждённого <code>jvmstat</code> в Windows (регистр имени пользователя и файл <code>hsperfdata</code>)
+                        </li>
+
+                        <li>Различные улучшения интерфейса: главное меню, панель инструментов и контекстное меню; системные (темы) цвета; диалог About, снимки профилировщика, HeapWalker
+                        </li>
+
+                        <li>Сборка на NetBeans Platform и профилировщике 6.7.1:
+                            <ul>
+                                <li>Экспорт снимков профилировщика в HTML, XML и CSV
+                                </li>
+
+                                <li>Вычисление retained size в HeapWalker
+                                </li>
+
+                                <li>Поддержка сценариев OQL в HeapWalker (OQL Syntax Support [расширенный редактор OQL] доступен в Plugins Center)
+                                </li>
+
+                                <li>Трассировки стека потоков в дампе кучи в HeapWalker
+                                </li>
+
+                                <li>Улучшенный внешний вид на Mac OS X
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </p>
+
+                <p>
+                    <b>Изменения API:</b><br>
+                    <ul>
+                        <li>Совместимо: <code>com.sun.tools.visualvm.charts.*</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.core.properties.*</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.core.datasource.descriptor.DataSourceDescriptor.providesProperties()</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.core.ui.DataSourceWindowManager.openDataSource(dataSource, selectView)</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.core.datasource.Storage()</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.core.datasource.Storage.clearCustomProperty(property)</code>, <code>Storage.clearCustomProperties([] properties)</code> и <code>Storage.hasCustomProperties()</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.application.views.ApplicationViewsSupport.getSnapshotMonitorView()</code> и <code>ApplicationViewsSupport.getSnapshotThreadsView()</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.jmx.CredentialsProvider</code>, <code>DefaultCustomizer</code>, <code>EnvironmentProvider</code>, <code>JmxConnectionCustomizer</code> и <code>JmxConnectionSupport</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.jmx.JmxApplicationsSupport.createJmxApplication(connectionString, displayName, environmentProvider, persistent)</code> и <code>JmxApplicationsSupport.createJmxApplicationInteractive(connectionString, displayName, environmentProvider, persistent)</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.application.jvm.Jvm.getMonitoredData()</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.application.jvm.HeapHistogram</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.tools.attach.AttachModel.takeHeapHistogram()</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.tools.jvmstat.JvmstatModel.getConnectionId()</code> добавлено
+                        </li>
+
+                    </ul>
+                </p>
+
+                <p style="margin-bottom: 10px;">
+                    <b>Исправленные ошибки:</b> <a href="https://visualvm.dev.java.net/issues/buglist.cgi?Submit+query=Submit+query&issue_type=DEFECT&component=visualvm&resolution=FIXED&target_milestone=1.2&email1=&emailtype1=exact&emailassigned_to1=1&email2=&emailtype2=exact&emailreporter2=1&issueidtype=include&issue_id=&changedin=&votes=&chfield=creation_ts&chfieldfrom=&chfieldto=Now&chfieldvalue=&short_desc=&short_desc_type=fulltext&long_desc=&long_desc_type=fulltext&issue_file_loc=&issue_file_loc_type=fulltext&status_whiteboard=&status_whiteboard_type=fulltext&field0-0-0=noop&type0-0-0=noop&value0-0-0=&cmdtype=doit&order=Reuse+same+sort+as+last+time">запросом Issue Tracker</a>.
+                </p>
+            </div>
+
+            <h3>Изменения в 1.1.1</h3>
+            <div>
+                <p style="margin-top: 5px;">
+                    <b>Возможности и улучшения:</b><br>
+                    <ul>
+                        <li>Введён плагин Memory Sampler
+                        </li>
+
+                        <li>Улучшена интеграция инструмента Visual GC
+                        </li>
+
+                        <li>В средство запуска Windows <code>visualvm.exe</code> добавлены сведения о версии
+                        </li>
+                    </ul>
+                </p>
+
+                <p>
+                    <b>Изменения API:</b><br>
+                    <ul>
+                        <li>Совместимо: <code>com.sun.tools.visualvm.host.HostsSupport.getOrCreateHost(hostname, interactive)</code> добавлено
+                        </li>
+                    </ul>
+                </p>
+
+                <p style="margin-bottom: 10px;">
+                    <b>Исправленные ошибки:</b> <a href="https://visualvm.dev.java.net/issues/buglist.cgi?Submit+query=Submit+query&issue_type=DEFECT&component=visualvm&issue_status=RESOLVED&issue_status=VERIFIED&issue_status=CLOSED&resolution=FIXED&target_milestone=1.1.1&email1=&emailtype1=exact&emailassigned_to1=1&email2=&emailtype2=exact&emailreporter2=1&issueidtype=include&issue_id=&changedin=&votes=&chfieldfrom=&chfieldto=Now&chfieldvalue=&short_desc=&short_desc_type=fulltext&long_desc=&long_desc_type=fulltext&issue_file_loc=&issue_file_loc_type=fulltext&status_whiteboard=&status_whiteboard_type=fulltext&field0-0-0=noop&type0-0-0=noop&value0-0-0=&cmdtype=doit&newqueryname=&order=Reuse+same+sort+as+last+time">запросом Issue Tracker</a>.
+                </p>
+            </div>
+
+            <h3>Изменения в 1.1</h3>
+            <div>
+                <p style="margin-top: 5px;">
+                    <b>Возможности и улучшения:</b><br>
+                    <ul>
+                        <li>График использования CPU и активности GC на вкладке Monitor
+                        </li>
+
+                        <li>Табличное представление на вкладке Threads
+                        </li>
+
+                        <li>Параметры командной строки: <code>--openpid</code> (открыть PID), <code>--openjmx</code> (открыть JMX), <code>--openfile</code> (открыть файл)
+                        </li>
+
+                        <li>Действие Compare Memory Snapshots в контекстном меню
+                        </li>
+
+                        <li>Кнопки Copy To Clipboard / Save To File в диалоге About
+                        </li>
+
+                        <li>Мониторинг IBM JVM через подключение JMX
+                        </li>
+
+                        <li>Экспериментальная поддержка HP-UX PA-RISC
+                        </li>
+
+                        <li>Плагин интеграции для Eclipse IDE
+                        </li>
+
+                        <li>В качестве основы — NetBeans Platform 6.5
+                        </li>
+                    </ul>
+                </p>
+
+                <p>
+                    <b>Изменения API:</b><br>
+                    <ul>
+                        <li>Совместимо: <code>com.sun.tools.visualvm.host.HostsSupport.createHost(hostname, displayname)</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.jmx.application.JmxApplicationsSupport</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.application.jvm.Jvm.isCpuMonitoringSupported()</code> и <code>isCollectionTimeSupported()</code> добавлено
+                        </li>
+
+                        <li>Совместимо: <code>com.sun.tools.visualvm.application.jvm.MonitoredData.getProcessCpuTime()</code> и <code>getCollectionTime()</code> добавлено
+                        </li>
+
+                        <li>Несовместимо: <code>com.sun.tools.visualvm.host.model.HostOverviewFactory</code> сделан final
+                        </li>
+
+                        <li>Несовместимо: <code>com.sun.tools.visualvm.core.datasource.descriptor.DataSourceDescriptor.&lt;init&gt;()</code> удалено
+                        </li>
+
+                        <li>Несовместимо: <code>com.sun.tools.visualvm.coredump.CoreDumpSupport.register()</code> больше не является public
+                        </li>
+
+                        <li>Несовместимо: <code>com.sun.tools.visualvm.host.HostsSupport.getStorageDirectoryString()</code> и <code>getHostProvider()</code> больше не являются public
+                        </li>
+                    </ul>
+                </p>
+
+                <p style="margin-bottom: 10px;">
+                    <b>Исправленные ошибки:</b> <a href="https://visualvm.dev.java.net/issues/buglist.cgi?Submit+query=Submit+query&issue_type=DEFECT&component=visualvm&issue_status=RESOLVED&issue_status=VERIFIED&issue_status=CLOSED&resolution=FIXED&target_milestone=1.1&email1=&emailtype1=exact&emailassigned_to1=1&email2=&emailtype2=exact&emailreporter2=1&issueidtype=include&issue_id=&changedin=&votes=&chfieldfrom=&chfieldto=Now&chfieldvalue=&short_desc=&short_desc_type=fulltext&long_desc=&long_desc_type=fulltext&issue_file_loc=&issue_file_loc_type=fulltext&status_whiteboard=&status_whiteboard_type=fulltext&field0-0-0=noop&type0-0-0=noop&value0-0-0=&cmdtype=doit&newqueryname=&order=Reuse+same+sort+as+last+time">запросом Issue Tracker</a>.
+                </p>
+            </div>
+
+            <h3>Изменения в 1.0.1</h3>
+            <div>
+                <p style="margin-top: 5px;">
+                    <b>Возможности и улучшения:</b><br>
+                    <ul>
+                        <li>Профилировщик поддерживает OpenJDK
+                        </li>
+
+                        <li>Профилировщик незаметно отключается на неподдерживаемых платформах, остальная часть инструмента работает без изменений
+                        </li>
+
+                        <li>Небольшие улучшения предупреждающих сообщений в инструменте и плагинах, чтобы лучше описывать обнаруженные проблемы
+                        </li>
+
+                        <li>Новые плагины в центре плагинов: JvmCapabilities, KillApplication, SysTray
+                        </li>
+                    </ul>
+                </p>
+
+                <p style="margin-bottom: 10px;">
+                    <b>Исправленные ошибки:</b> <a href="https://visualvm.dev.java.net/issues/buglist.cgi?Submit+query=Submit+query&issue_type=DEFECT&component=visualvm&resolution=FIXED&target_milestone=1.0.1&email1=&emailtype1=exact&emailassigned_to1=1&email2=&emailtype2=exact&emailreporter2=1&issueidtype=include&issue_id=&changedin=&votes=&chfield=creation_ts&chfieldfrom=&chfieldto=Now&chfieldvalue=&short_desc=&short_desc_type=fulltext&long_desc=&long_desc_type=fulltext&issue_file_loc=&issue_file_loc_type=fulltext&status_whiteboard=&status_whiteboard_type=fulltext&field0-0-0=noop&type0-0-0=noop&value0-0-0=&cmdtype=doit&order=Reuse+same+sort+as+last+time">запросом Issue Tracker</a>.
+                </p>
+            </div>
+            
+        </div>
+    </div>
+    
+    <div id="contents_hints">
+        
+        <h3 class="first">На этой странице</h3>
+        <div>
+            <a href="#system_requirements">Системные требования</a>
+            <a href="#changes">Изменения в 1.2.1</a>
+            <a href="#known_problems">Известные проблемы</a>
+            <a href="#changeshistory">История изменений</a>
+        </div>
+        
+        <h3>Быстрые ссылки</h3>
+        <div>
+            <a href="features.html">Возможности</a>
+            <a href="download.html">Загрузить</a>
+            <a href="docindex.html">Документация</a>
+            <a href="plugins.html">Плагины</a>
+            <a href="releases.html">Обзор выпусков</a>
+        </div>
+        
+    </div>
+    
+    <div id="contents_clear"></div>
+
+</div>
+
+</body>
+</html>

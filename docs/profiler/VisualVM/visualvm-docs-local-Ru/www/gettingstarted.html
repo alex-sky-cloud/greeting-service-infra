@@ -1,0 +1,178 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+
+        <title>Начало работы с VisualVM</title>
+    </head>
+    <body>
+    <div id="contents_div">
+    <div id="contents_contents">
+    <div id="contents_main_doc">
+        <h1>Начало работы с <strong>VisualVM</strong> (средством VisualVM)</h1>
+        <hr>
+
+        <p>
+            <small>Примечание: эта страница также доступна на <a href="ja/gettingstarted.html">японском <img src="ja/images/japanese.png" style="border: 0px; vertical-align: bottom;"/></a>,
+            <a href="zh_CN/gettingstarted.html">упрощённом китайском <img src="zh_CN/images/simplified_chinese.png" style="border: 0px; vertical-align: bottom;"/></a> и
+            <a href="ko_KR/gettingstarted.html">корейском <img src="ko_KR/images/korean.png" style="border: 0px; vertical-align: bottom;"/></a>.</small>
+        </p>
+
+        <p><strong>VisualVM</strong> предоставляет подробные сведения о приложениях Java, пока они выполняются на <strong>JVM</strong> (Java Virtual Machine, виртуальная машина Java). 
+        Графический интерфейс VisualVM позволяет быстро и наглядно просматривать сведения сразу о нескольких приложениях Java.</p>
+        
+        <p>Это руководство поможет вам быстро приступить к работе с VisualVM.
+        В нём показано, как установить VisualVM и расширить возможности средства, установив подключаемый модуль из центра обновлений VisualVM.
+        Вы узнаете, как запустить VisualVM и какие сведения можно получить о приложении, выполняющемся на локальной и удалённой JVM.</p>
+        
+        <br>
+
+        <h3>VisualVM в действии</h3>
+        <p>Кратко посмотрите возможности VisualVM в этом видеоролике:</p>
+        <p><iframe width="420" height="315" src="https://www.youtube-nocookie.com/embed/z8n7Bg7-A4I" frameborder="0" allowfullscreen></iframe></p>
+
+        <br>
+        
+        <h3>Установка VisualVM</h3>
+        <ul>
+            <li>Загрузите установщик VisualVM со <a href="https://visualvm.java.net/">страницы проекта VisualVM</a>.</li>
+            <li>Распакуйте установщик VisualVM в пустой каталог на локальном компьютере.</li>
+        </ul>
+        
+        <a name="starting_visualvm"></a>
+        <h3>Запуск VisualVM</h3>
+        <p>Чтобы запустить VisualVM в Windows, выполните программу <code>visualvm.exe</code> из папки
+            <code>\bin</code> каталога установки VisualVM.  
+            В Unix или Linux используйте сценарий оболочки visualvm из папки <code>/bin</code>
+            каталога установки VisualVM. <strong>JDK</strong> (Java Development Kit, комплект разработки Java), на котором запускается VisualVM,
+            и каталог пользователя можно задать параметрами командной строки или изменив файл <code>etc\visualvm.conf</code>.
+            Пример команды запуска VisualVM в Windows с выбранным JDK и каталогом пользователя:
+        </p>
+        <p>
+          <pre>
+  visualvm.exe --jdkhome "C:\Software\Java\jdk1.6.0" --userdir "C:\Temp\visualvm_userdir"
+          </pre>
+        </p>
+
+        <h3>Работа с окном Applications</h3>
+        <p>При запуске программы открывается главное окно VisualVM.
+        По умолчанию слева в главном окне отображается окно <strong>Applications</strong> (приложения).
+        В окне Applications можно сразу увидеть приложения Java, выполняющиеся на локальной и удалённых JVM.</p>
+        <img src="images/getstarted/vvm-anagram-applications.png" style="border:1px solid;" alt="снимок окна Applications" 
+        title="снимок окна Applications">
+        <p>Окно Applications — основная точка входа для просмотра подробных сведений о конкретном приложении.
+        Щелчок правой кнопкой по узлу приложения открывает контекстное меню, в котором можно открыть главную вкладку приложения или снять <strong>Thread Dump</strong> (снимок потоков) либо <strong>Heap Dump</strong> (снимок кучи).</p>
+
+        <p>Подробнее о том, как с помощью окна Applications просматривать и сохранять данные о приложениях, см. на следующих страницах:</p>
+        <ul>
+            <li><a href="applications_window.html">Работа с окном Applications</a> (приложения)</li>
+        </ul>
+
+        <h3>Просмотр Heap Dump</h3>
+        <p>В VisualVM есть визуализатор, с помощью которого удобно просматривать снимки кучи.
+        Можно загрузить уже существующий <strong>Heap Dump</strong> (снимок кучи) или снять снимок кучи для локальных выполняющихся приложений.</p>
+        
+        <p>Чтобы снять снимок кучи локального приложения, выполните одно из следующих действий:</p>
+        <ul>
+            <li>Щёлкните правой кнопкой узел приложения в окне <strong>Applications</strong> (приложения) и выберите <strong>Heap Dump</strong> (снимок кучи).</li>
+            <li>Дважды щёлкните узел приложения в окне Applications, чтобы открыть вкладку приложения, и нажмите
+            <strong>Heap Dump</strong> (снимок кучи) на вкладке <strong>Monitor</strong> (мониторинг).</li>
+        </ul>
+        <p>Чтобы открыть сохранённый снимок кучи, выберите в главном меню <strong>File</strong> (Файл) &gt; <strong>Load</strong> (загрузить) и укажите сохранённый файл снимка кучи.</p>
+        
+        <p>Чтобы просмотреть открытый снимок кучи:</p>
+        <ol>
+            <li>На панели инструментов <strong>Heap Dump</strong> нажмите <strong>Classes</strong> (классы), чтобы увидеть список живых классов и соответствующих экземпляров.</li>
+            <li>Дважды щёлкните имя класса, чтобы открыть представление <strong>Instances</strong> (экземпляры) со списком экземпляров.</li>
+            <li>Выберите экземпляр в списке, чтобы увидеть ссылки на этот экземпляр.</li>
+        </ol>
+        <img src="images/getstarted/vvm-anagram-heapdump.png" style="border:1px solid;" alt="снимок вкладки Instances снимка кучи" 
+        title="снимок вкладки Instances снимка кучи">
+        
+        <p>Когда вы снимаете снимок кучи, VisualVM открывает его на новой вкладке и создаёт узел снимка кучи под узлом приложения
+        в окне <strong>Applications</strong> (приложения).
+        Чтобы сохранить созданный снимок кучи, щёлкните правой кнопкой узел снимка кучи и выберите <strong>Save As</strong> (сохранить как).
+        Если созданный снимок кучи явно не сохранить, он будет удалён при закрытии приложения.</p>
+
+        <p>Дополнительные сведения см. в следующем документе:</p>
+        <ul>
+            <li><a href="heapdump.html">Просмотр Heap Dump</a> (снимка кучи)</li>
+        </ul>
+
+        <h3>Профилирование приложения</h3>
+        <p>В VisualVM есть <strong>Profiler</strong> (профилировщик), с помощью которого можно профилировать приложения, выполняющиеся на локальной <strong>JVM</strong>.
+        Элементы управления профилированием находятся на вкладке <strong>Profiler</strong> (профилировщик) вкладки приложения.
+        Профилировщик позволяет анализировать использование памяти и производительность <strong>CPU</strong> (процессора) локальных приложений.<br/>
+        <b>Примечание.</b> Чтобы профилировать приложение, выполняющееся на <strong>JDK</strong> 6, нужно отключить совместное использование классов для этого приложения, иначе приложение может аварийно завершиться.
+        Чтобы отключить совместное использование классов, запускайте приложение с аргументом <tt>-Xshare:off</tt>.</p>
+        
+        <ol>
+            <li>Запустите локальное приложение Java. (Запускайте приложение с аргументом <tt>-Xshare:off</tt>.)</li>
+            <li>Под узлом <strong>Local</strong> (локальные) в окне <strong>Applications</strong> (приложения) щёлкните правой кнопкой узел приложения и выберите <strong>Open</strong> (открыть), чтобы открыть вкладку приложения.</li>
+            <li>Откройте вкладку <strong>Profiler</strong> (профилировщик) на вкладке приложения.</li>
+            <li>На вкладке Profiler нажмите <strong>Memory</strong> (память) или <strong>CPU</strong> (процессор).
+            <p>Когда вы выбираете задачу профилирования, VisualVM отображает данные профилирования на вкладке Profiler.</p>
+            </li>
+        </ol>
+        <img src="images/getstarted/vvm-anagram-profiler.png" style="border:1px solid;" alt="снимок вкладки Profiler с результатами профилирования" 
+        title="Снимок экрана с результатами профилирования при анализе выделения памяти">
+
+      
+        <p>Подробнее о профилировании в VisualVM см. в следующем документе:</p>
+        <ul>
+            <li><a href="profiler.html">Профилирование приложения</a></li>
+        </ul>
+      
+        <h3>Подключение к удалённому узлу</h3>
+        <p>VisualVM позволяет удобно наблюдать за приложениями на удалённых узлах и просматривать общие сведения об удалённой системе. 
+        Чтобы увидеть сведения о приложениях на удалённых узлах, сначала нужно подключиться к удалённому узлу.
+        Подключённые удалённые узлы перечислены под узлом <strong>Remote</strong> (удалённые) в окне <strong>Applications</strong> (приложения).
+        Разверните узел удалённого хоста, чтобы увидеть приложения, выполняющиеся на этом хосте.</p>
+        <p>Чтобы получать данные от удалённого приложения, на удалённой <strong>JVM</strong> должна быть запущена утилита <tt>jstatd</tt>.
+        Подробнее о запуске <tt>jstatd</tt> см. <a href="http://java.sun.com/javase/6/docs/technotes/tools/share/jstatd.html">jstatd - Virtual Machine jstat Daemon</a>.
+        Профилировать приложения, выполняющиеся на удалённом узле, нельзя.</p>
+        <ol>
+            <li>Щёлкните правой кнопкой <strong>Remote</strong> (удалённые) в окне <strong>Applications</strong> (приложения) и выберите <strong>Add Remote Host</strong> (добавить удалённый узел).</li>
+            <li>В диалоговом окне <strong>Add Remote Host</strong> (добавить удалённый узел) введите имя хоста или IP-адрес удалённой машины.</li>
+            <li>(Необязательно) Введите отображаемое имя удалённого узла. Это имя показывается в окне Applications.
+            Если отображаемое имя не задано, для обозначения удалённого узла в окне Applications используется имя хоста.</li>
+            <li>Нажмите <strong>OK</strong>.</li>
+        </ol>
+        <p>После нажатия OK под узлом Remote появляется узел удалённого хоста. 
+        Разверните узел удалённого хоста, чтобы увидеть приложения Java, выполняющиеся на этом хосте.</p>
+        <p>Дважды щёлкните имя удалённого приложения, чтобы открыть вкладку приложения в VisualVM.</p>
+        <img src="images/getstarted/vvm-applications-remote.png" style="border:1px solid;" alt="снимок окна Applications с удалёнными узлами" 
+        title="Снимок окна Applications с удалёнными узлами">
+
+        <p>Дополнительные сведения см. в следующем документе:</p>
+        <ul>
+            <li><a href="applications_remote.html">Работа с удалёнными приложениями</a></li>
+        </ul>
+
+        <h3>Установка модулей VisualVM</h3>
+        <p>Возможности VisualVM можно расширить, установив модули из центра обновлений VisualVM.
+        Например, установка модуля VisualVM-MBeans добавляет на вкладку приложения вкладку <strong>MBeans</strong> (управляемые компоненты), 
+        с которой можно <a href="http://java.sun.com/javase/6/docs/technotes/guides/management/jconsole.html#gdeap">наблюдать за MBeans и управлять ими</a> 
+        прямо из VisualVM.</p>
+        <p><b>Чтобы установить модуль VisualVM:</b></p>
+        <ol>
+            <li>В главном меню выберите <strong>Tools</strong> (Сервис) &gt; <strong>Plugins</strong> (модули).</li>
+            <li>На вкладке <strong>Available Plugins</strong> (доступные модули) отметьте флажок <strong>Install</strong> (установить) у нужного модуля. Нажмите <strong>Install</strong> (установить).</li>
+            <li>Пройдите шаги мастера установки модуля и завершите установку.<br/>
+        </ol>        
+        <img src="images/getstarted/vvm-plugins-window.png" alt="снимок окна Plugins" 
+        title="Снимок окна Plugins">
+        <p class="small">Снимок диспетчера модулей с выбранным модулем VisualVM-MBeans.</p>
+
+        <h2>Дополнительная документация VisualVM</h2>
+        <p>В этом документе представлены некоторые возможности VisualVM.
+        VisualVM задуман как наглядный интерфейс, с помощью которого удобно
+        изучать сведения о приложениях Java на локальных и удалённых <strong>JVM</strong>. 
+        Более подробные сведения о работе с возможностями VisualVM см. в следующих документах:</p>
+        <ul>
+            <li><a href="https://visualvm.java.net/docindex.html">Документация и ресурсы VisualVM</a>.</li>
+        </ul>
+    </div>
+    </div>
+    </div>
+    </body>
+</html>
