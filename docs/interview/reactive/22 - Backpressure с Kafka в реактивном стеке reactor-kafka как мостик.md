@@ -2,7 +2,11 @@
 
 ## Содержание
 
-- [Question–Answer](#question-answer)
+- [Сначала: кто с кем взаимодействует](#сначала-кто-с-кем-взаимодействует)
+- [Что происходит при обычной обработке](#что-происходит-при-обычной-обработке)
+- [Что такое backpressure здесь](#что-такое-backpressure-здесь)
+- [Что значит блокирующая БД](#что-значит-блокирующая-бд)
+- [Главное различие](#главное-различие)
 - [Почему обычная Kafka не имеет встроенного backpressure](#pochemu-obychnaya-kafka-ne-imeet-backpressure)
 - [Как reactor-kafka решает проблему](#kak-reactor-kafka-reshaet-problemu)
 - [Отличие от реактивного драйвера БД](#otlichie-ot-r2dbc)
@@ -12,14 +16,186 @@
 
 ---
 
-<a name="question-answer"></a>
-## Question–Answer
+## Сначала: кто с кем взаимодействует
 
-**Вопрос.** В исходном тексте обычный нереактивный консьюмер описан через «пул-модель» и одновременно через запрос `poll`. Чем отличаются `pull`, `poll()` и `pool`? Как reactor-kafka на самом деле регулирует backpressure, если `receive()` отдал, например, 10 заказов, а дальше `flatMap`/`concatMap` пишет их в БД? Верно ли, что при «синхронной» записи в БД реактивный Kafka-консьюмер сам ждёт и больше не делает запрос?
+В `reactor-kafka` есть три стороны:
 
-**Ответ.** Это три разных слова. `pull` — модель «консьюмер сам вытягивает данные у брокера». `poll()` — метод Java-клиента, которым консьюмер спрашивает брокер: «есть ли сейчас записи?». `pool` — пул потоков или пул соединений, к Kafka-модели потребления не относится. Backpressure в reactor-kafka — это не «консьюмер завис на записи в БД». Пока обработка реактивная, поток консьюмера продолжает вызывать `poll()` для heartbeat. Если downstream больше не делает `request(n)`, reactor-kafka вызывает `pause()`: `poll()` идёт дальше, но по поставленным на паузу партициям новые записи не возвращаются. Если запись в БД блокирующая (JDBC на том же потоке), это уже не backpressure, а блокировка потока: `poll()` может не вызываться вовремя, и группу могут перебалансировать.
+1. **Kafka broker** хранит записи.
+2. **Kafka consumer** регулярно вызывает `poll()` и получает очередную порцию записей из назначенных ему партиций.
+3. **Ваш обработчик** получает эти записи и, например, сохраняет их в БД.
 
----
+Схема в упрощённом виде такая:
+
+```text
+Kafka broker
+     │
+     │ poll()
+     ▼
+reactor-kafka / Kafka consumer
+     │
+     │ передаёт записи
+     ▼
+ваш код: обработка → запись в БД
+```
+
+`poll()` — это вызов Kafka-клиента, который получает записи. Консьюмер должен регулярно возвращаться к этому вызову: если он слишком долго не вызывает `poll()`, Kafka считает, что он не справляется, и может передать его партиции другому консьюмеру группы.
+
+**Источник:** https://kafka.apache.org/37/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
+
+EN:
+
+> The poll API is designed to ensure consumer liveness. As long as you continue to call poll, the consumer will stay in the group and continue to receive messages from the partitions it was assigned.
+
+RU:
+
+> API `poll()` предназначен для контроля работоспособности консьюмера. Пока консьюмер продолжает вызывать `poll()`, он остаётся в группе и получает сообщения из назначенных ему партиций.
+
+## Что происходит при обычной обработке
+
+Представим, что Kafka отдаёт записи, а приложение сохраняет их в PostgreSQL через **R2DBC**, то есть неблокирующе:
+
+```java
+receiver.receive()
+// Поток записей из Kafka: каждая запись — это ConsumerRecord с ключом, значением и метаданными
+    .concatMap(record ->
+        // concatMap(..., concurrency=1 по умолчанию): обрабатывает записи строго последовательно
+        // — следующая запись не начнёт обрабатываться, пока не завершится предыдущая
+        databaseClient
+        // Формируем SQL-запрос: вставляем id и status в таблицу orders
+        .sql("insert into orders(id, status) values (:id, :status)")
+// Подставляем ключ записи Kafka как id
+            .bind("id", record.key())
+        // Подставляем поле status из значения записи Kafka
+        .bind("status", record.value().status())
+        .fetch()
+// Выполняем запрос и получаем количество обновлённых строк (для INSERT обычно 1)
+            .rowsUpdated()
+// После успешной вставки в БД подтверждаем offset в Kafka
+// acknowledge() сообщает брокеру, что запись обработана и можно сдвигать consumer offset
+            .then(Mono.fromRunnable(record.receiverOffset()::acknowledge))
+        )
+        // Запускаем поток: без subscribe() конвейер не начнёт работать
+        .subscribe();
+
+```
+
+Здесь запись в БД может выполняться некоторое время, но поток Kafka-консьюмера не стоит в ожидании. Он запускает асинхронную операцию и может продолжать работу: reactor-kafka может регулярно вызывать `poll()`.
+
+Важно: «запись в БД ещё не завершилась` и «поток, который вызывает `poll()`, завис` — не одно и то же.
+
+## Что такое backpressure здесь
+
+**Backpressure** — это ситуация, когда обработчик временно не готов принять следующую запись, потому что ещё занят предыдущими.
+
+Например, `concatMap` обрабатывает записи строго по одной:
+
+```text
+Kafka отдала записи: A, B, C
+
+Приложение:
+- сохраняет A в БД;
+- пока A не сохранена, B не передаётся в обработчик;
+- пока B не обработана, C также ждёт.
+```
+
+То есть приложение не говорит Kafka: «я сломался` или «я завис`. Оно говорит: «сейчас у меня есть место только для одной записи; следующую отдай, когда я закончу текущую`.
+
+В терминах Reactive Streams это выражается через `request(n)`:
+
+- `request(1)` означает: «я готов принять одну запись`;
+- пока эта запись обрабатывается, новый запрос на следующую может не поступать;
+- когда обработка завершена, появляется запрос на следующую запись.
+
+`request(n)` — не вызов, который обычно нужно писать вручную в бизнес-коде. Его обычно выполняет Reactor-оператор, например `concatMap`, `flatMap` или `limitRate`, чтобы ограничить число одновременно обрабатываемых записей.
+
+Когда reactor-kafka видит, что обработчик пока не запрашивает новые записи, он может вызвать `pause()` для партиций. Это означает: «временно не отдавай новые записи из этих партиций`. При этом сам consumer loop продолжает выполнять `poll()`.
+
+**Источник:** https://github.com/reactor/reactor-kafka/blob/main/src/main/java/reactor/kafka/receiver/internals/ConsumerEventLoop.java
+
+EN:
+
+> `consumer.pause(consumer.assignment());`  
+> `log.debug("Paused - back pressure");`  
+> `records = consumer.poll(pollTimeout);`
+
+RU:
+
+> При backpressure reactor-kafka вызывает `pause()` для назначенных партиций, пишет в лог `Paused - back pressure`, а затем всё равно выполняет `poll()`.
+
+Иными словами, при backpressure происходит следующее:
+
+```text
+Обработчик ещё занят
+        │
+        ▼
+reactor-kafka временно pause() партиции
+        │
+        ▼
+poll() продолжает вызываться
+        │
+        ▼
+новые записи с paused-партиций пока не передаются обработчику
+```
+
+Это нормальный управляемый режим замедления. Консьюмер не перестаёт работать и не должен выпадать из consumer group только потому, что обработка стала медленнее.
+
+## Что значит блокирующая БД
+
+Теперь другой сценарий: используется JDBC.
+
+```java
+receiver.receive()
+    .doOnNext(record ->
+        jdbcTemplate.update(
+            "insert into orders(id, status) values (?, ?)",
+            record.key(),
+            record.value().status()
+        )
+    )
+    .subscribe();
+```
+
+`jdbcTemplate.update(...)` — синхронный вызов. Пока PostgreSQL не ответит, поток, который выполняет этот код, стоит и ждёт.
+
+Если этот код выполняется на том же потоке, который должен вызывать Kafka `poll()`, получается такая последовательность:
+
+```text
+1. consumer получил записи через poll()
+2. начал jdbcTemplate.update(...)
+3. БД отвечает долго
+4. поток ждёт БД
+5. poll() в это время не вызывается
+6. Kafka ждёт следующий poll()
+7. max.poll.interval.ms истекает
+8. Kafka исключает consumer из группы и запускает rebalance
+```
+
+Фраза «консьюмер завис на INSERT в БД` должна означать именно это:
+
+> Не Kafka зависла и не backpressure сработал. Поток приложения синхронно ждёт завершения SQL-запроса, поэтому не возвращается к вызову `poll()`.
+
+**Источник:** https://kafka.apache.org/37/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
+
+EN:
+
+> It is also possible that the consumer could encounter a "livelock" situation where it is continuing to send heartbeats, but no progress is being made. [...] Basically if you don't call poll at least as frequently as the configured max interval, then the client will proactively leave the group so that another consumer can take over its partitions.
+
+RU:
+
+> Консьюмер может попасть в ситуацию, когда heartbeat продолжает отправляться, но обработки нет. Если `poll()` не вызывается с частотой, заданной максимальным интервалом, клиент сам покинет группу, чтобы другой консьюмер мог забрать его партиции.
+
+## Главное различие
+
+| Ситуация | Что происходит с обработкой | Что происходит с `poll()` | Последствие |
+|---|---|---|---|
+| Backpressure | Обработчик временно не берёт новые записи, пока занят предыдущими | `poll()` продолжает выполняться | Партиции временно ставятся на `pause()`, новые записи ждут в Kafka |
+| JDBC на consumer-потоке | Поток синхронно ждёт завершения SQL-запроса | `poll()` не выполняется, пока JDBC не вернёт управление | Может истечь `max.poll.interval.ms`, после чего начнётся rebalance |
+
+Корректная краткая формулировка для документа:
+
+> **Backpressure в reactor-kafka** — это управляемое ограничение скорости получения записей: когда обработчик ещё занят, reactor-kafka временно приостанавливает выдачу новых записей из партиций через `pause()`, но продолжает вызывать `poll()`.
+>
+> **Блокирующий JDBC-вызов на потоке Kafka-консьюмера** — другая проблема: поток ждёт ответа БД и не может вызвать следующий `poll()`. Если это длится дольше `max.poll.interval.ms`, Kafka исключает консьюмер из группы и перераспределяет его партиции.
 
 <a name="pochemu-obychnaya-kafka-ne-imeet-backpressure"></a>
 ## Почему обычная Kafka не имеет встроенного backpressure
@@ -85,53 +261,137 @@ rawStream
 
 `KafkaReceiver` — это мостик. Снаружи вы видите `Flux<ReceiverRecord>` и обычный Reactive Streams `request(n)`. Внутри остаётся тот же небезопасный для многопоточности `KafkaConsumer`: все `poll()`, `pause()` и `resume()` идут в одном `ConsumerEventLoop` на отдельном планировщике reactor-kafka, а не на Netty event loop.
 
-https://projectreactor.io/docs/kafka/release/reference/
+# Как reactor-kafka управляет `requested` и как связаны pause, resume и poll
 
-**EN:**
+- [Кто меняет `requested`](#кто-меняет-requested)
+- [Как связаны requested, pause и poll](#как-связаны-requested-pause-и-poll)
+- [Полный цикл PollEvent](#полный-цикл-pollevent)
 
-> Reactor Kafka API enables messages to be published to Kafka and consumed from Kafka using functional APIs with non-blocking back-pressure and very low overheads.
+## Кто меняет `requested`
 
-**RU:**
+`requested` — это счётчик спроса от downstream (Reactive Streams).
 
-> API Reactor Kafka позволяет публиковать сообщения в Kafka и читать их из Kafka функциональными методами с неблокирующим backpressure и очень небольшими накладными расходами.
+- Увеличивает downstream через `request(n)` (например, `concatMap`, `flatMap`).
+- Уменьшает `ConsumerEventLoop` на 1 после эмитa одной пачки записей.
 
-Важно: цитата выше говорит о неблокирующем backpressure Reactor. Для консьюмера это реализовано не остановкой `poll()`, а паузой партиций.
+```java
+receiver.receive()
+    .concatMap(record -> process(record))
+    .subscribe();
+```
 
-https://kafka.apache.org/37/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
+`concatMap` сам вызывает `request(n)` upstream, когда готов обработать следующую запись.
 
-**EN:**
+**Источник:** https://github.com/reactor/reactor-kafka/blob/main/src/main/java/reactor/kafka/receiver/internals/ConsumerEventLoop.java
 
-> Kafka supports dynamic controlling of consumption flows by using pause(Collection) and resume(Collection) to pause the consumption on the specified assigned partitions and resume the consumption on the specified paused partitions respectively in the future poll(Duration) calls.
+EN:
 
-**RU:**
+```java
+void onRequest(long toAdd) {
+    Operators.addCap(REQUESTED, this, toAdd);
+    if (pollEvent.isPaused()) {
+        consumer.wakeup();
+    }
+    pollEvent.schedule();
+}
+```
 
-> Kafka позволяет динамически управлять потоком потребления через `pause` и `resume`: потребление указанных партиций приостанавливается, а в следующих вызовах `poll` эти партиции снова начинают отдавать записи только после `resume`.
+RU:
 
-Тот же javadoc прямо рекомендует этот приём, если обработка идёт в другом потоке: продолжать вызывать `poll()`, но `pause()` партиции, пока предыдущие записи не обработаны.
+`onRequest(long toAdd)` добавляет `toAdd` к `requested`, будит consumer и планирует следующий `PollEvent`.
 
-https://github.com/reactor/reactor-kafka/blob/main/src/main/java/reactor/kafka/receiver/internals/ConsumerEventLoop.java
+**Источник:** https://github.com/reactor/reactor-kafka/blob/main/src/main/java/reactor/kafka/receiver/internals/ConsumerEventLoop.java
 
-В `PollEvent.run()` логика такая:
+EN:
 
-1. Смотрим счётчик `requested` — это накопленный спрос downstream.
-2. Если `requested > 0`, при необходимости вызываем `consumer.resume(...)`.
-3. Если `requested == 0`, вызываем `consumer.pause(consumer.assignment())` и пишем в лог `Paused - back pressure`.
-4. Затем всё равно вызываем `consumer.poll(pollTimeout)`.
-5. Если пачка не пустая, уменьшаем `requested` и эмитим её в sink.
+```java
+if (!records.isEmpty()) {
+    this.commitBatch.addUncommitted(records);
+    r = Operators.produced(REQUESTED, ConsumerEventLoop.this, 1);
+    log.debug("Emitting {} records, requested now {}", records.count(), r);
+    sink.emitNext(records, ConsumerEventLoop.this);
+}
+```
 
-https://github.com/reactor/reactor-kafka/issues/108
+RU:
 
-**EN:**
+Если `poll()` вернул записи — уменьшает `requested` на 1 и эмитит пачку в sink.
 
-> That appears to be far away from the reactor-kafka code, where back pressure is implemented by pausing the consumer; nothing is emitted from the receiver if there are no available requests in the ConsumerEventLoop.
+## Как связаны requested, pause и poll
 
-**RU:**
+В начале `PollEvent.run()`:
 
-> Это далеко от кода reactor-kafka: backpressure там сделан через паузу консьюмера; если в `ConsumerEventLoop` нет доступных запросов, receiver ничего не эмитит.
+1. Читает `requested`.
+2. Если `requested > 0` → `resume()` партиций.
+3. Если `requested == 0` → `pause()` партиций с логом `Paused - back pressure`.
+4. В любом случае вызывает `consumer.poll(timeout)`.
+5. Если `poll()` вернул записи → эмитит пачку и уменьшает `requested` на 1.
+
+**Источник:** https://github.com/reactor/reactor-kafka/blob/main/src/main/java/reactor/kafka/receiver/internals/ConsumerEventLoop.java
+
+EN:
+
+```java
+if (r > 0) {
+    if (!awaitingTransaction.get()) {
+        if (pausedByUs.getAndSet(false)) {
+            consumer.resume(toResume);
+        }
+    }
+} else if (checkAndSetPausedByUs()) {
+    consumer.pause(consumer.assignment());
+    log.debug("Paused - back pressure");
+}
+
+records = consumer.poll(pollTimeout);
+
+if (!records.isEmpty()) {
+    sink.emitNext(records, ConsumerEventLoop.this);
+}
+```
+
+RU:
+
+Если `r > 0` и не ждём транзакцию — снимает паузу (`resume()`).  
+Если `r == 0` — ставит паузу (`pause()`) с логом `Paused - back pressure`.  
+Затем вызывает `poll()` и, если есть записи, эмитит их.
+
+## Полный цикл PollEvent
+
+**Термины:**
+
+- **Downstream** — ваш код после `receiver.receive()`: операторы `concatMap`, `flatMap`, `subscribe` и т.п.
+- **`request(n)`** — сигнал от downstream: «я готов обработать ещё `n` пачек записей из Kafka`.
+- **`requested`** — внутренний счётчик в `ConsumerEventLoop`. Показывает, сколько пачек downstream ещё готов принять.
+- **Пачка** — один `ConsumerRecords<K,V>`, который вернул `poll()`. Может содержать от 0 до многих записей Kafka.
+- **Эмит пачки** — передача этой пачки из `ConsumerEventLoop` в downstream (в ваш `Flux`).
+
+**Цикл:**
+
+1. Downstream (например, `concatMap`) вызывает `request(n)`.  
+   `n` выбирает оператор: сколько пачек он сейчас готов обработать без перегрузки.  
+   `ConsumerEventLoop` делает `requested += n`.
+
+2. `PollEvent.run()`:
+   - если `requested > 0` → `resume()` партиций;
+   - если `requested == 0` → `pause()` партиций;
+   - в любом случае `consumer.poll(timeout)`;
+   - если `poll()` вернул непустую пачку → эмитит её в downstream и `requested -= 1`.
+
+3. Downstream обрабатывает пачку (например, сохраняет записи в БД).
+
+4. Когда downstream обработал часть данных и готов к следующей пачке, он снова вызывает `request(n)` → цикл повторяется.
+
+**Итог:**
+
+- Backpressure = `pause()` партиций + `poll()` продолжается + нет эмитов при `requested == 0`.
+- Блокирующий JDBC на том же потоке ломает цикл: `poll()` не вызывается вовремя → rebalance.
 
 ### По шагам: 10 заказов и запись в БД
 
-Берём сервис склада интернет-магазина. Топик `orders-topic` присылает события «списать товар». Дальше `concatMap` или `flatMap` пишет в PostgreSQL.
+Берём сервис склада интернет-магазина. 
+- Топик `orders-topic` присылает события «списать товар». 
+- Дальше `concatMap` или `flatMap` пишет в PostgreSQL.
 
 ```java
 receiver.receive()
@@ -185,14 +445,15 @@ receiver.receive()
 
 | Аспект | R2DBC PostgreSQL | reactor-kafka |
 |---|---|---|
-| Есть ли `request(n)` в самом протоколе источника | У потока результата запроса спрос Reactor может остановить чтение следующих строк | У Kafka-консьюмера нет Reactive Streams. Спрос эмулируется через `pause`/`resume` |
-| Что происходит при отсутствии спроса | Драйвер не забирает следующую порцию результата | `poll()` продолжается, но поставленные на паузу партиции не отдают новые записи |
-| Где действует | Один запрос или курсор на соединении | Назначенные партиции данного `KafkaConsumer` |
-| Гранулярность | Ближе к строкам результата | Побатчево: `poll()` может вернуть до `max.poll.records` сразу |
-| Где крутится цикл | Netty event loop / пул R2DBC | Отдельный `eventScheduler` reactor-kafka, не Netty event loop |
+| Есть ли `request(n)` в самом протоколе источника | Да. Спрос от Reactor останавливает чтение следующих строк результата из соединения. | Нет. У Kafka-консьюмера нет Reactive Streams. Спрос эмулируется через `pause()`/`resume()` партиций. |
+| Что происходит при отсутствии спроса | Драйвер не забирает следующую порцию строк из БД. | `poll()` продолжается, но с поставленных на паузу партиций новые записи не возвращаются. |
+| Где действует | На одном соединении / курсоре в рамках одного запроса. | На всех партициях, назначенных данному `KafkaConsumer`. |
+| Единица управления | Отдельные строки результата запроса. | Пачка записей, которую вернул один вызов `poll()` (до `max.poll.records` записей). |
+| Где работает цикл | Netty event loop / пул R2DBC. | Отдельный `eventScheduler` reactor-kafka, не Netty event loop. |
 
-**Вывод:** R2DBC ближе к «настоящему» реактивному спросу на уровне чтения из соединения. Kafka остаётся `pull`+`poll()`, а reactor-kafka добавляет сверху тормоз `pause()`, чтобы не вытягивать новую пачку, пока склад не переварил уже взятые заказы.
-
+**Вывод:** 
+ - R2DBC управляет спросом на уровне строк результата внутри соединения. 
+ - Kafka остаётся `pull`+`poll()`, а reactor-kafka добавляет сверху `pause()` партиций, чтобы не вытягивать новую пачку, пока обработаны не все предыдущие.
 ---
 
 <a name="biznes-primer-zakazy"></a>

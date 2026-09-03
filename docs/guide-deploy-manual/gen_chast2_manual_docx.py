@@ -54,16 +54,17 @@ TEMPLATE_CANDIDATES = [
     ROOT / "docs/guide-deploy-terraform/Razdel-dns-ingress-dostup.docx",
 ]
 
-# --- placeholders (пользователь подставляет свои IP) ---
-DEVTOOLS_IP = "<DEVTOOLS_IP>"
-K8S_MASTER_IP = "<K8S_MASTER_IP>"
-K8S_WORKER_1_IP = "<K8S_WORKER_1_IP>"
-TRAEFIK_1_IP = "<TRAEFIK_1_IP>"
-TRAEFIK_2_IP = "<TRAEFIK_2_IP>"
-TRAEFIK_FLOATING_IP = "<TRAEFIK_FLOATING_IP>"
-STORAGE_IP = "<STORAGE_IP>"
-POSTGRES_PRIMARY_IP = "<POSTGRES_PRIMARY_IP>"
-POSTGRES_REPLICA_IP = "<POSTGRES_REPLICA_IP>"
+# --- placeholders в примерах (bash-safe: без < >) ---
+PLACEHOLDER = "REPLACE_ME"
+DEVTOOLS_IP = PLACEHOLDER
+K8S_MASTER_IP = PLACEHOLDER
+K8S_WORKER_1_IP = PLACEHOLDER
+TRAEFIK_1_IP = PLACEHOLDER
+TRAEFIK_2_IP = PLACEHOLDER
+TRAEFIK_FLOATING_IP = PLACEHOLDER
+STORAGE_IP = PLACEHOLDER
+POSTGRES_PRIMARY_IP = PLACEHOLDER
+POSTGRES_REPLICA_IP = PLACEHOLDER
 DOMAIN = "greeting-dev.example.com"
 GITLAB_GROUP = "greeting-group"
 GITLAB_PROJECT = "greeting-service"
@@ -98,10 +99,12 @@ TOC = [
     ("6.3. Linux (Ubuntu)", "m2_s06_3_linux"),
     ("7. Подготовка серверов (root CLI)", "m2_s07_prepare"),
     ("8. Кластер Kubernetes (k3s)", "m2_s08_k3s"),
-    ("8.1. Master", "m2_s08_1_master"),
-    ("8.2. Workers", "m2_s08_2_workers"),
-    ("8.3. kubeconfig на локальном ПК", "m2_s08_3_kubeconfig"),
-    ("8.4. Разбор команд kubectl", "m2_s08_4_kubectl"),
+    ("8.1. Главный сервер (control-plane)", "m2_s08_1_master"),
+    ("8.2. Получение токена", "m2_s08_2_token"),
+    ("8.3. Рабочие узлы (workers)", "m2_s08_3_workers"),
+    ("8.4. Проверка кластера", "m2_s08_4_verify"),
+    ("8.5. kubeconfig на локальном ПК", "m2_s08_5_kubeconfig"),
+    ("8.6. Разбор команд kubectl", "m2_s08_6_kubectl"),
     ("9. Кластер Traefik на отдельных VPS", "m2_s09_traefik"),
     ("9.1. Установка Traefik", "m2_s09_1_install"),
     ("9.2. Маршрут к приложению", "m2_s09_2_route"),
@@ -677,6 +680,12 @@ def build_document(doc: Document) -> None:
     sty.add_normal(doc, "3. Добавить публичный SSH-ключ.")
     sty.add_normal(doc, "4. Заказать Floating IP и привязать к traefik-1 (или держать на keepalived VIP).")
     sty.add_normal(doc, "5. Записать все публичные IP в файл infra-servers.env (см. ниже).")
+    sty.add_normal(
+        doc,
+        "Важно для Git Bash: в значениях только IP (например 203.0.113.10). "
+        "Не пишите K3S_SERVER_IP=<K3S_SERVER_IP> — символ < bash воспринимает как перенаправление "
+        "ввода и source ./infra-servers.env упадёт с syntax error.",
+    )
     sty.add_platform_block(
         doc,
         "Локальный ПК — любой ОС, файл переменных",
@@ -684,14 +693,15 @@ def build_document(doc: Document) -> None:
         f"DEVTOOLS_IP={DEVTOOLS_IP}\n"
         f"K8S_MASTER_IP={K8S_MASTER_IP}\n"
         f"K8S_WORKER_1_IP={K8S_WORKER_1_IP}\n"
-        f"K8S_WORKER_2_IP=<K8S_WORKER_2_IP>\n"
+        f"K8S_WORKER_2_IP={PLACEHOLDER}\n"
         f"TRAEFIK_1_IP={TRAEFIK_1_IP}\n"
         f"TRAEFIK_2_IP={TRAEFIK_2_IP}\n"
         f"TRAEFIK_FLOATING_IP={TRAEFIK_FLOATING_IP}\n"
         f"POSTGRES_PRIMARY_IP={POSTGRES_PRIMARY_IP}\n"
         f"POSTGRES_REPLICA_IP={POSTGRES_REPLICA_IP}\n"
         f"STORAGE_IP={STORAGE_IP}\n"
-        "EOF",
+        "EOF\n"
+        "# затем откройте файл и замените REPLACE_ME на реальные IP",
     )
 
     # ── 5 ────────────────────────────────────────────────────────────────
@@ -746,18 +756,26 @@ def build_document(doc: Document) -> None:
     )
 
     sty.add_heading3(doc, "6.1. Windows (Git Bash)", "m2_s06_1_win")
+    sty.add_normal(
+        doc,
+        "В Git Bash переменная $USER часто пустая — путь /c/Users/$USER/.ssh ломается "
+        "(получится /c/Users//.ssh). Используйте ~/.ssh/id_ed25519.",
+    )
     sty.add_platform_block(
         doc,
-        "Локальный ПК — Windows (Git Bash)",
+        "Локальный ПК — Windows (Git Bash), корень репозитория",
+        "cd /d/Project_infra/greeting-service-infra\n"
         "source ./infra-servers.env\n"
-        "ssh -i /c/Users/$USER/.ssh/id_ed25519 root@${DEVTOOLS_IP} \"echo connected\"\n"
-        "ssh -i /c/Users/$USER/.ssh/id_ed25519 root@${K8S_MASTER_IP} \"echo connected\"\n"
-        "ssh -i /c/Users/$USER/.ssh/id_ed25519 root@${TRAEFIK_1_IP} \"echo connected\"",
+        "# первый раз: добавить отпечаток хоста (иначе Host key verification failed)\n"
+        "ssh-keyscan -H \"${DEVTOOLS_IP}\" >> ~/.ssh/known_hosts\n"
+        "ssh -i ~/.ssh/id_ed25519 root@${DEVTOOLS_IP} \"echo connected\"\n"
+        "ssh -i ~/.ssh/id_ed25519 root@${K8S_MASTER_IP} \"echo connected\"\n"
+        "ssh -i ~/.ssh/id_ed25519 root@${TRAEFIK_1_IP} \"echo connected\"",
     )
     sty.add_normal(
         doc,
-        "Пояснение: -i задаёт приватный ключ; root@IP — пользователь и хост; "
-        "кавычки запускают удалённую команду без интерактивной сессии.",
+        "Пояснение: -i — приватный ключ; ssh-keyscan — записать ключ сервера в known_hosts; "
+        "при первом ручном ssh без keyscan bash спросит yes/no — нужно ответить yes.",
     )
 
     sty.add_heading3(doc, "6.2. macOS (Terminal)", "m2_s06_2_mac")
@@ -814,22 +832,33 @@ def build_document(doc: Document) -> None:
     sty.add_heading2(doc, "8. Кластер Kubernetes (k3s)", "m2_s08_k3s")
     sty.add_normal(
         doc,
-        "k3s ставится официальным скриптом get.k3s.io. Traefik, встроенный в k3s по умолчанию, "
-        "отключаем: внешний вход будет через отдельный Traefik-кластер.",
-    )
-
-    sty.add_heading3(doc, "8.1. Master", "m2_s08_1_master")
-    sty.add_platform_block(
-        doc,
-        "На k8s-master (после SSH)",
-        "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -\n"
-        "k3s kubectl get nodes\n"
-        "cat /var/lib/rancher/k3s/server/node-token",
+        "K3s ставится официальным скриптом get.k3s.io. Встроенный Traefik отключаем — "
+        "вход в приложение будет через отдельный Traefik-кластер (§9).",
     )
     sty.add_normal(
         doc,
-        "Пояснение флагов: curl -sfL — silent/fail/follow redirects; INSTALL_K3S_EXEC="
-        "\"--disable traefik\" — не ставить встроенный Traefik k3s; sh - — выполнить скрипт.",
+        "Команды выполняйте по отдельности: сначала полностью настройте главный сервер "
+        "(control-plane), затем подключайте каждый рабочий узел (worker).",
+    )
+
+    sty.add_heading3(doc, "8.1. Главный сервер (control-plane)", "m2_s08_1_master")
+    sty.add_normal(doc, "На k8s-master (после SSH) выполните установку K3s server:")
+    sty.add_command_block(
+        doc,
+        'curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -',
+        "Скрипт скачивает установщик K3s, отключает Traefik (--disable traefik) и ставит control-plane.",
+    )
+    sty.add_normal(doc, "Проверьте состояние узла на главном сервере:")
+    sty.add_command_block(
+        doc,
+        "kubectl get nodes",
+        "Если kubectl установлен вместе с K3s — покажет список нод (пока только master).",
+    )
+    sty.add_normal(doc, "Если команда kubectl не найдена, используйте:")
+    sty.add_command_block(
+        doc,
+        "k3s kubectl get nodes",
+        "Обёртка k3s kubectl всегда доступна после установки server.",
     )
     sty.add_citation(
         doc,
@@ -838,28 +867,80 @@ def build_document(doc: Document) -> None:
         "Если нужен другой Ingress-контроллер, запустите K3s с --disable=traefik.",
     )
 
-    sty.add_heading3(doc, "8.2. Workers", "m2_s08_2_workers")
+    sty.add_heading3(doc, "8.2. Получение токена", "m2_s08_2_token")
+    sty.add_normal(
+        doc,
+        "На главном сервере получите токен для подключения workers. "
+        "Скопируйте весь выведенный токен — он понадобится на каждом worker.",
+    )
+    sty.add_command_block(
+        doc,
+        "cat /var/lib/rancher/k3s/server/node-token",
+        "Значение K3S_TOKEN для команды join на worker-нодах.",
+    )
+
+    sty.add_heading3(doc, "8.3. Рабочие узлы (workers)", "m2_s08_3_workers")
+    sty.add_normal(
+        doc,
+        "На каждом дополнительном VPS (k8s-worker-1, k8s-worker-2) выполните join отдельно. "
+        f"Подставьте IP главного сервера ({K8S_MASTER_IP}) и токен из §8.2.",
+    )
     sty.add_platform_block(
         doc,
-        "На k8s-worker-1 / k8s-worker-2 (после SSH)",
-        f"curl -sfL https://get.k3s.io | K3S_URL=https://{K8S_MASTER_IP}:6443 K3S_TOKEN=<NODE_TOKEN> sh -\n"
-        "# на master проверьте:\n"
-        "k3s kubectl get nodes -o wide",
+        "На k8s-worker-1 (после SSH)",
+        f"curl -sfL https://get.k3s.io | K3S_URL=https://{K8S_MASTER_IP}:6443 K3S_TOKEN=\"<NODE_TOKEN>\" sh -",
+    )
+    sty.add_platform_block(
+        doc,
+        "На k8s-worker-2 (после SSH) — та же команда, другой hostname",
+        f"curl -sfL https://get.k3s.io | K3S_URL=https://{K8S_MASTER_IP}:6443 K3S_TOKEN=\"<NODE_TOKEN>\" sh -",
     )
     sty.add_normal(
         doc,
-        "K3S_URL — адрес API server; K3S_TOKEN — токен из /var/lib/rancher/k3s/server/node-token; "
-        "при наличии K3S_URL установщик поднимает agent, а не server.",
+        "K3S_URL — адрес API server главной ноды и порт 6443. "
+        "K3S_TOKEN — строка из /var/lib/rancher/k3s/server/node-token. "
+        "При наличии K3S_URL установщик поднимает agent (worker), а не server.",
+    )
+    sty.add_citation(
+        doc,
+        "https://docs.k3s.io/quick-start",
+        "To install additional agent nodes and add them to the cluster, run the installation script "
+        "with the K3S_URL and K3S_TOKEN environment variables. ... The value to use for K3S_TOKEN "
+        "is stored at /var/lib/rancher/k3s/server/node-token on your server node.",
+        "Чтобы добавить agent-ноды, запустите установочный скрипт с переменными K3S_URL и K3S_TOKEN. "
+        "Значение K3S_TOKEN хранится в /var/lib/rancher/k3s/server/node-token на server-ноде.",
+    )
+    sty.add_normal(
+        doc,
+        "На главном сервере откройте порт 6443 для workers (если join не проходит): ufw allow 6443/tcp.",
     )
 
-    sty.add_heading3(doc, "8.3. kubeconfig на локальном ПК", "m2_s08_3_kubeconfig")
+    sty.add_heading3(doc, "8.4. Проверка кластера", "m2_s08_4_verify")
+    sty.add_normal(doc, "Снова на главном сервере проверьте, что все ноды в статусе Ready:")
+    sty.add_command_block(
+        doc,
+        "kubectl get nodes",
+        "Должны быть видны master и все workers.",
+    )
+    sty.add_normal(doc, "Или:")
+    sty.add_command_block(
+        doc,
+        "k3s kubectl get nodes",
+        "Расширенный вывод: k3s kubectl get nodes -o wide (INTERNAL-IP, роли).",
+    )
+    sty.add_normal(
+        doc,
+        "Ожидаемый результат: главный сервер и рабочие узлы со статусом Ready.",
+    )
+
+    sty.add_heading3(doc, "8.5. kubeconfig на локальном ПК", "m2_s08_5_kubeconfig")
     add_os_triple(
         doc,
         # win
-        f"mkdir -p /c/Users/$USER/.kube\n"
-        f"scp -i /c/Users/$USER/.ssh/id_ed25519 root@{K8S_MASTER_IP}:/etc/rancher/k3s/k3s.yaml /c/Users/$USER/.kube/selfhosted-greeting.yaml\n"
-        f"sed -i 's/127.0.0.1/{K8S_MASTER_IP}/' /c/Users/$USER/.kube/selfhosted-greeting.yaml\n"
-        "export KUBECONFIG=/c/Users/$USER/.kube/selfhosted-greeting.yaml\n"
+        "mkdir -p ~/.kube\n"
+        f"scp -i ~/.ssh/id_ed25519 root@{K8S_MASTER_IP}:/etc/rancher/k3s/k3s.yaml ~/.kube/selfhosted-greeting.yaml\n"
+        f"sed -i 's/127.0.0.1/{K8S_MASTER_IP}/' ~/.kube/selfhosted-greeting.yaml\n"
+        "export KUBECONFIG=~/.kube/selfhosted-greeting.yaml\n"
         "kubectl get nodes",
         # mac
         f"mkdir -p ~/.kube\n"
@@ -880,7 +961,7 @@ def build_document(doc: Document) -> None:
         "На Linux/Git Bash — sed -i 's/.../.../'.",
     )
 
-    sty.add_heading3(doc, "8.4. Разбор команд kubectl", "m2_s08_4_kubectl")
+    sty.add_heading3(doc, "8.6. Разбор команд kubectl", "m2_s08_6_kubectl")
     sty.add_command_block(
         doc,
         "kubectl get nodes -o wide",
@@ -978,7 +1059,7 @@ def build_document(doc: Document) -> None:
     sty.add_platform_block(
         doc,
         "Локальный ПК — любой ОС (kubectl)",
-        "export KUBECONFIG=~/.kube/selfhosted-greeting.yaml   # на Windows Git Bash: /c/Users/$USER/.kube/...\n"
+        "export KUBECONFIG=~/.kube/selfhosted-greeting.yaml\n"
         "kubectl -n dev get svc greeting-service -o wide\n"
         "# найдите PORT(S), например 80:30080/TCP → NodePort=30080",
     )
@@ -1431,6 +1512,20 @@ def build_document(doc: Document) -> None:
     sty.add_normal(doc, "• DNS ок, сайт нет — Floating IP не на traefik-1; ufw закрыл 80.")
     sty.add_normal(doc, "• helm atomic rollback — смотрите kubectl -n dev describe pod / events.")
     sty.add_normal(doc, "• sed на macOS — забыли sed -i ''.")
+    sty.add_normal(
+        doc,
+        "• source infra-servers.env: syntax error near '<' — в файле остались плейсхолдеры "
+        "вида IP=<K3S_SERVER_IP>; замените на реальные адреса без угловых скобок.",
+    )
+    sty.add_normal(
+        doc,
+        "• Identity file /c/Users//.ssh/... — в Git Bash $USER пустой; используйте ~/.ssh/id_ed25519.",
+    )
+    sty.add_normal(
+        doc,
+        "• Host key verification failed — первый вход: ssh-keyscan -H IP >> ~/.ssh/known_hosts "
+        "или ответьте yes на вопрос о fingerprint.",
+    )
 
     # ── 20 summary ───────────────────────────────────────────────────────
     sty.add_heading2(doc, "20. Финальная сводка", "m2_s20_summary")
