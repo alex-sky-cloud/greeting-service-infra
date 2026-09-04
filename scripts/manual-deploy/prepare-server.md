@@ -14,6 +14,21 @@
 
 SSH-ключ: `~/.ssh/id_ed25519` (это `/c/Users/<ваш_user>/.ssh/id_ed25519`, **не** `/c/Users/$USER/...`).
 
+```bash
+
+source ./infra-servers.env 
+
+```
+ - **Это важно!!!** В этой команде, **shell** получает переменные и значения
+
+
+```bash
+ssh-keyscan -H "${DEVTOOLS_IP}" >> ~/.ssh/known_hosts
+
+```
+**ssh-keyscan** — записать ключ сервера в known_hosts;
+ - при первом ручном **ssh** без `keyscan`, `bash` спросит `yes/no` — нужно ответить `yes`.
+
 ## Файлы
 
 | Файл | Где выполняется |
