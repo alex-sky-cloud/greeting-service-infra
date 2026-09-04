@@ -26,6 +26,8 @@ kubeconfig.yaml
 # Secrets
 *.env
 .env
+k3s-node-token
+scripts/manual-deploy/k3s-master/k3s-node-token
 infra/terraform/docker/.env
 infra/terraform-serverspace/docker/.env
 secrets/
