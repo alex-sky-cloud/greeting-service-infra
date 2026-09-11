@@ -1,6 +1,6 @@
 # install-k3s-master.sh — фаза 2: k3s control-plane (§8.1)
 
-Ставит **k3s server** на master: `--disable traefik`, проверка `kubectl get nodes`, пишет **K3S_TOKEN** в `infra-servers.env`.
+Ставит **k3s server** на master: `--disable traefik`, проверка `kubectl get nodes`, пишет **K3S_TOKEN** в `infra-servers.env`, скачивает **kubeconfig** в `~/.kube/selfhosted-greeting.yaml`.
 
 ## Среда запуска
 
@@ -60,12 +60,23 @@ bash scripts/manual-deploy/k3s-master/install-k3s-master.sh --host 203.0.113.10
 5. Запись `/root/k3s-node-token` на сервере.
 6. `ufw allow 6443/tcp` (и 8472/udp, 10250/tcp если ufw есть).
 
-## Куда попадает токен
+## Куда попадают токен и kubeconfig
 
 После успеха локальный скрипт:
 
 1. копирует `/root/k3s-node-token` на ПК;
-2. записывает строку `K3S_TOKEN=...` в `infra-servers.env`.
+2. записывает строку `K3S_TOKEN=...` в `infra-servers.env`;
+3. скачивает `/etc/rancher/k3s/k3s.yaml` → `~/.kube/selfhosted-greeting.yaml`;
+4. заменяет `127.0.0.1` на IP master; при наличии `kubectl` — `kubectl get nodes`.
+
+### Если kubeconfig ещё недоступен
+
+Скрипт **не падает сам**. Ждёт ваш выбор:
+
+| Ввод | Действие |
+|------|----------|
+| **Enter** | снова проверить master и скачать |
+| **q** | прервать скрипт |
 
 Вручную копировать токен в команду join **не нужно**. Дальше:
 
@@ -75,4 +86,12 @@ source <(tr -d '\r' < ./infra-servers.env)
 bash scripts/manual-deploy/k3s-workers/install-k3s-workers.sh
 ```
 
-Файл `k3s-node-token` и `*.env` в `.gitignore` — **не коммитьте**.
+Файл `k3s-node-token`, kubeconfig и `*.env` в `.gitignore` — **не коммитьте**.
+
+После установки:
+
+```bash
+
+export KUBECONFIG=~/.kube/selfhosted-greeting.yaml
+kubectl get nodes
+```

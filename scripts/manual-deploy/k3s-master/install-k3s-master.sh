@@ -14,6 +14,8 @@ ENV_FILE="$REPO_ROOT/infra-servers.env"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
 LAUNCH_DIR="$(pwd)"
 TOKEN_NAME="k3s-node-token"
+KUBECONFIG_REMOTE="/etc/rancher/k3s/k3s.yaml"
+KUBECONFIG_FILENAME="selfhosted-greeting.yaml"
 
 load_infra_env() {
   local env_file="$1"
@@ -100,9 +102,152 @@ IP master берётся из infra-servers.env (K8S_MASTER_IP, затем K3S_S
   --yes        без ожидания Enter (только таймер-паузы)
   -h, --help   эта справка
 
-После успеха токен пишется в infra-servers.env как K3S_TOKEN=
-(и дублируется в файл k3s-node-token в каталоге запуска).
+После успеха:
+  K3S_TOKEN  → infra-servers.env + k3s-node-token
+  kubeconfig → ~/.kube/selfhosted-greeting.yaml (§8.3)
+
+Если kubeconfig ещё недоступен — скрипт ждёт: Enter повторить, q прервать.
 EOF
+}
+
+resolve_kubeconfig_local_path() {
+  if [[ -n "${KUBECONFIG:-}" ]]; then
+    echo "${KUBECONFIG}"
+    return 0
+  fi
+  if [[ -n "${USERPROFILE:-}" ]]; then
+    echo "${USERPROFILE//\\//}/.kube/${KUBECONFIG_FILENAME}"
+    return 0
+  fi
+  if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" ]]; then
+    echo "/c/Users/${USERNAME:-${USER:-sky}}/.kube/${KUBECONFIG_FILENAME}"
+    return 0
+  fi
+  echo "${HOME}/.kube/${KUBECONFIG_FILENAME}"
+}
+
+wait_retry_or_abort() {
+  echo
+  echo "================================================================"
+  echo "  kubeconfig пока недоступен."
+  echo "================================================================"
+  echo
+  echo "  Enter — повторить проверку и скачивание"
+  echo "  q     — прервать выполнение скрипта"
+  echo
+  local choice=""
+  if [[ -r /dev/tty ]]; then
+    read -r -p "Ваш выбор: " choice </dev/tty
+  else
+    read -r -p "Ваш выбор: " choice
+  fi
+  echo
+  if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+    echo "Прервано по команде пользователя (q)."
+    exit 1
+  fi
+  return 0
+}
+
+remote_kubeconfig_ready() {
+  ssh -i "$SSH_KEY" \
+    -o ConnectTimeout=15 \
+    -o BatchMode=yes \
+    -o StrictHostKeyChecking=accept-new \
+    "root@${HOST}" \
+    "test -s ${KUBECONFIG_REMOTE}"
+}
+
+fetch_kubeconfig_once() {
+  local dest_dir dest_file tmp_file
+
+  dest_file="$(resolve_kubeconfig_local_path)"
+  dest_dir="$(dirname "$dest_file")"
+  tmp_file="$(mktemp)"
+
+  mkdir -p "$dest_dir"
+
+  echo "Команда:"
+  echo "  scp -i ${SSH_KEY} root@${HOST}:${KUBECONFIG_REMOTE} ${dest_file}"
+  if ! scp -i "$SSH_KEY" \
+    -o ConnectTimeout=15 \
+    -o StrictHostKeyChecking=accept-new \
+    "root@${HOST}:${KUBECONFIG_REMOTE}" \
+    "$tmp_file"; then
+    rm -f "$tmp_file"
+    return 1
+  fi
+
+  if [[ ! -s "$tmp_file" ]]; then
+    rm -f "$tmp_file"
+    echo "ОШИБКА: скачанный kubeconfig пустой." >&2
+    return 1
+  fi
+
+  sed "s/127.0.0.1/${HOST}/g; s/0.0.0.0/${HOST}/g" "$tmp_file" > "$dest_file"
+  rm -f "$tmp_file"
+  chmod 600 "$dest_file" 2>/dev/null || true
+
+  if ! grep -q "server:.*${HOST}" "$dest_file"; then
+    echo "WARN: в kubeconfig не найден server с IP ${HOST} — проверьте файл вручную." >&2
+  fi
+
+  echo "kubeconfig сохранён: ${dest_file}"
+  echo "  export KUBECONFIG=${dest_file}"
+
+  if command -v kubectl >/dev/null 2>&1; then
+    echo
+    echo "--- Проверка: kubectl get nodes ---"
+    if kubectl --kubeconfig "$dest_file" get nodes; then
+      echo "--- Результат: OK — kubectl видит кластер ---"
+    else
+      echo "WARN: kubectl get nodes не удался — kubeconfig на месте, проверьте порт 6443 и ufw на master." >&2
+    fi
+  else
+    echo "kubectl не в PATH — проверку пропускаем."
+    echo "  kubectl --kubeconfig \"${dest_file}\" get nodes"
+  fi
+
+  return 0
+}
+
+fetch_kubeconfig_with_retry() {
+  local attempt=0
+
+  echo
+  echo "================================================================"
+  echo "  §8.3 kubeconfig на локальном ПК"
+  echo "================================================================"
+  echo
+  echo "Источник: root@${HOST}:${KUBECONFIG_REMOTE}"
+  echo "Назначение: $(resolve_kubeconfig_local_path)"
+  echo "На master server часто указан 127.0.0.1 — заменим на ${HOST}."
+  echo
+
+  while true; do
+    attempt=$((attempt + 1))
+    echo "--- Попытка ${attempt}: проверка kubeconfig на master ---"
+
+    if remote_kubeconfig_ready; then
+      echo "Файл на master найден — скачиваем..."
+      if fetch_kubeconfig_once; then
+        echo
+        echo "=== kubeconfig готов ==="
+        return 0
+      fi
+      echo
+      echo "Не удалось скачать или обработать kubeconfig."
+    else
+      echo
+      echo "На master пока нет ${KUBECONFIG_REMOTE} (или файл пустой)."
+      echo "Возможные причины:"
+      echo "  • k3s ещё устанавливается;"
+      echo "  • установка k3s завершилась с ошибкой;"
+      echo "  • master перезагружается."
+    fi
+
+    wait_retry_or_abort
+  done
 }
 
 while [[ $# -gt 0 ]]; do
@@ -260,5 +405,9 @@ echo "  2. Заполните K3S_WORKER_1_IP и K3S_WORKER_2_IP, если ещ�
 echo "  3. Запустите скрипт воркеров — он сам возьмёт K3S_TOKEN из env:"
 echo
 echo "     bash scripts/manual-deploy/k3s-workers/install-k3s-workers.sh"
+echo
+
+fetch_kubeconfig_with_retry
+
 echo
 echo "=== Локально: install-k3s-master.sh завершён для root@${HOST} ==="
