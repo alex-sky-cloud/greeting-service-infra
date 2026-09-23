@@ -14,7 +14,7 @@
 
 **Утверждение:**
 
-Decorator — структурный паттерн, позволяющий динамически добавлять объекту новое поведение, оборачивая его в объект-обёртку того же интерфейса. Все обёртки следуют одному интерфейсу с исходным объектом, поэтому их можно накладывать друг на друга сколько угодно раз.
+**Decorator** — структурный паттерн, позволяющий динамически добавлять объекту новое поведение, оборачивая его в объект-обёртку того же интерфейса. Все обёртки следуют одному интерфейсу с исходным объектом, поэтому их можно накладывать друг на друга сколько угодно раз.
 
 - Источник: https://refactoring.guru/design-patterns/decorator/java/example
 
@@ -22,8 +22,8 @@ Decorator — структурный паттерн, позволяющий ди
 
 RU:
 
-> "Декоратор — это структурный паттерн, который позволяет динамически добавлять объектам новое поведение, помещая их в объекты-обёртки, называемые декораторами. 
-> 
+> "Декоратор — это структурный паттерн, который позволяет динамически добавлять объектам новое поведение, помещая их в объекты-обёртки, называемые декораторами.
+>
 > С помощью декораторов можно оборачивать объекты бесконечное число раз, так как целевые объекты и декораторы реализуют один и тот же интерфейс."
 
 **Код (интерфейс + декоратор):**
@@ -70,8 +70,8 @@ public abstract class DataSourceDecorator implements DataSource {
 
 - Источник: https://stackoverflow.com/questions/45739200/how-to-write-operators-in-reactor-3
 
-- Каждый оператор в Reactor (`FluxMap`, `FluxFilter`, `FluxContextWrite` и т.д.) реализует `Publisher`, 
-- а при вызове `subscribe(downstreamSubscriber)` создаёт собственный внутренний класс `Subscriber` (например, `FluxMap.MapSubscriber`), 
+- Каждый оператор в Reactor (`FluxMap`, `FluxFilter`, `FluxContextWrite` и т.д.) реализует `Publisher`,
+- а при вызове `subscribe(downstreamSubscriber)` создаёт собственный внутренний класс `Subscriber` (например, `FluxMap.MapSubscriber`),
 - который оборачивает `downstreamSubscriber` и подписывает его на исходный (upstream) `Publisher`.
 
 ---
@@ -85,34 +85,32 @@ userRepository.findAllUsers()          // (1) источник — запрос 
     .subscribe(dto -> save(dto));       // (4) запуск всего процесса
 ```
 
-
 ## Порядок выполнения простыми словами
 
 - Ничего не происходит, пока не вызван `subscribe()` в строке (4) — до этого момента у вас просто "рецепт", а не запущенный процесс.
-- `subscribe()` запускает цепочку "снизу вверх": 
-  - сначала обращается к оператору `map`, 
-  - оператор `map` обращается к оператору `flatMap`, 
+- `subscribe()` запускает цепочку "снизу вверх":
+  - сначала обращается к оператору `map`,
+  - оператор `map` обращается к оператору `flatMap`,
   - оператор `flatMap` сообщает источнику — "начинай присылать данные".
-  
-- Дальше данные летят "сверху вниз": 
-  - БД присылает набор пользователей и оператор `flatMap` принимает из этого списка пользователей один элемент (это упрощенно...)  
-  - → оператор `flatMap` получает объект User и передает его в доп. запрос 
-  - → То есть, происходит обогащение данными и только после этого, результат идёт в  оператор `map` 
-  - → оператор `map` конвертирует полученную сущность в DTO 
-  - → DTO попадает в ваш `subscribe(dto -> save(dto))`.
 
+- Дальше данные летят "сверху вниз":
+  - БД присылает набор пользователей и оператор `flatMap` принимает из этого списка пользователей один элемент (это упрощенно...)
+  - → оператор `flatMap` получает объект User и передает его в доп. запрос
+  - → То есть, происходит обогащение данными и только после этого, результат идёт в оператор `map`
+  - → оператор `map` конвертирует полученную сущность в DTO
+  - → DTO попадает в ваш `subscribe(dto -> save(dto))`.
 
 ## Аналогия
 
-Это как заказ в кафе: 
- - вы делаете заказ (`subscribe`) — сигнал идёт на кухню (к источнику данных). 
- - Кухня готовит блюдо и передаёт его официанту (`flatMap`), 
+Это как заказ в кафе:
+ - вы делаете заказ (`subscribe`) — сигнал идёт на кухню (к источнику данных).
+ - Кухня готовит блюдо и передаёт его официанту (`flatMap`),
  - официант кладёт соус (`map`) и приносит вам (`subscribe`).
 
  - Каждый "работник" в этой цепочке просто получает то, что сделал предыдущий, и передаёт дальше — ничего абстрактного здесь нет, просто "обёртки" в Reactor физически создаются в момент вызова `subscribe()`,
  - а данные летят в обратном направлении.
 
-Источник: [https://projectreactor.io/docs/core/release/reference/reactiveProgramming.html](https://projectreactor.io/docs/core/release/reference/reactiveProgramming.html)
+Источник: https://projectreactor.io/docs/core/release/reference/reactiveProgramming.html
 
 > "Nothing happens until you subscribe."
 
@@ -131,7 +129,6 @@ userRepository.findAllUsers()          // источник (Publisher)
     .subscribe(dto -> save(dto));       // ваш Subscriber
 ```
 
-
 ## Где и как создаётся Subscriber на каждом шаге
 
 - Вы вызываете `.subscribe(dto -> save(dto))` — это создаёт ваш Subscriber (назовём его `terminalSubscriber`).
@@ -139,20 +136,19 @@ userRepository.findAllUsers()          // источник (Publisher)
 - Дальше `mapSubscriber` подписывается на `flatMap` — то есть `flatMap` получает `mapSubscriber` и создаёт **свой** объект-обёртку (`flatMapSubscriber`), который хранит ссылку на `mapSubscriber`.
 - И наконец `flatMapSubscriber` подписывается на `findAllUsers()` — это и есть момент, когда сигнал "подпишись" дошёл до самого источника.
 
-
 ## Почему "от последнего оператора к первому"
 
-Порядок вызовов такой: 
-  - `subscribe → map → flatMap → findAllUsers`. 
+Порядок вызовов такой:
+  - `subscribe → map → flatMap → findAllUsers`.
   - Именно поэтому в исходной фразе сказано "от последнего оператора к первому (к источнику)" — `map` в коде написан позже, чем `flatMap`, но именно `map` первым узнаёт о подписке, потому что он ближе к `subscribe()`.
 
 ## Что означает "создаёт новый Subscriber, оборачивающий тот, что пришёл снизу"
 
 "Снизу" здесь — это ближе к `subscribe()`. Когда `flatMap` создаёт `flatMapSubscriber`, он оборачивает `mapSubscriber` (который пришёл к нему как параметр) — то есть внутри `flatMapSubscriber` лежит ссылка на `mapSubscriber`, а внутри `mapSubscriber` — ссылка на ваш `terminalSubscriber`.
 
-Источник: [https://github.com/reactor/reactor-core/blob/master/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java](https://github.com/reactor/reactor-core/blob/master/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java)
+Источник: https://github.com/reactor/reactor-core/blob/master/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java
 
-> "public CoreSubscriber\<? super T> subscribeOrReturn(CoreSubscriber\<? super R> actual) { return new MapSubscriber\<>(actual, mapper); }"
+> "public CoreSubscriber<? super T> subscribeOrReturn(CoreSubscriber<? super R> actual) { return new MapSubscriber<>(actual, mapper); }"
 
 RU:
 
@@ -165,9 +161,9 @@ RU:
 ## 3. Как Subscription оборачивается (decorator) снизу вверх
 
 **Утверждение:**
-- Объект `Subscription`, создаётся источником данных (то есть, объектом Publisher), и происходит это в момент вызова `onSubscribe`. 
-  - Каждый промежуточный реактивный оператор, может обернуть полученный объект `Subscription` в свою реализацию, 
-    - делегируя вызовы `request()`/`cancel()` вложенному объекту. 
+- Объект `Subscription`, создаётся источником данных (то есть, объектом Publisher), и происходит это в момент вызова `onSubscribe`.
+  - Каждый промежуточный реактивный оператор, может обернуть полученный объект `Subscription` в свою реализацию,
+    - делегируя вызовы `request()`/`cancel()` вложенному объекту.
   - То есть, это тот же паттерн **Decorator**, просто применённый к интерфейсу `Subscription`.
 
 - Источник: https://github.com/reactive-streams/reactive-streams-jvm
@@ -178,8 +174,6 @@ RU:
 
 > "Subscription представляет собой связь один-к-одному в жизненном цикле подписки Subscriber на Publisher. [...] Методы Subscription.request(long n) и Subscription.cancel() должны вызываться только тем Subscriber-ом, которому была выдана данная Subscription."
 
-
-
 ## Поясним на том же примере
 
 ```java
@@ -188,7 +182,6 @@ userRepository.findAllUsers()          // источник (Publisher)
     .map(User::toDto)                   // оператор B
     .subscribe(dto -> save(dto));       // ваш Subscriber
 ```
-
 
 ## Кто вызывает onSubscribe
 
@@ -202,7 +195,7 @@ userRepository.findAllUsers()          // источник (Publisher)
 
 Настоящая `Subscription` от источника остаётся только у `flatMapSubscriber`. Дальше по цепочке идут уже обёртки, а не оригинал.
 
-Источник: [https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java](https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java)
+Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java
 
 ```java
 static final class MapSubscriber<T, R> implements InnerOperator<T, R> {
@@ -226,15 +219,14 @@ RU:
 
 `actual` — это просто поле, куда сохранили `terminalSubscriber` в момент создания `MapSubscriber` (когда вызывался `subscribe()`). Никакого нового объекта здесь нет — это тот же Subscriber, который "пришёл снизу".
 
-
 ## Зачем нужна обёртка
 
-Когда вы в конце вызовете `subscription.request(n)` (это Reactor делает автоматически при `subscribe()`), запрос пойдёт в обратном направлении — от `terminalSubscriber` вниз к источнику: 
- - `terminalSubscriber → mapSubscriber → flatMapSubscriber → источник`. 
- - Если, например, `flatMap` обернул `Subscription`, чтобы контролировать, сколько параллельных запросов к `enrichUser()` можно делать одновременно — именно в этой обёртке и сработает нужная логика перед тем, 
+Когда вы в конце вызовете `subscription.request(n)` (это Reactor делает автоматически при `subscribe()`), запрос пойдёт в обратном направлении — от `terminalSubscriber` вниз к источнику:
+ - `terminalSubscriber → mapSubscriber → flatMapSubscriber → источник`.
+ - Если, например, `flatMap` обернул `Subscription`, чтобы контролировать, сколько параллельных запросов к `enrichUser()` можно делать одновременно — именно в этой обёртке и сработает нужная логика перед тем,
    - как запрос уйдёт дальше к источнику.
 
-Источник: [https://github.com/reactive-streams/reactive-streams-jvm](https://github.com/reactive-streams/reactive-streams-jvm)
+Источник: https://github.com/reactive-streams/reactive-streams-jvm
 
 > "The Publisher.subscribe method [...] can be called as many times as necessary but only with different Subscriber instances. [...] The Publisher MUST call onSubscribe on the Subscriber instance."
 
@@ -248,44 +240,9 @@ RU:
 
 > "Subscription представляет собой связь один-к-одному в жизненном цикле подписки Subscriber на Publisher."
 
-Иначе говоря: 
-- `onSubscribe` всегда вызывает тот, кто выше по цепочке (в направлении к источнику), но передаёт он не оригинальную `Subscription`, 
+Иначе говоря:
+- `onSubscribe` всегда вызывает тот, кто выше по цепочке (в направлении к источнику), но передаёт он не оригинальную `Subscription`,
 - а собственную обёртку — именно правило "один-к-одному" объясняет, почему у каждой пары (оператор как Subscriber) → (его downstream) обязана быть своя собственная `Subscription`, а не общая для всех.
-
-
-**Код (упрощённая обёртка Subscription по аналогии с Decorator):**
-
-```java
-public interface Subscription {
-    void request(long n);
-    void cancel();
-}
-```
-
-```java
-
-public class WrappingSubscription implements Subscription {
-    private final Subscription wrapped;
-
-    public WrappingSubscription(Subscription wrapped) {
-        this.wrapped = wrapped;
-    }
-
-    @Override
-    public void request(long n) {
-        System.out.println("Логируем request: " + n);
-        wrapped.request(n);
-    }
-
-    @Override
-    public void cancel() {
-        wrapped.cancel();
-    }
-}
-```
-
-- Каждый оператор **Reactor**, которому нужно изменить поведение `request`/`cancel` (например, для подсчёта, буферизации, **backpressure**), 
-- создаёт такую обёртку вокруг `Subscription`, полученной снизу, и передаёт её выше по цепочке через `onSubscribe()`.
 
 ---
 
@@ -297,10 +254,10 @@ public class WrappingSubscription implements Subscription {
 
 - Он распространяется через механизм **Subscription** — начиная с финального **subscribe** и двигаясь вверх по цепочке.
   - `contextWrite` объединяет переданный **ContextView** с **Context**, пришедшим снизу, создавая новый **Context** для всех операторов выше.
-  
+
 - Технически `Context` хранится как обычное поле внутри объекта `Subscriber` на каждом уровне цепочки, а метод `currentContext()` просто возвращает значение этого поля.
 
-- Источник: [https://projectreactor.io/docs/core/release/reference/advancedFeatures/context.html](https://projectreactor.io/docs/core/release/reference/advancedFeatures/context.html)
+- Источник: https://projectreactor.io/docs/core/release/reference/advancedFeatures/context.html
 
 > "Actually, a Context is tied to each Subscriber in a chain. It uses the Subscription propagation mechanism to make itself available to each operator, starting with the final subscribe and moving up the chain. [...] contextWrite(ContextView) merges the ContextView you provide and the Context from downstream [...] resulting in a NEW Context for upstream."
 
@@ -320,7 +277,7 @@ RU:
 import reactor.core.publisher.Mono;
 
 public class ContextDemo {
-  
+
     public static void main(String[] args) {
     String key = "message";
 
@@ -339,7 +296,7 @@ public class ContextDemo {
 }
 ```
 
-- Источник: [https://projectreactor.io/docs/core/release/reference/advancedFeatures/context.html](https://projectreactor.io/docs/core/release/reference/advancedFeatures/context.html)
+- Источник: https://projectreactor.io/docs/core/release/reference/advancedFeatures/context.html
 
 **Как это выглядит в реальном исходном коде Reactor (где хранится Subscriber и Context):**
 
@@ -365,21 +322,110 @@ public CoreSubscriber<? super T> subscribeOrReturn(CoreSubscriber<? super T> act
 }
 ```
 
-- Источник: [https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxContextWrite.java](https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxContextWrite.java)
+- Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/core/publisher/FluxContextWrite.java
 
 RU (пояснение к коду):
 
-`actual` — тот же Subscriber снизу, который мы уже разбирали в предыдущих разделах (обычное поле, а не новый объект). `context` — тоже обычное поле того же объекта, где лежит именно тот Context, который видим на этом уровне цепочки. `actual.currentContext()` читает Context, пришедший снизу, ваша лямбда из `contextWrite(ctx -> ctx.put(...))` добавляет к нему свой ключ, а результат сохраняется в новом `ContextWriteSubscriber` — именно так Context "поднимается" вверх по цепочке, оставаясь при этом полем внутри конкретного Subscriber-а на каждом уровне.
+- `actual` — тот же Subscriber снизу, который мы уже разбирали в предыдущих разделах (обычное поле, а не новый объект). 
+
+- `context` — тоже обычное поле того же объекта, где лежит именно тот Context, который видим на этом уровне цепочки. 
+
+- `actual.currentContext()` читает Context, пришедший снизу, ваша лямбда из `contextWrite(ctx -> ctx.put(...))` добавляет к нему свой ключ, а результат сохраняется в новом `ContextWriteSubscriber` — именно так `Context` "поднимается" вверх по цепочке, оставаясь при этом полем внутри конкретного Subscriber-а на каждом уровне.
 
 
+## Подтверждение на примере выше
 
+```java
+findAllUsers()          // источник
+    .flatMap(...)        // оператор flatMap
+    .map(...)             // оператор map
+    .subscribe(...);      // ваш Subscriber
+```
+
+**Порядок создания объектов** (снизу вверх, начиная от `subscribe()`):
+
+  - `subscribe()` создаёт `terminalSubscriber`.
+  - `map` создаёт `mapSubscriber`, и его поле `actual` = `terminalSubscriber`.
+  - `flatMap` создаёт `flatMapSubscriber`, и его поле `actual` = `mapSubscriber` (объект, созданный уровнем `map`, который стоит ниже него по цепочке).
+
+То есть да: 
+- `actual` на уровне `flatMap` — это именно объект `Subscriber`, созданный на уровне `map`, а не что-то абстрактное. 
+- Каждый следующий уровень (ближе к источнику) хранит в `actual` ссылку на конкретный объект-обёртку, созданный предыдущим (более низким) уровнем.
+
+## Является ли `actual` "обёрткой"
+
+Смотря с какой стороны смотреть: 
+ - сам объект, на который ссылается `actual` (например, `mapSubscriber`), — это обёртка вокруг `terminalSubscriber`. 
+ - Но с точки зрения `flatMapSubscriber` поле `actual` — это просто ссылка на готовый, уже созданный объект, который был передан ему в конструктор при вызове `subscribeOrReturn(actual)`. 
+ - Сам `flatMapSubscriber` не создаёт `actual` — он его получает как параметр.
+
+Источник: [https://github.com/reactor/reactor-core/blob/master/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java](https://github.com/reactor/reactor-core/blob/master/reactor-core/src/main/java/reactor/core/publisher/FluxMap.java)
+
+> "public CoreSubscriber\<? super T> subscribeOrReturn(CoreSubscriber\<? super R> actual) { return new MapSubscriber\<>(actual, mapper); }"
+
+RU:
+
+> "`actual` передаётся в конструктор извне — это Subscriber, который пришёл к этому оператору от уровня, стоящего ниже (ближе к subscribe())."
+
+Таким образом: 
+ - `actual` на каждом уровне — это конкретный объект-**Subscriber**, созданный уровнем ниже, и цепочка `flatMapSubscriber.actual → mapSubscriber.actual → terminalSubscriber` — это и есть та самая матрёшка ссылок.
+
+
+### 4.1. ВАЖНОЕ УТОЧНЕНИЕ: внутри `Context` нет "матрёшки со ссылками", в отличие от `Subscription`
+
+- В **разделе 3** показано, что `Subscription`-обёртки реально хранят ссылку друг на друга (`this.s = s`) — это классическая матрёшка-декоратор.
+  - **Context работает по-другому**: `put()`/`putAll()` не создают обёртку со ссылкой на предыдущий `Context`, а создают **новый объект с копией всех пар ключ-значение**.
+
+- Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/util/context/Context1.java
+
+
+```java
+
+final class Context1 implements CoreContext {
+    final Object key;
+    final Object value;
+
+    Context1(Object key, Object value) {
+        this.key = key;
+        this.value = value;
+    }
+
+    @Override
+    public Context put(Object key, Object value) {
+        if (this.key.equals(key)) {
+            return new Context1(key, value); // замена значения по тому же ключу
+        }
+        return new Context2(this.key, this.value, key, value); // копия старой пары + новая
+    }
+}
+```
+
+**RU**:
+
+- `Context1` хранит ровно одну пару ключ-значение. При `put()` с новым ключом создаётся **не обёртка** вокруг старого объекта (поля `parent` здесь нет вообще), а 
+- `Context2` — новый объект, который **копирует** старую пару и добавляет новую рядом с ней.
+
+- Источник: https://github.com/reactor/reactor-core/blob/main/reactor-core/src/main/java/reactor/util/context/Context.java
+
+> "Note that contexts are optimized for low cardinality key/value storage [...] Past five user key/value pair, the Context will use a copy-on-write implementation backed by a new java.util.Map on each put."
+
+**RU**:
+
+> "Контексты оптимизированы для хранения небольшого числа пар ключ-значение [...] После пяти пар Context переключается на реализацию copy-on-write на основе нового java.util.Map при каждом put."
+
+**Итог по разделу 4:** 
+  - Reactor использует классы `Context1`, `Context2`, `Context3`, `Context4`, `Context5`, а после пяти записей — `ContextN` на основе `Map`. 
+  - Каждый `put`/`putAll` создаёт новый объект с полным (скопированным) набором данных, а не цепочку ссылок на предыдущие версии — **иммутабельность** здесь достигается **через копирование**, а не через decorator-обёртки, как это было с `Subscription`.
 
 ---
 
 ## 5. Фазы жизненного цикла: подписка и эмиссия (PlantUML)
 
 **Утверждение:**
-Жизненный цикл реактивной цепочки строго делится на две непересекающиеся фазы: фазу подписки (assembly/subscribe), в которой строится граф Subscriber/Subscription и ничего из данных ещё не передаётся, и фазу эмиссии (request/onNext), в которой запрос данных идёт вверх, а сами данные — вниз.
+
+- **Жизненный цикл реактивной цепочки** строго делится на две непересекающиеся фазы: 
+  - **фазу подписки** (assembly/subscribe), в которой строится **граф** Subscriber/Subscription и ничего из данных ещё не передаётся, и 
+  - **фазу эмиссии** (request/onNext), в которой **запрос** данных идёт **вверх**, а сами **данные** — **вниз**.
 
 - Источник: https://github.com/reactive-streams/reactive-streams-jvm
 
@@ -387,11 +433,12 @@ RU (пояснение к коду):
 
 RU:
 
-> "После того как Subscriber зарегистрирован у Publisher, и до первого сигнала onNext, onComplete или onError, Publisher ОБЯЗАН вызвать onSubscribe у этого Subscriber."
+> "После того как `Subscriber` зарегистрирован у `Publisher`, и до первого сигнала `onNext`, `onComplete` или `onError`, `Publisher` ОБЯЗАН вызвать `onSubscribe` у этого `Subscriber`."
 
-### 5.1. Фаза подписки — граница: создание Subscriber идёт вниз→вверх, Subscription — вверх→вниз
+### 5.1. Фаза подписки — граница: создание `Subscriber` идёт вниз→вверх, `Subscription` — вверх→вниз
 
 ```plantuml
+
 @startuml
 title Фаза подписки (assembly) — где именно создаётся Subscription
 
@@ -452,10 +499,31 @@ Op2 -> Client : onComplete()
 ### 5.3. Итоговая граница между фазами
 
 | Момент | Что создаётся / происходит | Направление |
-|---|---|---|
-| `subscribe()` вызван | Создаются объекты Subscriber (по одному на оператор) | Сверху вниз по коду → снизу вверх по цепочке (от Client к Source) |
-| `onSubscribe(subscription)` вызван источником | Создаётся ЕДИНСТВЕННЫЙ реальный объект Subscription, затем оборачивается decorator'ами | Снизу вверх по цепочке → сверху вниз (от Source к Client) |
-| `request(n)` вызван подписчиком | Ничего не создаётся, идёт сигнал "дай данные" | От Client к Source (вверх) |
-| `onNext(value)` вызван источником | Данные преобразуются каждым оператором по пути | От Source к Client (вниз) |
+| :-- | :-- | :-- |
+| `subscribe()` вызван | Создаются объекты Subscriber (по одному на оператор) | От `subscribe()` к источнику (`findAllUsers`) |
+| `onSubscribe(subscription)` вызван источником | Создаётся ЕДИНСТВЕННЫЙ реальный объект Subscription, затем оборачивается decorator'ами | От источника (`findAllUsers`) к `subscribe()` |
+| `request(n)` вызван подписчиком | Ничего не создаётся, идёт сигнал "дай данные" | От `subscribe()` к источнику (`findAllUsers`) |
+| `onNext(value)` вызван источником | Данные преобразуются каждым оператором по пути | От источника (`findAllUsers`) к `subscribe()` |
+
+## Проверка на вашем примере
+
+```java
+findAllUsers()          // источник
+    .flatMap(...)
+    .map(...)
+    .subscribe(...);
+```
+
+- **Создание Subscriber-ов**: начинается от `subscribe()`, идёт к `map`, потом к `flatMap`, и заканчивается на `findAllUsers()`. Значит направление — "от `subscribe()` к источнику".
+- **Создание и передача Subscription**: начинается у `findAllUsers()` (только там рождается настоящий объект), идёт к `flatMap`, потом к `map`, и заканчивается у вашего `subscribe()`. Значит направление — "от источника к `subscribe()`" — то есть строго обратное первому пункту.
+- **`request(n)`**: направление такое же, как у создания Subscriber-ов — от `subscribe()` к источнику.
+- **`onNext(value)`**: направление такое же, как у Subscription — от источника к `subscribe()`.
+
+Так что правило простое: 
+
+- создание Subscriber-ов и запрос данных (`request`) всегда идут в одну сторону (к источнику), а 
+- создание/передача Subscription и сами данные (`onNext`) — всегда в другую сторону (от источника к вам).
+
+
 
 - Источник: https://projectreactor.io/docs/core/release/reference/reactiveProgramming.html

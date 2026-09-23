@@ -9,14 +9,19 @@ public class ContextDemo {
 
         Mono<String> result = Mono.just("Hello")
                 .flatMap(
-                        str -> Mono.deferContextual(
-                                ctx -> Mono.just(
-                                        str + " " + ctx.get(key)
-                                )
-                        )
+                        str -> getDeferContextual(str, key)
                 )
                 .contextWrite(ctx -> ctx.put(key, "World"));
 
         result.subscribe(System.out::println); // выведет: Hello World
+    }
+
+    private static Mono<String> getDeferContextual(String str, String key) {
+
+        return Mono.deferContextual(
+                ctx -> Mono.just(
+                        str + " " + ctx.get(key)
+                )
+        );
     }
 }
