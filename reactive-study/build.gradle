@@ -13,6 +13,18 @@ java {
     }
 }
 
+// Исходники UTF-8. Без этого Gradle на русской Windows берёт windows-1251,
+// а консоль IDEA читает вывод как UTF-8 — кириллица превращается в «♦».
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaExec).configureEach {
+    jvmArgs '-Dfile.encoding=UTF-8',
+            '-Dstdout.encoding=UTF-8',
+            '-Dstderr.encoding=UTF-8'
+}
+
 repositories {
     mavenCentral()
 }
@@ -43,6 +55,9 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    jvmArgs '-Dfile.encoding=UTF-8',
+            '-Dstdout.encoding=UTF-8',
+            '-Dstderr.encoding=UTF-8'
 }
 
 bootJar {
