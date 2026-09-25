@@ -1,6 +1,6 @@
 # Тема 07 — Условные агрегаты: FILTER и CASE
 
-> **Статус:** практика · интервью ✅ · **Следующий шаг:** прислать SQL по `07-conditional-aggregates-tasks.md`
+> **Статус:** завершена · теория ✅ · интервью ✅ · практика ✅
 
 Тема опирается на тему 03: `count`, `sum`, `GROUP BY`. Подзапросы здесь не обязательны.
 
@@ -593,7 +593,8 @@ count(CASE WHEN status = 'success' THEN 1 END)
 | pending | 0 |
 | success | 3 |
 
-Два статуса в одном `CASE` пишут двумя `WHEN` подряд. В конце один `END`. Вложенный `CASE` без своего `END` база не примет.
+Два статуса в одном `CASE` пишут двумя `WHEN` подряд. 
+- В конце один `END`. Вложенный `CASE` без своего `END` база не примет.
 
 ```sql
 count(CASE
@@ -603,6 +604,38 @@ count(CASE
 ```
 
 Это то же, что `FILTER (WHERE status IN ('success', 'failed'))`. Кучка `pending` получит `0`, потому что `pending` в список не входит.
+
+Два `WHEN` подряд — это не `AND`. 
+- `CASE` идёт сверху вниз и берёт первое подошедшее условие.
+- Если оба `THEN` дают одно и то же, строка подходит, когда сработало первое условие **или** второе.
+
+`AND` пишут в одном `WHEN`:
+
+```sql
+CASE
+    WHEN attempt_no = 3 AND status = 'success' THEN 1
+END
+```
+
+Это то же, что `FILTER (WHERE attempt_no = 3 AND status = 'success')`.
+
+`OR` — тоже в одном `WHEN`:
+
+```sql
+CASE
+    WHEN attempt_no = 3 OR status = 'success' THEN 1
+END
+```
+
+`BETWEEN` — тоже в одном `WHEN`:
+
+```sql
+CASE
+    WHEN attempt_no BETWEEN 2 AND 3 THEN 1
+END
+```
+
+Это то же, что `FILTER (WHERE attempt_no BETWEEN 2 AND 3)`.
 
 Запись `THEN 1 ELSE 1` считает все строки только потому, что и ветка `THEN`, и ветка `ELSE` дают `1`. Слово `success` в `WHEN` ничего не отбирает. Это тот же `count(*)`, только длиннее.
 
