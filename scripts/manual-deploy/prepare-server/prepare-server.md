@@ -33,6 +33,41 @@ source <(tr -d '\r' < ./infra-servers.env)
 | [`prepare-server.sh`](prepare-server.sh) | Git Bash на ПК → SSH на VPS |
 | [`prepare-server-remote.sh`](prepare-server-remote.sh) | На сервере (передаётся по SSH автоматически) |
 
+## Фаза 0: SSH-ключ по паролю (внутри prepare-server.sh)
+
+Если провайдер **не** добавил ключ при создании VPS, в **начале того же** `prepare-server.sh` спросит:
+
+```text
+Копировать SSH-ключ по паролю? (yes/no)
+```
+
+| Ответ | Действие |
+|-------|----------|
+| **yes** | для каждой роли с IP: вход по `*_SSH_USER` / `*_SSH_PASSWORD`, запись `~/.ssh/id_ed25519.pub` |
+| **no** | сразу §7, вход только по ключу |
+
+Переменные в `infra-servers.env` (пароли **не коммитить**):
+
+| Роль | IP | Пользователь | Пароль |
+|------|-----|--------------|--------|
+| devtools | `DEVTOOLS_IP` | `DEVTOOLS_SSH_USER` | `DEVTOOLS_SSH_PASSWORD` |
+| k8s-master | `K3S_SERVER_IP` | `K3S_SERVER_SSH_USER` | `K3S_SERVER_SSH_PASSWORD` |
+| k8s-worker-1 | `K3S_WORKER_1_IP` | `K3S_WORKER_1_SSH_USER` | `K3S_WORKER_1_SSH_PASSWORD` |
+| k8s-worker-2 | `K3S_WORKER_2_IP` | `K3S_WORKER_2_SSH_USER` | `K3S_WORKER_2_SSH_PASSWORD` |
+| traefik-1/2, storage-1/2 | … | `TRAEFIK_*_SSH_*`, `STORAGE_*_SSH_*` | … |
+
+Общий пользователь по умолчанию: `SSH_BOOTSTRAP_DEFAULT_USER=root`.
+
+Флаги без вопроса yes/no:
+
+```bash
+
+bash scripts/manual-deploy/prepare-server/prepare-server.sh --ssh-bootstrap
+bash scripts/manual-deploy/prepare-server/prepare-server.sh --no-ssh-bootstrap
+```
+
+Фаза 0 — только **bash + ssh/scp** из Git Bash (пароль через `SSH_ASKPASS`). Отдельных файлов нет.
+
 ## Быстрый старт (Git Bash)
 
 Все роли, у которых в env уже есть IP:
@@ -115,7 +150,7 @@ bash scripts/manual-deploy/prepare-server/prepare-server.sh k8s-master --with-do
 
 Если SSH просит **пароль** — ключ на **этом** VPS не прописан. Новый `ssh-keygen` на ПК не нужен.
 
-`ssh-keygen -R IP` — только сброс старого отпечатка **хоста** в `known_hosts`.
+Если отпечаток **этого** IP сменился, скрипт сам обновляет только его строку в `~/.ssh/known_hosts` и подключается снова. Остальные записи файла не удаляются.
 
 ## После скрипта
 

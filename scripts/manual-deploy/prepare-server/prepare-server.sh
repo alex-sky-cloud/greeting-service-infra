@@ -13,6 +13,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 REMOTE_SCRIPT="$SCRIPT_DIR/prepare-server-remote.sh"
 ENV_FILE="$REPO_ROOT/infra-servers.env"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+SSH_BOOTSTRAP="" # yes | no | ask
 
 load_infra_env() {
   local env_file="$1"
@@ -96,8 +97,14 @@ usage() {
   --no-docker         не ставить Docker даже на devtools
   --skip-upgrade      пропустить apt-get upgrade (быстрый повтор)
   --dry-run           показать шаги без изменений на сервере
-  --yes               без ожидания Enter на remote (пауза «нет VPS» остаётся)
+  --yes               без ожидания Enter на remote (не отключает вопрос фазы 0)
+  --ssh-bootstrap     фаза 0 без вопроса: да, копировать ключ по паролю
+  --no-ssh-bootstrap  фаза 0 без вопроса: нет, ключ уже на серверах
   -h, --help          эта справка
+
+Фаза 0 (в начале этого же скрипта, интерактивно yes/no, если не заданы флаги):
+  yes — по IP из env: вход *_SSH_USER / *_SSH_PASSWORD, запись ~/.ssh/id_ed25519.pub
+  no  — сразу §7, только вход по ключу
 
 Примеры:
   bash scripts/manual-deploy/prepare-server/prepare-server.sh
@@ -135,6 +142,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --yes)
       NONINTERACTIVE=1
+      shift
+      ;;
+    --ssh-bootstrap)
+      SSH_BOOTSTRAP="yes"
+      shift
+      ;;
+    --no-ssh-bootstrap)
+      SSH_BOOTSTRAP="no"
       shift
       ;;
     -*)
@@ -210,6 +225,178 @@ resolve_host_from_role() {
   esac
 }
 
+resolve_ssh_user_from_role() {
+  local role="$1"
+  local user="${SSH_BOOTSTRAP_DEFAULT_USER:-root}"
+  case "$role" in
+    devtools) user="${DEVTOOLS_SSH_USER:-$user}" ;;
+    k8s-master|k3s-server|k3s-master) user="${K3S_SERVER_SSH_USER:-$user}" ;;
+    k8s-worker-1|k3s-worker-1) user="${K3S_WORKER_1_SSH_USER:-$user}" ;;
+    k8s-worker-2|k3s-worker-2) user="${K3S_WORKER_2_SSH_USER:-$user}" ;;
+    traefik-1) user="${TRAEFIK_1_SSH_USER:-$user}" ;;
+    traefik-2) user="${TRAEFIK_2_SSH_USER:-$user}" ;;
+    storage-1) user="${STORAGE_1_SSH_USER:-$user}" ;;
+    storage-2) user="${STORAGE_2_SSH_USER:-$user}" ;;
+  esac
+  echo "$user"
+}
+
+resolve_password_from_role() {
+  case "$1" in
+    devtools) echo "${DEVTOOLS_SSH_PASSWORD:-}" ;;
+    k8s-master|k3s-server|k3s-master) echo "${K3S_SERVER_SSH_PASSWORD:-}" ;;
+    k8s-worker-1|k3s-worker-1) echo "${K3S_WORKER_1_SSH_PASSWORD:-}" ;;
+    k8s-worker-2|k3s-worker-2) echo "${K3S_WORKER_2_SSH_PASSWORD:-}" ;;
+    traefik-1) echo "${TRAEFIK_1_SSH_PASSWORD:-}" ;;
+    traefik-2) echo "${TRAEFIK_2_SSH_PASSWORD:-}" ;;
+    storage-1) echo "${STORAGE_1_SSH_PASSWORD:-}" ;;
+    storage-2) echo "${STORAGE_2_SSH_PASSWORD:-}" ;;
+    *) echo "" ;;
+  esac
+}
+
+bootstrap_role_in_scope() {
+  local role="$1"
+  if [[ -z "$ROLE" ]]; then
+    return 0
+  fi
+  [[ "$role" == "$ROLE" ]]
+}
+
+ASKPASS_HELPER=""
+
+cleanup_askpass() {
+  if [[ -n "$ASKPASS_HELPER" && -f "$ASKPASS_HELPER" ]]; then
+    rm -f "$ASKPASS_HELPER"
+  fi
+  ASKPASS_HELPER=""
+  unset SSH_BOOTSTRAP_ASKPASS_PASSWORD SSH_ASKPASS SSH_ASKPASS_REQUIRE 2>/dev/null || true
+}
+
+setup_askpass() {
+  local password="$1"
+  cleanup_askpass
+  ASKPASS_HELPER="$(mktemp)"
+  chmod 700 "$ASKPASS_HELPER"
+  cat > "$ASKPASS_HELPER" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$SSH_BOOTSTRAP_ASKPASS_PASSWORD"
+EOF
+  chmod 700 "$ASKPASS_HELPER"
+  export SSH_BOOTSTRAP_ASKPASS_PASSWORD="$password"
+  export SSH_ASKPASS="$ASKPASS_HELPER"
+  export SSH_ASKPASS_REQUIRE=force
+  export DISPLAY="${DISPLAY:-:0}"
+}
+
+# Если отпечаток именно этого хоста сменился — правим только его строку
+# в known_hosts и подключаемся ещё раз. Остальные записи файла не трогаем.
+replace_changed_host_key() {
+  local host="$1"
+  echo "known_hosts: отпечаток ${host} сменился — обновляю только эту запись"
+  ssh-keygen -R "$host" >/dev/null 2>&1 || true
+  ssh-keygen -R "[${host}]:22" >/dev/null 2>&1 || true
+}
+
+run_with_host_key_refresh() {
+  local host="$1"
+  shift
+  local err rc
+  err="$(mktemp)"
+  if "$@" 2>"$err"; then
+    cat "$err" >&2
+    rm -f "$err"
+    return 0
+  fi
+  rc=$?
+  cat "$err" >&2
+  if grep -q 'REMOTE HOST IDENTIFICATION HAS CHANGED' "$err"; then
+    rm -f "$err"
+    replace_changed_host_key "$host"
+    "$@"
+    return $?
+  fi
+  rm -f "$err"
+  return "$rc"
+}
+
+SSH_HOSTKEY_OPTS=(
+  -o StrictHostKeyChecking=accept-new
+)
+
+ssh_password_common_opts=(
+  -o ConnectTimeout=60
+  "${SSH_HOSTKEY_OPTS[@]}"
+  -o PreferredAuthentications=password,keyboard-interactive
+  -o PubkeyAuthentication=no
+  -o NumberOfPasswordPrompts=1
+)
+
+run_ssh_with_password() {
+  local user="$1"
+  local host="$2"
+  local password="$3"
+  shift 3
+  setup_askpass "$password"
+  # shellcheck disable=SC2068
+  run_with_host_key_refresh "$host" ssh "${ssh_password_common_opts[@]}" "${user}@${host}" "$@"
+  local rc=$?
+  cleanup_askpass
+  return "$rc"
+}
+
+run_scp_with_password() {
+  local user="$1"
+  local host="$2"
+  local password="$3"
+  local src="$4"
+  local dst="$5"
+  setup_askpass "$password"
+  run_with_host_key_refresh "$host" scp "${ssh_password_common_opts[@]}" "$src" "${user}@${host}:${dst}"
+  local rc=$?
+  cleanup_askpass
+  return "$rc"
+}
+
+install_ssh_key_on_host() {
+  local role="$1"
+  local user="$2"
+  local host="$3"
+  local password="$4"
+  local pub_key="${SSH_KEY}.pub"
+
+  echo "--- ${role} @ ${user}@${host} ---"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "[dry-run] scp ${pub_key} → authorized_keys"
+    return 0
+  fi
+
+  run_scp_with_password "$user" "$host" "$password" "$pub_key" "/tmp/bootstrap-ssh-key.pub"
+  run_ssh_with_password "$user" "$host" "$password" bash -s <<'REMOTE'
+set -euo pipefail
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+auth=~/.ssh/authorized_keys
+touch "$auth"
+chmod 600 "$auth"
+line="$(tr -d '\r\n' < /tmp/bootstrap-ssh-key.pub)"
+grep -qxF "$line" "$auth" || echo "$line" >> "$auth"
+rm -f /tmp/bootstrap-ssh-key.pub
+REMOTE
+
+  if run_with_host_key_refresh "$host" ssh -i "$SSH_KEY" \
+    -o ConnectTimeout=30 \
+    -o BatchMode=yes \
+    "${SSH_HOSTKEY_OPTS[@]}" \
+    "${user}@${host}" \
+    "echo connected; hostname"; then
+    echo "OK: ключ работает"
+    return 0
+  fi
+  echo "FAIL: ключ не принят после фазы 0" >&2
+  return 1
+}
+
 env_var_for_role() {
   case "$1" in
     devtools) echo "DEVTOOLS_IP" ;;
@@ -226,6 +413,11 @@ env_var_for_role() {
 
 # Возврат 0 = повторить, 1 = пропустить роль.
 wait_retry_or_skip() {
+  if [[ "$NONINTERACTIVE" == "1" ]]; then
+    echo
+    echo "Режим --yes: роль пропущена (нет IP или SSH)."
+    return 1
+  fi
   echo
   echo "Когда VPS готов и infra-servers.env сохранён — нажмите Enter."
   echo "Скрипт сам прочитает env и повторит проверку."
@@ -235,7 +427,8 @@ wait_retry_or_skip() {
   if [[ -r /dev/tty ]]; then
     read -r -p "Enter — повторить, s — пропустить: " choice </dev/tty
   else
-    read -r -p "Enter — повторить, s — пропустить: " choice
+    echo "Нет интерактивного терминала — роль пропущена." >&2
+    return 1
   fi
   echo
   if [[ "$choice" == "s" || "$choice" == "S" ]]; then
@@ -246,21 +439,130 @@ wait_retry_or_skip() {
 
 ssh_probe() {
   local ip="$1"
-  ssh -i "$SSH_KEY" \
+  local ssh_user="${2:-root}"
+  run_with_host_key_refresh "$ip" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=12 \
     -o BatchMode=yes \
-    -o StrictHostKeyChecking=accept-new \
-    "root@${ip}" \
+    "${SSH_HOSTKEY_OPTS[@]}" \
+    "${ssh_user}@${ip}" \
     "echo connected; hostname"
+}
+
+ask_ssh_bootstrap() {
+  if [[ -n "$SSH_BOOTSTRAP" ]]; then
+    return 0
+  fi
+  if [[ "$DRY_RUN" == "1" ]]; then
+    SSH_BOOTSTRAP="no"
+    return 0
+  fi
+
+  echo
+  echo "================================================================"
+  echo "  Фаза 0: копирование SSH-ключа по паролю"
+  echo "================================================================"
+  echo
+  echo "Некоторые облака не добавляют SSH-ключ при создании VPS."
+  echo "Можно подключиться по логину/паролю из infra-servers.env"
+  echo "и записать ${SSH_KEY}.pub в authorized_keys на каждом сервере."
+  echo
+  echo "  yes — выполнить фазу 0, затем основную подготовку §7"
+  echo "  no  — пропустить (ключ уже на серверах, дальше только SSH-ключ)"
+  echo
+  local choice=""
+  if [[ ! -r /dev/tty ]]; then
+    echo "ОШИБКА: нужен интерактивный терминал для yes/no." >&2
+    echo "Запустите из Git Bash или укажите --ssh-bootstrap / --no-ssh-bootstrap." >&2
+    exit 1
+  fi
+  read -r -p "Копировать SSH-ключ по паролю? (yes/no): " choice </dev/tty
+  case "$choice" in
+    yes|y|Y|Yes|YES)
+      SSH_BOOTSTRAP="yes"
+      ;;
+    *)
+      SSH_BOOTSTRAP="no"
+      ;;
+  esac
+  echo
+}
+
+run_ssh_bootstrap() {
+  local role ip user password
+  local -a failed=()
+  declare -A bootstrap_seen_ips=()
+
+  ask_ssh_bootstrap
+
+  echo "Фаза 0 (копирование SSH-ключа): ${SSH_BOOTSTRAP}"
+  if [[ "$SSH_BOOTSTRAP" != "yes" ]]; then
+    echo "Пропуск — дальше подключение только по ключу."
+    return 0
+  fi
+
+  if [[ ! -f "${SSH_KEY}.pub" ]]; then
+    echo "Не найден публичный ключ: ${SSH_KEY}.pub" >&2
+    exit 1
+  fi
+
+  trap cleanup_askpass EXIT
+  load_infra_env "$ENV_FILE"
+
+  echo
+  echo "=== Фаза 0: копирование ${SSH_KEY}.pub по паролю из env ==="
+  echo
+
+  for role in "${ALL_ROLES[@]}"; do
+    if ! bootstrap_role_in_scope "$role"; then
+      continue
+    fi
+
+    ip="$(resolve_host_from_role "$role")"
+    if ip_is_missing "$ip"; then
+      echo "${role}: пропуск — нет IP"
+      continue
+    fi
+    if [[ -n "${bootstrap_seen_ips[$ip]:-}" ]]; then
+      echo "${role}: пропуск — IP ${ip} уже как «${bootstrap_seen_ips[$ip]}»"
+      continue
+    fi
+
+    user="$(resolve_ssh_user_from_role "$role")"
+    password="$(resolve_password_from_role "$role")"
+    if [[ -z "$password" ]]; then
+      echo "${role} @ ${ip}: пропуск — пароль не задан в env"
+      continue
+    fi
+
+    if install_ssh_key_on_host "$role" "$user" "$ip" "$password"; then
+      bootstrap_seen_ips["$ip"]="$role"
+    else
+      failed+=("$role")
+    fi
+    echo
+  done
+
+  cleanup_askpass
+  trap - EXIT
+
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    echo "ОШИБКА: фаза 0 не завершилась для: ${failed[*]}" >&2
+    exit 1
+  fi
+
+  echo "--- Фаза 0 завершена ---"
+  echo
 }
 
 run_remote() {
   local role="$1"
   local ip="$2"
+  local ssh_user
+  ssh_user="$(resolve_ssh_user_from_role "$role")"
 
   echo "=== prepare-server.sh ==="
   echo "Роль:   $role"
-  echo "Хост:   root@${ip}"
+  echo "Хост:   ${ssh_user}@${ip}"
   echo "Ключ:   $SSH_KEY"
   echo "Docker: $DOCKER_FLAG"
   echo "Режим:  dry-run=$DRY_RUN skip-upgrade=$SKIP_UPGRADE yes=$NONINTERACTIVE"
@@ -273,10 +575,10 @@ run_remote() {
     return 0
   fi
 
-  ssh -i "$SSH_KEY" \
+  run_with_host_key_refresh "$ip" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
-    -o StrictHostKeyChecking=accept-new \
-    "root@${ip}" \
+    "${SSH_HOSTKEY_OPTS[@]}" \
+    "${ssh_user}@${ip}" \
     env DRY_RUN="$DRY_RUN" SKIP_UPGRADE="$SKIP_UPGRADE" NONINTERACTIVE="$NONINTERACTIVE" \
     bash -s -- "$role" "$DOCKER_FLAG" \
     < "$REMOTE_SCRIPT"
@@ -292,7 +594,7 @@ declare -A SEEN_IPS=()
 wait_until_ready() {
   local role="$1"
   local forced_ip="${2:-}"
-  local ip env_name
+  local ip env_name ssh_user
 
   HOST_READY=""
   env_name="$(env_var_for_role "$role")"
@@ -335,12 +637,15 @@ wait_until_ready() {
       return 2
     fi
 
+    load_infra_env "$ENV_FILE"
+    ssh_user="$(resolve_ssh_user_from_role "$role")"
+
     echo
-    echo "--- Проверка SSH: root@${ip} (${role}) ---"
+    echo "--- Проверка SSH: ${ssh_user}@${ip} (${role}) ---"
     echo "Команда:"
-    echo "  ssh -i ${SSH_KEY} root@${ip} \"echo connected; hostname\""
+    echo "  ssh -i ${SSH_KEY} ${ssh_user}@${ip} \"echo connected; hostname\""
     echo "----- вывод -----"
-    if ssh_probe "$ip"; then
+    if ssh_probe "$ip" "$ssh_user"; then
       echo "----- конец -----"
       echo "--- Результат: OK — SSH работает ---"
       HOST_READY="$ip"
@@ -410,6 +715,8 @@ echo "Ключ:   $SSH_KEY"
 echo "Docker: $DOCKER_FLAG"
 echo "Режим:  dry-run=$DRY_RUN skip-upgrade=$SKIP_UPGRADE yes=$NONINTERACTIVE"
 echo
+
+run_ssh_bootstrap
 
 if [[ -z "$ROLE" ]]; then
   print_plan

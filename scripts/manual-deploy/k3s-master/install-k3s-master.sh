@@ -12,6 +12,37 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 REMOTE_SCRIPT="$SCRIPT_DIR/install-k3s-master-remote.sh"
 ENV_FILE="$REPO_ROOT/infra-servers.env"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+
+# Если отпечаток именно этого хоста сменился — правим только его строку
+# в known_hosts и подключаемся ещё раз. Остальные записи файла не трогаем.
+replace_changed_host_key() {
+  local host="$1"
+  echo "known_hosts: отпечаток ${host} сменился — обновляю только эту запись"
+  ssh-keygen -R "$host" >/dev/null 2>&1 || true
+  ssh-keygen -R "[${host}]:22" >/dev/null 2>&1 || true
+}
+
+run_with_host_key_refresh() {
+  local host="$1"
+  shift
+  local err rc
+  err="$(mktemp)"
+  if "$@" 2>"$err"; then
+    cat "$err" >&2
+    rm -f "$err"
+    return 0
+  fi
+  rc=$?
+  cat "$err" >&2
+  if grep -q 'REMOTE HOST IDENTIFICATION HAS CHANGED' "$err"; then
+    rm -f "$err"
+    replace_changed_host_key "$host"
+    "$@"
+    return $?
+  fi
+  rm -f "$err"
+  return "$rc"
+}
 LAUNCH_DIR="$(pwd)"
 TOKEN_NAME="k3s-node-token"
 KUBECONFIG_REMOTE="/etc/rancher/k3s/k3s.yaml"
@@ -150,7 +181,7 @@ wait_retry_or_abort() {
 }
 
 remote_kubeconfig_ready() {
-  ssh -i "$SSH_KEY" \
+  run_with_host_key_refresh "$HOST" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
     -o BatchMode=yes \
     -o StrictHostKeyChecking=accept-new \
@@ -169,7 +200,7 @@ fetch_kubeconfig_once() {
 
   echo "Команда:"
   echo "  scp -i ${SSH_KEY} root@${HOST}:${KUBECONFIG_REMOTE} ${dest_file}"
-  if ! scp -i "$SSH_KEY" \
+  if ! run_with_host_key_refresh "$HOST" scp -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
     -o StrictHostKeyChecking=accept-new \
     "root@${HOST}:${KUBECONFIG_REMOTE}" \
@@ -322,7 +353,7 @@ if [[ "$DRY_RUN" != "1" ]]; then
   echo "Команда:"
   echo "  ssh -i ${SSH_KEY} root@${HOST} \"echo connected; hostname\""
   echo "----- вывод -----"
-  if ssh -i "$SSH_KEY" \
+  if run_with_host_key_refresh "$HOST" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
     -o StrictHostKeyChecking=accept-new \
     "root@${HOST}" \
@@ -338,7 +369,7 @@ if [[ "$DRY_RUN" != "1" ]]; then
   echo
 fi
 
-ssh -i "$SSH_KEY" \
+run_with_host_key_refresh "$HOST" ssh -i "$SSH_KEY" \
   -o ConnectTimeout=15 \
   -o StrictHostKeyChecking=accept-new \
   "root@${HOST}" \
@@ -357,7 +388,7 @@ echo "--- Копирование токена на локальный ПК ---"
 echo "Команда:"
 echo "  scp -i ${SSH_KEY} root@${HOST}:/root/${TOKEN_NAME} ${LAUNCH_DIR}/${TOKEN_NAME}"
 echo "----- вывод -----"
-if scp -i "$SSH_KEY" \
+if run_with_host_key_refresh "$HOST" scp -i "$SSH_KEY" \
   -o ConnectTimeout=15 \
   -o StrictHostKeyChecking=accept-new \
   "root@${HOST}:/root/${TOKEN_NAME}" \

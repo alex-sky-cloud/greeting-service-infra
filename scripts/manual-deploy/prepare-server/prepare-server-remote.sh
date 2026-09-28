@@ -338,10 +338,26 @@ install_docker_engine() {
     exit 1
   fi
 
-  if ! systemctl enable --now docker; then
+  # dockerd в Ubuntu слушает -H fd:// и требует живой docker.socket.
+  # После apt/needrestart сокет часто «битый»: service падает с
+  # "no sockets found via socket activation". Сначала сбрасываем лимит
+  # рестартов и поднимаем socket, потом service.
+  systemctl daemon-reload || true
+  systemctl reset-failed docker.socket docker.service 2>/dev/null || true
+  systemctl enable docker.socket docker.service
+
+  if ! systemctl restart docker.socket; then
     echo ""
-    echo "ОШИБКА: docker установлен, но systemctl enable --now docker не сработал." >&2
-    systemctl status docker --no-pager 2>&1 || true
+    echo "ОШИБКА: docker.socket не стартовал." >&2
+    systemctl status docker.socket --no-pager 2>&1 || true
+    exit 1
+  fi
+
+  if ! systemctl restart docker.service; then
+    echo ""
+    echo "ОШИБКА: docker.service не стартовал после docker.socket." >&2
+    systemctl status docker.socket docker.service --no-pager 2>&1 || true
+    journalctl -u docker.service -n 40 --no-pager 2>&1 || true
     exit 1
   fi
 

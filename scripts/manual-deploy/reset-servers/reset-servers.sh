@@ -14,6 +14,37 @@ REMOTE_SCRIPT="$SCRIPT_DIR/reset-servers-remote.sh"
 ENV_FILE="$REPO_ROOT/infra-servers.env"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
 
+# Если отпечаток именно этого хоста сменился — правим только его строку
+# в known_hosts и подключаемся ещё раз. Остальные записи файла не трогаем.
+replace_changed_host_key() {
+  local host="$1"
+  echo "known_hosts: отпечаток ${host} сменился — обновляю только эту запись"
+  ssh-keygen -R "$host" >/dev/null 2>&1 || true
+  ssh-keygen -R "[${host}]:22" >/dev/null 2>&1 || true
+}
+
+run_with_host_key_refresh() {
+  local host="$1"
+  shift
+  local err rc
+  err="$(mktemp)"
+  if "$@" 2>"$err"; then
+    cat "$err" >&2
+    rm -f "$err"
+    return 0
+  fi
+  rc=$?
+  cat "$err" >&2
+  if grep -q 'REMOTE HOST IDENTIFICATION HAS CHANGED' "$err"; then
+    rm -f "$err"
+    replace_changed_host_key "$host"
+    "$@"
+    return $?
+  fi
+  rm -f "$err"
+  return "$rc"
+}
+
 load_infra_env() {
   local env_file="$1"
   if [[ ! -f "$env_file" ]]; then
@@ -233,6 +264,11 @@ is_k8s_master_role() {
 }
 
 wait_retry_or_skip() {
+  if [[ "$NONINTERACTIVE" == "1" ]]; then
+    echo
+    echo "Режим --yes: роль пропущена (нет IP или SSH)."
+    return 1
+  fi
   echo
   echo "Когда VPS готов и infra-servers.env сохранён — нажмите Enter."
   echo "Скрипт сам прочитает env и повторит проверку."
@@ -253,7 +289,7 @@ wait_retry_or_skip() {
 
 ssh_probe() {
   local ip="$1"
-  ssh -i "$SSH_KEY" \
+  run_with_host_key_refresh "$ip" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=12 \
     -o BatchMode=yes \
     -o StrictHostKeyChecking=accept-new \
@@ -278,7 +314,7 @@ run_remote() {
   fi
 
   echo "--- SSH reset на root@${ip} ---"
-  ssh -i "$SSH_KEY" \
+  run_with_host_key_refresh "$ip" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
     -o StrictHostKeyChecking=accept-new \
     "root@${ip}" \

@@ -12,6 +12,37 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 REMOTE_SCRIPT="$SCRIPT_DIR/install-k3s-workers-remote.sh"
 ENV_FILE="$REPO_ROOT/infra-servers.env"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+
+# Если отпечаток именно этого хоста сменился — правим только его строку
+# в known_hosts и подключаемся ещё раз. Остальные записи файла не трогаем.
+replace_changed_host_key() {
+  local host="$1"
+  echo "known_hosts: отпечаток ${host} сменился — обновляю только эту запись"
+  ssh-keygen -R "$host" >/dev/null 2>&1 || true
+  ssh-keygen -R "[${host}]:22" >/dev/null 2>&1 || true
+}
+
+run_with_host_key_refresh() {
+  local host="$1"
+  shift
+  local err rc
+  err="$(mktemp)"
+  if "$@" 2>"$err"; then
+    cat "$err" >&2
+    rm -f "$err"
+    return 0
+  fi
+  rc=$?
+  cat "$err" >&2
+  if grep -q 'REMOTE HOST IDENTIFICATION HAS CHANGED' "$err"; then
+    rm -f "$err"
+    replace_changed_host_key "$host"
+    "$@"
+    return $?
+  fi
+  rm -f "$err"
+  return "$rc"
+}
 LAUNCH_DIR="$(pwd)"
 TOKEN_NAME="k3s-node-token"
 
@@ -214,7 +245,7 @@ ensure_k3s_token() {
   echo "K3S_TOKEN в env пуст — копирую /root/${TOKEN_NAME} с master ${master_ip}..."
   local tmp
   tmp="$(mktemp)"
-  if scp -i "$SSH_KEY" \
+  if run_with_host_key_refresh "$master_ip" scp -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
     -o StrictHostKeyChecking=accept-new \
     "root@${master_ip}:/root/${TOKEN_NAME}" \
@@ -272,7 +303,7 @@ wait_for_worker() {
     echo "Команда:"
     echo "  ssh -i ${SSH_KEY} root@${ip} \"echo connected; hostname\""
     echo "----- вывод -----"
-    if ssh -i "$SSH_KEY" \
+    if run_with_host_key_refresh "$ip" ssh -i "$SSH_KEY" \
       -o ConnectTimeout=12 \
       -o BatchMode=yes \
       -o StrictHostKeyChecking=accept-new \
@@ -334,7 +365,7 @@ join_worker() {
     return 0
   fi
 
-  ssh -i "$SSH_KEY" \
+  run_with_host_key_refresh "$ip" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
     -o StrictHostKeyChecking=accept-new \
     "root@${ip}" \
@@ -376,7 +407,7 @@ else
   echo "Команда:"
   echo "  ssh -i ${SSH_KEY} root@${MASTER_IP} \"kubectl get nodes -o wide\""
   echo "----- вывод -----"
-  if ssh -i "$SSH_KEY" \
+  if run_with_host_key_refresh "$MASTER_IP" ssh -i "$SSH_KEY" \
     -o ConnectTimeout=15 \
     -o StrictHostKeyChecking=accept-new \
     "root@${MASTER_IP}" \
