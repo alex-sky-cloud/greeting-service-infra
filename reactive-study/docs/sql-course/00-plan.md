@@ -391,7 +391,7 @@ reactive-study/src/main/resources/db/migration/
 | 05 | `05-joins-multi-table.md` | JOIN трёх и более таблиц | `orders` + `products` + `product_categories` |
 | 06 | `06-subqueries.md` | Подзапросы: скalar, `IN`, `EXISTS` | `orders`, `users` |
 | 07 | `07-conditional-aggregates.md` | Условные агрегаты: `FILTER`, `count(CASE …)` | `orders`, `payment_attempts` |
-| 08 | `08-cte.md` | CTE (`WITH … AS`), `UNION ALL`, `WITH RECURSIVE` | `orders`, `departments`, `employees`, `catalog_sections` |
+| 08 | `08-cte.md` | CTE (`WITH … AS`), `UNION ALL`, `WITH RECURSIVE`, self-JOIN по дереву | `orders`, `departments`, `employees`, `catalog_sections` |
 | 09 | `09-window-functions.md` | Оконные функции: `ROW_NUMBER`, `RANK`, `SUM() OVER` | `orders` |
 | 10 | `10-datetime.md` | Даты и время: `date_trunc`, интервалы, `EXTRACT` | `orders`, `order_status_events` |
 | 11 | `11-indexes-explain.md` | Индексы и `EXPLAIN` (чтение плана) | индексы на `orders`, `users` |
