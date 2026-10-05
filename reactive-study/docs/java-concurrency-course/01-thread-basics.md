@@ -11,7 +11,9 @@
 - [Состояния потока](#состояния-потока)
 - [join: дождаться результата](#join-дождаться-результата)
 - [Прерывание потока](#прерывание-потока)
-- [Daemon-поток](#daemon-поток)
+- [Когда завершается программа](#когда-завершается-программа)
+    - [Daemon-потоки программу не задерживают](#daemon-потоки-программу-не-задерживают)
+    - [Три способа дождаться потока — и их разница](#три-способа-дождаться-потока--и-их-разница)
 - [Типичные ошибки](#типичные-ошибки)
 - [Что попробовать самостоятельно](#что-попробовать-самостоятельно)
 
@@ -21,85 +23,233 @@
 
 Представьте кухню ресторана. **Процесс** — это отдельная кухня со своими продуктами и своими ножами: что там происходит, соседней кухне не видно. **Поток** — это повар внутри одной кухни. Поваров может быть несколько, но холодильник у них один, общий.
 
-Отсюда всё остальное в курсе. Два повара у одного холодильника работают быстро, но могут одновременно взять последнее яйцо.
+Теперь переведём аналогию на технический язык.
+
+**Программа** — это код, сохранённый на диске. Когда операционная система запускает программу, появляется **процесс** — выполняющийся экземпляр этой программы со своей областью памяти и открытыми ресурсами. Например, Java-приложение, сервер PostgreSQL и брокер Kafka обычно работают как отдельные процессы; их можно увидеть в диспетчере задач.
+
+Java-код выполняет **JVM** (Java Virtual Machine, виртуальная машина Java). Когда вы запускаете команду `java Kitchen`, операционная система запускает процесс JVM, JVM загружает класс `Kitchen` и создаёт поток `main`, который начинает выполнять метод `main`.
+
+Внутри процесса работает как минимум один **поток** — последовательность выполняемых команд. Java-приложение может создать дополнительные потоки. Все потоки одного процесса могут обращаться к общей памяти процесса, поэтому им доступны одни и те же объекты и поля, если у них есть ссылки на эти данные.
+
+Ниже поток `main` создаёт дополнительный поток `cook`. Оба обращаются к одному статическому полю `fridge`.
+
+Инструкции для потока записываются в методе `run()` интерфейса `Runnable`. В этом примере метод `run()` написан явно, чтобы было видно, где лежат инструкции и какой поток их выполняет.
 
 ```java
+
 public class Kitchen {
-    static String fridge = "пусто";   // общая полка на всех поваров
+    static String fridge = "пусто"; // Одно поле класса, общее для main и cook.
 
     public static void main(String[] args) throws InterruptedException {
-        Thread cook = new Thread(() -> fridge = "яйцо");
-        cook.start();
-        cook.join();
-        System.out.println(fridge);   // яйцо
+        Runnable task = new Runnable() { // Объект с инструкциями для будущего потока.
+            @Override
+            public void run() { // Тело run() — набор инструкций, которые выполнит поток.
+                System.out.println("run() выполняет поток " + Thread.currentThread().getName());
+                fridge = "яйцо"; // Поток кладёт яйцо в общий холодильник.
+            }
+        };
+
+        Thread cook = new Thread(task, "cook"); // Создаём поток cook и передаём ему task. Поток ещё не работает.
+        cook.start(); // main запускает cook. Дальше cook сам вызывает task.run().
+        cook.join();  // main ждёт, пока cook выполнит run() до конца.
+
+        System.out.println(fridge);
     }
 }
 ```
 
-Технически: поток живёт внутри процесса и пользуется памятью этого процесса. Поэтому объект, созданный в одном потоке, виден другому потоку — не копия, а тот же самый объект. Отдельные процессы так обмениваться не могут, им нужны сокеты или файлы.
+Результат:
+
+```text
+run() выполняет поток cook
+яйцо
+```
+
+### Кто вызывает `run()`
+
+В коде нет строки `task.run()`, и это сделано намеренно: метод `run()` вызываем не мы. Последовательность такая:
+
+1. Поток `main` выполняет `new Thread(task, "cook")`. Создан объект потока, внутри него сохранена ссылка на `task`. Поток ещё ничего не выполняет.
+2. Поток `main` вызывает `cook.start()`. JVM запускает новый поток `cook`, и `main` сразу идёт к следующей строке.
+3. Запущенный поток `cook` вызывает свой метод `Thread.run()`, а тот вызывает `task.run()`.
+4. Поток `cook` выполняет инструкции из тела `run()`: печатает своё имя и записывает `"яйцо"` в `fridge`.
+5. Метод `run()` закончился — поток `cook` завершён. `main` выходит из `cook.join()` и печатает `fridge`.
+
+Первая строка вывода это подтверждает: `Thread.currentThread().getName()` возвращает имя потока, который выполняет эту строку, и это `cook`, а не `main`.
+
+Что ещё в примере не видно напрямую:
+
+- `static` означает, что поле `fridge` принадлежит самому классу `Kitchen`, а не отдельному объекту. В памяти одно такое поле, и к нему обращаются оба потока.
+- `new Runnable() { ... }` — анонимный класс: класс без имени, который реализует интерфейс `Runnable` и сразу создаёт свой объект.
+- `@Override` отмечает, что метод `run()` реализует метод из интерфейса `Runnable`. Если ошибиться в имени метода, компилятор сообщит об ошибке.
+- `throws InterruptedException` в объявлении `main` нужен, потому что `join()` может быть прерван. Прерывание разберём ниже в этой теме.
+
+### Короткая запись через лямбду
+
+Тот же `Runnable` обычно записывают короче — лямбда-выражением:
+
+```java
+
+Thread cook = new Thread(() -> fridge = "яйцо", "cook"); // Лямбда — это тело метода run().
+```
+
+Здесь лямбда `() -> fridge = "яйцо"` заменяет весь анонимный класс:
+
+- `()` — список параметров метода `run()`. Он пустой, потому что `run()` ничего не принимает.
+- `->` отделяет параметры от тела метода.
+- `fridge = "яйцо"` — тело метода `run()`, то есть инструкции для потока.
+
+Java понимает, что лямбда реализует именно `run()`, потому что конструктор `Thread` ожидает `Runnable`, а у `Runnable` единственный абстрактный метод — `run()`. Всё остальное не меняется: `cook.start()` запускает поток, и уже поток `cook` вызывает `run()`, то есть выполняет тело лямбды.
 
 - Источник: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html
 
+> A process has a self-contained execution environment. A process generally has a complete, private set of basic run-time resources; in particular, each process has its own memory space.
+>
 > Threads exist within a process — every process has at least one. Threads share the process's resources, including memory and open files. This makes for efficient, but potentially problematic, communication.
 
 RU:
 
+> Процесс имеет самостоятельную среду выполнения. Обычно процесс располагает полным собственным набором основных ресурсов времени выполнения; в частности, у каждого процесса есть собственное пространство памяти.
+>
 > Потоки существуют внутри процесса — у каждого процесса есть по меньшей мере один. Потоки разделяют ресурсы процесса, включая память и открытые файлы. Это делает обмен данными эффективным, но потенциально проблемным.
 
-**Правило:** потоки делят память процесса, поэтому любое общее изменяемое поле — это место возможной ошибки.
+**Правило:** процесс имеет собственную память, а потоки внутри процесса используют её совместно. Поэтому общее изменяемое поле — место возможной ошибки.
 
 ---
 
 ## start и run
 
-Аналогия: `start()` — позвать коллегу и поручить ему работу, вы при этом свободны. `run()` — открыть его инструкцию и выполнить всё самому. Работа сделана в обоих случаях, но во втором никакого коллеги не появилось.
+- `run()` — описание инструкций, которые должен выполнить поток.
+- `start()` — запускает выполнение этих инструкций в новом потоке.
+
+Инструкции мы записали в лямбде, а лямбда — это и есть тело метода `run()`. Значит, у нас уже есть объект `Runnable` с готовым методом `run()`, и его можно вызвать как обычный метод любого объекта. Новый поток в этом случае не запускается, поэтому инструкции выполнит тот поток, который дошёл до строки с вызовом. Внутри метода `main` это поток `main`.
+
+Пример показывает оба случая и печатает имя исполнителя: `Thread.currentThread()` возвращает поток, выполняющий текущую строку, а `getName()` — его имя.
 
 ```java
+
 public class StartVsRun {
     public static void main(String[] args) {
-        Runnable task = () -> System.out.println("работаю в " + Thread.currentThread().getName());
+        // Лямбда — это тело метода run(), то есть инструкции для исполнителя.
+        Runnable task = () -> System.out.println("инструкции выполняет поток " + Thread.currentThread().getName());
 
-        new Thread(task, "worker").start();   // работаю в worker
-        new Thread(task, "worker").run();     // работаю в main
+        task.run(); // Вызов метода run() у объекта task. Новый поток не создаётся.
+
+        new Thread(task, "worker").start(); // Запуск нового потока worker. Он сам вызовет run().
     }
 }
 ```
 
-Технически новый поток операционной системы создаётся только вызовом `start()`. Метод `run()` — обычный метод обычного объекта: вызвали — выполнился в вызывающем потоке.
+Результат:
 
-Порядок двух строк в выводе не задан: `main` часто успевает напечатать свою строку первым. Смотреть нужно не на порядок, а на имя потока в каждой строке.
+```text
+инструкции выполняет поток main
+инструкции выполняет поток worker
+```
+
+Первую строку напечатал `main`: вызов `task.run()` — это обычный вызов метода, потоки здесь не участвуют, поэтому инструкции выполнил тот же поток, что выполняет `main`.
+
+Вторую строку напечатал `worker`: `new Thread(task, "worker")` создал объект потока и сохранил в нём `task`, а `start()` запустил этот поток. Дальше `worker` работает самостоятельно и сам вызывает `run()`, то есть выполняет тело лямбды. Поток `main` его инструкции не выполняет и сразу идёт дальше по своему коду.
+
+### Что именно делает `start()`
+
+Ниже — описание метода `Thread.start()` из документации JDK 17. Курс идёт на JDK 17 и новее, поэтому цитаты приводятся из этой версии.
+
+- Источник: https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html
+
+> Causes this thread to begin execution; the Java Virtual Machine calls the `run` method of this thread.
+>
+> The result is that two threads are running concurrently: the current thread (which returns from the call to the `start` method) and the other thread (which executes its `run` method).
+
+RU:
+
+> Заставляет этот поток начать выполнение; виртуальная машина Java вызывает метод `run` этого потока.
+>
+> В результате одновременно работают два потока: текущий поток (который возвращается из вызова метода `start`) и другой поток (который выполняет свой метод `run`).
+
+Из этого описания следуют три факта.
+
+**Первый факт:** `start()` — это и есть запуск потока. После вызова поток переходит из состояния `NEW` в `RUNNABLE`, то есть его жизненный цикл начался.
+
+**Второй факт**: метод `run()` вызывает виртуальная машина, а не наш код. Поэтому в примере `Kitchen` строки `task.run()` нет, но инструкции выполняются.
+
+**Третий факт**: вызывающий поток ничего не ждёт — он возвращается из `start()` и продолжает выполнять свои строки. С этого момента в программе работают два потока одновременно.
+
+Запуск потока не означает, что поток немедленно получит процессор. Процессорное время между потоками распределяет операционная система.
+
+- Источник: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html
+
+> Processing time for a single core is shared among processes and threads through an OS feature called time slicing.
+
+RU:
+
+> Процессорное время одного ядра распределяется между процессами и потоками с помощью возможности операционной системы, которая называется разделением времени (time slicing).
+
+Поэтому состояние `RUNNABLE` означает «поток запущен и готов выполняться», а не «поток прямо сейчас занимает процессор».
+
+- Источник: https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.State.html
+
+> Thread state for a runnable thread. A thread in the runnable state is executing in the Java virtual machine but it may be waiting for other resources from the operating system such as processor.
+
+RU:
+
+> Состояние потока для потока, готового к выполнению. Поток в состоянии runnable выполняется в виртуальной машине Java, но может ожидать другие ресурсы операционной системы, например процессор.
+
+Практическое следствие: сразу после `start()` новый поток может ещё не выполнить ни одной инструкции. Именно поэтому в примере `Kitchen` поле `fridge` читается после `join()`.
+
+Запустить один объект `Thread` можно только один раз.
+
+- Источник: https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html
+
+> It is never legal to start a thread more than once. In particular, a thread may not be restarted once it has completed execution.
+
+RU:
+
+> Запускать поток более одного раза недопустимо. В частности, поток нельзя перезапустить после того, как он завершил выполнение.
+
+Повторный вызов `start()` на том же объекте выбрасывает `IllegalThreadStateException`. Чтобы выполнить ту же работу ещё раз, создают новый объект `Thread` и передают ему тот же `Runnable`.
+
+### Почему `thread.run()` вызывать не нужно
+
+Класс `Thread` сам реализует интерфейс `Runnable`, поэтому метод `run()` есть и у объекта потока. Вот что о нём написано в javadoc метода `Thread.run()` в JDK 17.
+
+- Источник: https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html
+
+> If this thread was constructed using a separate `Runnable` run object, then that `Runnable` object's `run` method is called; otherwise, this method does nothing and returns.
+
+RU:
+
+> Если этот поток был создан с отдельным объектом-задачей `Runnable`, то вызывается метод `run` этого объекта `Runnable`; иначе метод ничего не делает и завершается.
+
+Значит, `worker.run()` только перенаправляет вызов на `task.run()`. Это обычный вызов метода, поэтому новый поток не запускается, а инструкции выполняет текущий поток. Результат такой же, как у `task.run()` в примере выше, хотя строка внешне похожа на запуск потока.
+
+В документации JDK 21 это сказано прямым запретом — такую же подсказку выводит IntelliJ IDEA в предупреждении *«Calls to 'run()' should probably be replaced with 'start()'»*.
 
 - Источник: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.html
 
-> Schedules this thread to begin execution. The thread will execute independently of the current thread.
+> This method is not intended to be invoked directly.
 
 RU:
 
-> Планирует начало выполнения этого потока. Поток будет выполняться независимо от текущего потока.
+> Этот метод не предназначен для прямого вызова.
 
-Про `run()` там же сказано прямо:
-
-> This method is not intended to be invoked directly. If this thread is a platform thread created with a `Runnable` task then invoking this method will invoke the task's `run` method.
-
-RU:
-
-> Этот метод не предназначен для прямого вызова. Если данный поток — платформенный поток, созданный с задачей `Runnable`, то вызов этого метода вызовет метод `run` этой задачи.
-
-Второй раз тот же объект `Thread` запустить нельзя:
-
-> A thread can be started at most once. In particular, a thread can not be restarted after it has terminated.
-
-RU:
-
-> Поток может быть запущен не более одного раза. В частности, поток нельзя перезапустить после того, как он завершился.
-
-**Правило:** поток создаёт только `start()`; `start()` на одном объекте — один раз.
+**Правило:** `run()` только описывает инструкции и поток не создаёт. Поток запускает `start()`, после чего JVM вызывает `run()` у этого потока, а вызывающий поток продолжает работу параллельно.
 
 ---
 
 ## Состояния потока
 
-Аналогия — сотрудник в течение дня: ещё не пришёл, работает, стоит под дверью занятого кабинета, ждёт звонка неизвестно сколько, ждёт до 10:00, ушёл домой.
+**Аналогия** — сотрудник в течение дня: 
+  - ещё не пришёл, 
+  - работает, 
+  - стоит под дверью занятого кабинета, 
+  - ждёт звонка неизвестно сколько, 
+  - ждёт до 10:00, 
+  - ушёл домой.
+
+Технически состояние показывает, что поток делает прямо сейчас или чего он ожидает. 
+
+**Монитор** в таблице — встроенный замок Java-объекта: если замок уже занят другим потоком, войти в защищённый участок кода нельзя. Подробно монитор разберём в теме про `synchronized`.
 
 Тем же языком про поток:
 
@@ -124,10 +274,15 @@ RU:
 RU:
 
 > `NEW` Поток, который ещё не был запущен, находится в этом состоянии.
+> 
 > `RUNNABLE` Поток, выполняющийся в виртуальной машине Java, находится в этом состоянии.
+>
 > `BLOCKED` Поток, заблокированный в ожидании захвата монитора, находится в этом состоянии.
+> 
 > `WAITING` Поток, неограниченно долго ожидающий, пока другой поток выполнит определённое действие, находится в этом состоянии.
+> 
 > `TIMED_WAITING` Поток, ожидающий выполнения действия другим потоком не дольше указанного времени ожидания, находится в этом состоянии.
+> 
 > `TERMINATED` Поток, который завершился, находится в этом состоянии.
 
 Важная оговорка из того же источника: это состояния виртуальной машины, а не операционной системы.
@@ -138,7 +293,137 @@ RU:
 
 > В каждый момент времени поток может находиться только в одном состоянии. Это состояния виртуальной машины, которые не отражают какие-либо состояния потоков операционной системы.
 
-**Правило:** `BLOCKED` — ждёт замок, `WAITING` — ждёт действия другого потока. На собеседовании их часто путают.
+**Правило:** 
+  - состояние потока `BLOCKED` — означает, что поток ждёт замок,
+  - состояние потока `WAITING` — ждёт действия другого потока. На собеседовании их часто путают.
+
+---
+
+Поток в каждый момент находится ровно в одном из шести состояний. Это состояния виртуальной машины, а не операционной системы.
+
+- Источник: https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.State.html
+
+EN:
+
+> A thread can be in only one state at a given point in time. These states are virtual machine states which do not reflect any operating system thread states.
+
+RU:
+
+> Поток может находиться только в одном состоянии в каждый момент времени. Это состояния виртуальной машины, которые не отражают состояния потоков операционной системы.
+
+## NEW
+
+NEW — это состояние потока, который ещё не запущен. Объект `Thread` создан и описывает будущий поток, но `start()` не вызывали. Инструкции потока лежат в `run()`.
+
+- Источник: https://www.baeldung.com/java-thread-lifecycle
+
+EN:
+
+> A NEW Thread (or a Born Thread) is a thread that's been created but not yet started.
+
+RU:
+
+> NEW-поток (или «рождённый» поток) — это поток, который создан, но ещё не запущен.
+
+## RUNNABLE
+
+RUNNABLE — это состояние после вызова `start()`. Поток считается RUNNABLE и когда он выполняется на процессоре, и когда он готов выполняться, но ждёт процессор. Состояния RUNNING в Java нет. Планировщик решает, когда поток получит процессорное время, а состояние при этом не меняется.
+
+- Источник: https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.State.html
+
+EN:
+
+> A thread in the runnable state is executing in the Java virtual machine but it may be waiting for other resources from the operating system such as processor.
+
+RU:
+
+> Поток в состоянии runnable выполняется в виртуальной машине Java, но может ожидать других ресурсов от операционной системы, например процессор.
+
+- Источник: https://www.baeldung.com/java-thread-lifecycle
+
+EN:
+
+> Threads in this state are either running or ready to run, but they're waiting for resource allocation from the system.
+
+RU:
+
+> Потоки в этом состоянии либо выполняются, либо готовы выполняться, но ждут выделения ресурсов от системы.
+
+## BLOCKED
+
+BLOCKED — поток ждёт монитор. Он хочет войти в `synchronized`-блок или метод, но монитор общего ресурса занят другим потоком. Когда монитор освободится, поток захватит его и вернётся в RUNNABLE. В BLOCKED попадает и поток, который после `Object.wait()` заново входит в `synchronized`.
+
+- Источник: https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.State.html
+
+EN:
+
+> A thread in the blocked state is waiting for a monitor lock to enter a synchronized block/method or reenter a synchronized block/method after calling Object.wait.
+
+RU:
+
+> Поток в состоянии blocked ждёт монитор, чтобы войти в synchronized-блок или метод либо повторно войти в него после вызова Object.wait.
+
+## WAITING
+
+WAITING — поток без ограничения по времени ждёт определённого действия от другого потока. Это ожидание события, а не монитора. Поток попадает сюда после `Object.wait()`, `Thread.join()` или `LockSupport.park()` без таймаута.
+
+Пример: поток A вызвал `lock.wait()` и отпустил монитор. Он остаётся в WAITING, пока поток B не вызовет `lock.notify()` или `notifyAll()`. После этого A должен снова захватить монитор. Если монитор занят, A сначала окажется в BLOCKED, затем перейдёт в RUNNABLE.
+
+- Источник: https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.State.html
+
+EN:
+
+> For example, a thread that has called Object.wait() on an object is waiting for another thread to call Object.notify() or Object.notifyAll() on that object. A thread that has called Thread.join() is waiting for a specified thread to terminate.
+
+RU:
+
+> Например, поток, вызвавший Object.wait() на объекте, ждёт, пока другой поток вызовет Object.notify() или Object.notifyAll() на этом объекте. Поток, вызвавший Thread.join(), ждёт завершения указанного потока.
+
+## TIMED_WAITING
+
+TIMED_WAITING — то же ожидание, но с ограничением по времени. Поток попадает сюда после `Thread.sleep`, `Object.wait(timeout)`, `Thread.join(timeout)`, `LockSupport.parkNanos` или `LockSupport.parkUntil`.
+
+Когда время истекло, поток просыпается сам и возвращается в RUNNABLE. Если он ждал через `wait(timeout)`, то сначала заново захватывает монитор, и при занятом мониторе проходит через BLOCKED. Если сигнал пришёл раньше таймаута (`notify` или завершение потока при `join`), поток просыпается раньше.
+
+- Источник: https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.State.html
+
+EN:
+
+> A thread is in the timed waiting state due to calling one of the following methods with a specified positive waiting time: Thread.sleep, Object.wait with timeout, Thread.join with timeout, LockSupport.parkNanos, LockSupport.parkUntil
+
+RU:
+
+> Поток находится в состоянии timed waiting из-за вызова одного из следующих методов с заданным положительным временем ожидания: Thread.sleep, Object.wait с таймаутом, Thread.join с таймаутом, LockSupport.parkNanos, LockSupport.parkUntil.
+
+Описание того, что поток делает после истечения таймаута, — это мой вывод из определения состояния. Прямой цитаты на этот счёт в источнике нет.
+
+## TERMINATED
+
+TERMINATED — поток завершился: `run()` вернул управление нормально или из-за необработанного исключения. Перезапустить такой поток нельзя.
+
+- Источник: https://www.baeldung.com/java-thread-lifecycle
+
+EN:
+
+> It's in the TERMINATED state when it has either finished execution or was terminated abnormally.
+
+RU:
+
+> Поток находится в состоянии TERMINATED, когда он либо завершил выполнение, либо был завершён аварийно.
+
+## Жизненный цикл
+
+Этот раздел — моё обобщение переходов по источникам выше.
+
+1. NEW → `start()` → RUNNABLE.
+2. RUNNABLE ↔ BLOCKED: поток ждёт монитор `synchronized`, затем получает его.
+3. RUNNABLE ↔ WAITING: поток вызвал `wait()`, `join()` или `park()`, затем получил `notify`, завершение другого потока или `unpark`.
+4. RUNNABLE ↔ TIMED_WAITING: поток вызвал `sleep(ms)` или метод с таймаутом, затем истёк таймаут или пришёл сигнал.
+5. WAITING или TIMED_WAITING → BLOCKED, если после пробуждения монитор занят. Затем BLOCKED → RUNNABLE.
+6. RUNNABLE → TERMINATED, когда `run()` завершился.
+
+Порядок не жёсткий: поток может много раз переходить между RUNNABLE и состояниями ожидания. NEW всегда первое состояние, TERMINATED всегда последнее.
+
 
 ---
 
@@ -147,19 +432,24 @@ RU:
 Аналогия: вы попросили коллегу посчитать выручку и не уходите домой, пока он не положит отчёт на стол. Без этого ожидания вы возьмёте со стола пустой лист.
 
 ```java
+
 public class Report {
-    static int revenue;
+    static int revenue; // Общее поле. До присваивания содержит 0.
 
     public static void main(String[] args) throws InterruptedException {
+        // В Runnable.run() записываем результат расчёта в общее поле.
         Thread worker = new Thread(() -> revenue = 1000);
-        worker.start();
-        System.out.println(revenue);   // 0 — отчёта на столе ещё нет
 
-        worker.join();
-        System.out.println(revenue);   // 1000
+        worker.start(); // worker начинает расчёт независимо от main.
+        System.out.println("До join: " + revenue);
+
+        worker.join(); // main останавливается здесь до завершения worker.
+        System.out.println("После join: " + revenue);
     }
 }
 ```
+
+До `join()` можно увидеть `0` или `1000`: неизвестно, какой поток успеет выполнить свою строку первым. После возврата из `join()` результат всегда равен `1000`, потому что `worker` уже завершился.
 
 - Источник: https://docs.oracle.com/javase/tutorial/essential/concurrency/join.html
 
@@ -196,11 +486,15 @@ RU:
 Аналогия: вы стучите коллеге и говорите «заканчивай». Вы не выдёргиваете его из кабинета силой — он сам решает, когда прервать дело. Если коллега в этот момент спит, он проснётся и увидит просьбу.
 
 ```java
+
 public class Stopping {
     public static void main(String[] args) throws InterruptedException {
+        // Лямбда задаёт тело Runnable.run() рабочего потока.
         Thread worker = new Thread(() -> {
             try {
                 while (true) {
+                    // worker приостанавливается на 100 мс.
+                    // Если его прервут во время сна, sleep выбросит исключение.
                     Thread.sleep(100);
                 }
             } catch (InterruptedException e) {
@@ -208,15 +502,17 @@ public class Stopping {
             }
         });
 
-        worker.start();
-        Thread.sleep(300);
-        worker.interrupt();
-        worker.join();
+        worker.start();     // Запускаем worker.
+        Thread.sleep(300);  // Приостанавливаем main, а worker продолжает работать.
+        worker.interrupt(); // main устанавливает worker статус прерывания.
+        worker.join();      // main ждёт фактического завершения worker.
     }
 }
 ```
 
-Технически `interrupt()` не останавливает поток, а поднимает у него внутренний флаг. Если поток в этот момент внутри `sleep`, `wait` или `join`, метод немедленно выбрасывает `InterruptedException`. Если поток занят вычислениями, он обязан сам периодически проверять флаг.
+После `worker.interrupt()` поток не уничтожается принудительно. Поскольку `worker` находится в `sleep()`, этот метод заканчивается исключением `InterruptedException`, управление переходит в `catch`, а после `catch` метод `run()` завершается.
+
+Технически `interrupt()` устанавливает внутренний статус прерывания. Если поток в этот момент внутри `sleep`, `wait` или `join`, метод выбрасывает `InterruptedException`. Если поток занят вычислениями, он обязан сам периодически проверять статус.
 
 - Источник: https://docs.oracle.com/javase/tutorial/essential/concurrency/interrupt.html
 
@@ -238,36 +534,104 @@ RU:
 
 ---
 
-## Daemon-поток
+## Когда завершается программа
 
-Аналогия: уборщик в торговом центре. Центр закрывается, когда ушли все продавцы; уборщика при этом никто не дожидается.
+Метод `join()` из предыдущего раздела — это ожидание, которое мы написали сами: поток `main` стоит ровно в той строке, где мы вызвали `join()`. Если `join()` не вызывать, `main` до своей последней строки дойдёт раньше остальных потоков и закончится.
+
+Возникает вопрос: завершится ли при этом вся программа. Нет. Завершение процесса зависит не от потока `main`, а от того, остались ли в программе работающие **не-daemon** потоки. Решение принимает JVM, а не поток `main` и не операционная система.
+
+По умолчанию каждый созданный нами поток — не-daemon, его также называют пользовательским (user thread). Поток `main` тоже не-daemon.
 
 ```java
-public class Background {
+
+public class Shutdown {
     public static void main(String[] args) {
-        Thread cleaner = new Thread(() -> {
-            while (true) {
-                System.out.println("подметаю");
+        Thread worker = new Thread(() -> {
+            for (int i = 1; i <= 3; i++) {
+                try {
+                    Thread.sleep(200); // Имитируем работу, которая занимает время.
+                } catch (InterruptedException e) {
+                    return;
+                }
+                System.out.println("worker работает, шаг " + i);
             }
-        });
-        cleaner.setDaemon(true);   // без этой строки программа не завершится никогда
-        cleaner.start();
-        System.out.println("main закончил");
+            System.out.println("worker закончил");
+        }, "worker");
+
+        worker.start(); // Запускаем не-daemon поток. join() здесь намеренно не вызываем.
+
+        System.out.println("main закончил, но JVM ещё работает");
     }
 }
 ```
 
-- Источник: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.html
+Результат:
 
-> Marks this thread as either a daemon or non-daemon thread. The shutdown sequence begins when all started non-daemon threads have terminated.
+```text
+main закончил, но JVM ещё работает
+worker работает, шаг 1
+worker работает, шаг 2
+worker работает, шаг 3
+worker закончил
+```
+
+Поток `main` закончился первым, однако процесс продолжил работу, пока `worker` не выполнил все свои шаги. Условия выхода JVM описаны в документации класса `Thread`.
+
+- Источник: https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html
+
+> When a Java Virtual Machine starts up, there is usually a single non-daemon thread (which typically calls the method named `main` of some designated class). The Java Virtual Machine continues to execute threads until either of the following occurs:
+>
+> - The `exit` method of class `Runtime` has been called and the security manager has permitted the exit operation to take place.
+> - All threads that are not daemon threads have died, either by returning from the call to the `run` method or by throwing an exception that propagates beyond the `run` method.
 
 RU:
 
-> Помечает этот поток как daemon-поток или как не-daemon-поток. Последовательность завершения работы начинается, когда все запущенные не-daemon-потоки завершились.
+> Когда виртуальная машина Java запускается, обычно существует единственный не-daemon-поток (который, как правило, вызывает метод с именем `main` некоторого указанного класса). Виртуальная машина Java продолжает выполнять потоки, пока не произойдёт одно из следующего:
+>
+> - был вызван метод `exit` класса `Runtime`, и менеджер безопасности разрешил выполнить операцию выхода;
+> - все потоки, не являющиеся daemon-потоками, умерли — либо вернувшись из вызова метода `run`, либо выбросив исключение, которое вышло за пределы метода `run`.
 
-`setDaemon(true)` вызывают до `start()`. Daemon-поток может быть прерван на середине работы, поэтому важные записи в файл или в базу в нём не делают.
+### Daemon-потоки программу не задерживают
 
-**Правило:** JVM ждёт обычные потоки и не ждёт daemon-потоки.
+Аналогия: торговый центр закрывается, когда ушли все продавцы. Уборщика при этом никто не дожидается — его работу прекращают вместе с закрытием.
+
+Такой «уборщик» в Java — daemon-поток. Нужен он для фоновых подсобных задач: периодической очистки кэша, сбора статистики, служебных таймеров.
+
+Достаточно одной строки, добавленной к предыдущему примеру перед `start()`:
+
+```java
+
+worker.setDaemon(true); // Помечаем поток как daemon. Вызов возможен только до start().
+worker.start();
+```
+
+Результат того же кода меняется полностью:
+
+```text
+main закончил, но JVM ещё работает
+```
+
+Ни одного шага `worker` в выводе нет. После завершения `main` в программе не осталось работающих не-daemon-потоков, JVM начала завершение и оборвала daemon-поток в середине его работы.
+
+- Источник: https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html
+
+> Marks this thread as either a daemon thread or a user thread. The Java Virtual Machine exits when the only threads running are all daemon threads.
+
+RU:
+
+> Помечает этот поток как daemon-поток или как пользовательский поток. Виртуальная машина Java завершает работу, когда все работающие потоки являются daemon-потоками.
+
+Отсюда два практических вывода. Первый: `setDaemon(true)` вызывают до `start()`, иначе будет `IllegalThreadStateException`. Второй: daemon-поток может быть прерван на любой строке, поэтому запись в файл, отправку в сеть и работу с базой в нём не размещают — данные потеряются при завершении программы.
+
+### Три способа дождаться потока — и их разница
+
+| Что написано в коде | Кто ждёт | Что будет с работой потока |
+|---|---|---|
+| `worker.join()` | поток, вызвавший `join()` | `main` стоит в этой строке, пока `worker` не завершится |
+| `worker.start()` без `join()`, поток не-daemon | JVM перед завершением процесса | `main` заканчивается раньше, но работа потока доводится до конца |
+| `worker.setDaemon(true)` | никто | поток обрывается, как только закончились все не-daemon-потоки |
+
+**Правило:** JVM ждёт все не-daemon-потоки и не ждёт daemon-потоки. `join()` нужен тогда, когда результат потока требуется именно в текущем потоке и именно в этом месте кода.
 
 ---
 
@@ -280,6 +644,7 @@ RU:
 | Повторный `start()` на том же объекте | `IllegalThreadStateException` |
 | `interrupt()` в расчёте без проверки флага | поток продолжит работу как будто ничего не было |
 | `setDaemon(true)` после `start()` | `IllegalThreadStateException` |
+| Важная работа в daemon-потоке | JVM оборвёт поток при завершении, данные потеряются |
 
 ---
 
@@ -289,6 +654,7 @@ RU:
 2. Напечатайте `worker.getState()` до `start()`, сразу после `start()` и после `join()`.
 3. Вызовите `start()` на одном объекте дважды и прочитайте текст исключения.
 4. В примере `Stopping` замените `Thread.sleep(100)` на пустой цикл `while (true) {}`: `interrupt()` сам по себе работу не прервёт, программа зависнет на `join()` — её придётся снять вручную (`Ctrl+C`). Затем добавьте в цикл проверку `Thread.interrupted()` и запустите снова.
+5. В примере `Shutdown` добавьте строку `worker.setDaemon(true);` перед `start()` и сравните вывод с запуском без неё.
 
 ---
 

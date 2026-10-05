@@ -70,6 +70,7 @@ reactive-study/docs/sql-course/
 ├── 07-conditional-aggregates.md
 ├── 07-conditional-aggregates-tasks.md
 ├── 08-cte.md
+├── 08-cte-schema.md           ← схемы деревьев и связей таблиц темы 08
 ├── 08-cte-tasks.md
 ├── 06-lovushka-null-i-plan-zaprosa.md  ← доп. разбор к теме 6: ловушка NULL + планы
 ├── 06-uzly-plana-zaprosa.md            ← доп. разбор к теме 6: узлы плана построчно
