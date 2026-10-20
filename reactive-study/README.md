@@ -39,6 +39,26 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun --no-daemon
 
 ---
 
+## Курсы
+
+| Курс | План | Практика |
+|---|---|---|
+| Project Reactor, 13 тем | [`docs/reactor-course/00-plan.md`](docs/reactor-course/00-plan.md) | `reactorcourse/tNN` в `src/main` и `src/test`; тесты на Postgres в Testcontainers, таблицы `rc_*` (миграция `V17`) |
+| SQL | [`docs/sql-course/00-plan.md`](docs/sql-course/00-plan.md) | задачи в файлах тем |
+| Java Concurrency | [`docs/java-concurrency-course/00-plan.md`](docs/java-concurrency-course/00-plan.md) | задачи в файлах тем |
+
+Как готовить новый курс в том же стиле: [`docs/COURSE-AUTHORING-GUIDE.md`](docs/COURSE-AUTHORING-GUIDE.md).
+
+Тесты одной темы курса Reactor (нужен запущенный Docker):
+
+```bash
+
+cd /mnt/d/Project_infra/greeting-service-infra/reactive-study
+./gradlew test --tests "com.example.reactivestudy.reactorcourse.t01.*"
+```
+
+---
+
 ## Структура модуля
 
 ```

@@ -219,19 +219,30 @@ RU:
 
 Пять шагов. Следующий — только после зачёта предыдущего.
 
-```mermaid
-flowchart TD
-    A["1. Теория\nNN-slug.md"] --> B["2. Вы читаете файл"]
-    B --> C["3. Интервью в чате"]
-    C --> D{Ответы достаточны?}
-    D -- Нет --> C
-    D -- Да --> E["4. Практика\nNN-slug-tasks.md"]
-    E --> F{Код проходит проверку?}
-    F -- Нет --> E
-    F -- Да --> V["4b. Проверочная практика\nNN-verify-tasks.md"]
-    V --> G["5. Следующая тема?\nда / нет"]
-    G -- Да --> A
-    G -- Нет --> H["Пауза или повтор"]
+```plantuml
+@startuml
+skinparam defaultFontSize 16
+skinparam padding 10
+skinparam shadowing true
+skinparam ActivityBackgroundColor #E8F1FB
+skinparam ActivityBorderColor #2B6CB0
+skinparam ActivityDiamondBackgroundColor #FFF4D6
+skinparam ActivityDiamondBorderColor #B7791F
+start
+repeat
+  :1. Теория\n**NN-<slug>.md**;
+  :2. Вы читаете файл;
+  repeat
+    :3. Интервью в чате;
+  repeat while (Ответы достаточны?) is (нет) not (да)
+  repeat
+    :4. Практика\n**NN-<slug>-tasks.md**;
+  repeat while (Код проходит проверку?) is (нет) not (да)
+  :4b. Проверочная практика\n**NN-verify-tasks.md**;
+repeat while (5. Следующая тема?) is (да) not (нет)
+:Пауза или повтор;
+stop
+@enduml
 ```
 
 | Шаг | Что происходит |

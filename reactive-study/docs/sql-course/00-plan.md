@@ -76,6 +76,9 @@ reactive-study/docs/sql-course/
 ├── 08-cte-join-direction.md   ← условие JOIN: шаг вниз или шаг вверх
 ├── 08-cte-boss-or-child.md    ← крайняя колонка: руководитель или подчинённый
 ├── 08-cte-tasks.md
+├── 08-2-cross-join.md         ← тема 08.2: CROSS JOIN, перед темой 09
+├── 09-window-functions.md     ← тема 09: теория оконных функций
+├── 09-window-functions-tasks.md ← тема 09: практика после интервью
 ├── 06-lovushka-null-i-plan-zaprosa.md  ← доп. разбор к теме 6: ловушка NULL + планы
 ├── 06-uzly-plana-zaprosa.md            ← доп. разбор к теме 6: узлы плана построчно
 └── planner-explain.md                  ← общее руководство по EXPLAIN
@@ -164,18 +167,29 @@ reactive-study/docs/sql-course/
 
 Каждая тема проходит **строго в пять шагов**. Переход к следующему шагу — только после успешного завершения предыдущего.
 
-```mermaid
-flowchart TD
-    A["1. Теория\n(файл NN-<slug>.md)"] --> B["2. Вы изучаете материал"]
-    B --> C["3. Интервью\n(вы просите: «дай интервью по теме N»)"]
-    C --> D{Ответы удовлетворительны?}
-    D -- Нет --> C
-    D -- Да --> E["4. Практика\n(файл NN-<slug>-tasks.md)"]
-    E --> F{Задания выполнены?}
-    F -- Нет --> E
-    F -- Да --> G["5. Предложение следующей темы\n(вы отвечаете: да / нет)"]
-    G -- Да --> A
-    G -- Нет --> H["Пауза / повтор / уточнения"]
+```plantuml
+@startuml
+skinparam defaultFontSize 16
+skinparam padding 10
+skinparam shadowing true
+skinparam ActivityBackgroundColor #E8F1FB
+skinparam ActivityBorderColor #2B6CB0
+skinparam ActivityDiamondBackgroundColor #FFF4D6
+skinparam ActivityDiamondBorderColor #B7791F
+start
+repeat
+  :1. Теория\n**NN-<slug>.md**;
+  :2. Вы изучаете материал;
+  repeat
+    :3. Интервью\n«дай интервью по теме N»;
+  repeat while (Ответы удовлетворительны?) is (нет) not (да)
+  repeat
+    :4. Практика\n**NN-<slug>-tasks.md**;
+  repeat while (Задания выполнены?) is (нет) not (да)
+repeat while (5. Следующая тема?) is (да) not (нет)
+:Пауза / повтор / уточнения;
+stop
+@enduml
 ```
 
 ### Шаг 1 — Теория
@@ -408,7 +422,8 @@ reactive-study/src/main/resources/db/migration/
 | 06 | `06-subqueries.md` | Подзапросы: скalar, `IN`, `EXISTS` | `orders`, `users` |
 | 07 | `07-conditional-aggregates.md` | Условные агрегаты: `FILTER`, `count(CASE …)` | `orders`, `payment_attempts` |
 | 08 | `08-cte.md` | CTE (`WITH … AS`), `UNION ALL`, `WITH RECURSIVE`, self-JOIN по дереву | `orders`, `departments`, `employees`, `catalog_sections` |
-| 09 | `09-window-functions.md` | Оконные функции: `ROW_NUMBER`, `RANK`, `SUM() OVER` | `orders` |
+| 08.2 | `08-2-cross-join.md` | `CROSS JOIN`: каждая строка с каждой; одно число рядом со строками | `employees`, `departments` |
+| 09 | `09-window-functions.md` | Оконные функции: `OVER`, `PARTITION BY`, кадры, ранги, top-N, накопительные итоги, `LAG` / `LEAD` | `employees`, `departments`, `orders`, `payment_attempts` |
 | 10 | `10-datetime.md` | Даты и время: `date_trunc`, интервалы, `EXTRACT` | `orders`, `order_status_events` |
 | 11 | `11-indexes-explain.md` | Индексы и `EXPLAIN` (чтение плана) | индексы на `orders`, `users` |
 | 12 | `12-event-log.md` | Аналитика по логу событий | `order_status_events` |
@@ -432,7 +447,21 @@ reactive-study/src/main/resources/db/migration/
 - два имени подряд: второе читает первое;
 - одно имя читают дважды, чтобы не копировать один и тот же подзапрос;
 - имя живёт только до конца этого запроса, это не `CREATE TABLE`;
-- коротко `WITH RECURSIVE` на ряде чисел; дерева отделов в учебных таблицах нет.
+- `WITH RECURSIVE`: дерево отделов и каталога вниз, цепочка руководителей вверх;
+- self-JOIN: сотрудник и начальник, прямые подчинённые, листья дерева;
+- отдельная тема 08.2: `CROSS JOIN` и отличие от соединения по ключу.
+
+**Тема 09.** Что в неё входит:
+
+- отличие обычного агрегата от агрегата с `OVER`: строки сохраняются;
+- `PARTITION BY`: расчёт внутри отдела или клиента;
+- два разных порядка: внутри `OVER` и во внешней выдаче;
+- `ROW_NUMBER`, `RANK`, `DENSE_RANK`, одинаковые значения и детерминированный порядок;
+- top-N внутри каждой группы и фильтрация оконного результата через CTE;
+- накопительная сумма и скользящее среднее с явным кадром `ROWS`;
+- отличие кадра по умолчанию от построчного кадра на одинаковых значениях;
+- `LAG` и `LEAD` для соседних событий;
+- бизнес-задачи и типовые вопросы собеседований.
 
 ---
 
@@ -448,7 +477,8 @@ reactive-study/src/main/resources/db/migration/
 | 06 | Подзапросы | ✅ | ✅ | ✅ | **завершена** |
 | 07 | Условные агрегаты (`FILTER`) | ✅ | ✅ | ✅ | **завершена** |
 | 08 | CTE | ✅ | ⬜ | ⬜ | **теория** |
-| 09 | Оконные функции | ⬜ | ⬜ | ⬜ | не начата |
+| 08.2 | CROSS JOIN | ✅ | ⬜ | ⬜ | **теория** |
+| 09 | Оконные функции | ✅ | ⬜ | ⬜ | **теория** |
 | 10 | Даты и время | ⬜ | ⬜ | ⬜ | не начата |
 | 11 | Индексы и EXPLAIN | ⬜ | ⬜ | ⬜ | не начата |
 | 12 | Лог событий | ⬜ | ⬜ | ⬜ | не начата |
@@ -470,4 +500,4 @@ reactive-study/src/main/resources/db/migration/
 
 ---
 
-*Создано: 2026-08-19. Обновлено: 2026-10-08. Тема 07 завершена, тема 08 — теория, задания, `08-cte-schema.md`, `08-cte-tree-report.md`, `08-cte-tree-search.md`, `08-cte-join-direction.md`, `08-cte-boss-or-child.md` (миграции `V15`, `V16`).*
+*Создано: 2026-08-19. Обновлено: 2026-10-20. Тема 09 — теория `09-window-functions.md`, практика `09-window-functions-tasks.md` подготовлена и выдаётся после интервью.*
