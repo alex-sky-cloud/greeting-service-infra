@@ -29,8 +29,8 @@
 | `orders` | Заказы | 100 000 |
 | `products` | Товары | 203 |
 | `product_categories` | Категории | 10 |
-| `order_status_events` | История статусов заказов | — |
-| `payment_attempts` | Попытки оплаты | — |
+| `order_status_events` | История статусов заказов | 250 000 |
+| `payment_attempts` | Попытки оплаты | 101 600 |
 
 Курс идёт **от простого к сложному**: каждая тема опирается на предыдущие и использует реальные таблицы проекта.
 
@@ -79,6 +79,14 @@ reactive-study/docs/sql-course/
 ├── 08-2-cross-join.md         ← тема 08.2: CROSS JOIN, перед темой 09
 ├── 09-window-functions.md     ← тема 09: теория оконных функций
 ├── 09-window-functions-tasks.md ← тема 09: практика после интервью
+├── 10-datetime.md             ← тема 10: даты и время
+├── 10-datetime-tasks.md
+├── 11-indexes-explain.md      ← тема 11: индексы и EXPLAIN
+├── 11-indexes-explain-tasks.md
+├── 12-event-log.md            ← тема 12: аналитика по логу событий
+├── 12-event-log-tasks.md
+├── 13-payments-analytics.md   ← тема 13: аналитика платежей
+├── 13-payments-analytics-tasks.md
 ├── 06-lovushka-null-i-plan-zaprosa.md  ← доп. разбор к теме 6: ловушка NULL + планы
 ├── 06-uzly-plana-zaprosa.md            ← доп. разбор к теме 6: узлы плана построчно
 └── planner-explain.md                  ← общее руководство по EXPLAIN
@@ -373,7 +381,7 @@ stop
 reactive-study/src/main/resources/db/migration/
 ```
 
-Текущие миграции: `V0` … `V16` (схема `reactive_study`, таблицы, seed-данные).
+Текущие миграции: `V0` … `V18` (схема `reactive_study`, таблицы, seed-данные). `V17` относится к курсу по Reactor (таблицы `rc_*`), SQL-курс её не использует.
 
 | Миграция | Для какой темы добавлена | Что даёт |
 |---|---|---|
@@ -382,6 +390,7 @@ reactive-study/src/main/resources/db/migration/
 | `V14__payment_retry_attempts.sql` | 07 | у части заказов три попытки списания: две карты не прошли, третья прошла |
 | `V15__catalog_tree_and_employees.sql` | 08 | дерево разделов каталога (`catalog_sections`, 4 уровня), сотрудники с начальниками (`employees.manager_id`), товар в разделе (`products.section_id`) |
 | `V16__departments_tree.sql` | 08 | дерево отделов (`departments`: департамент → отдел → группа), сотрудник в отделе (`employees.department_id`) и его зарплата (`employees.salary`) |
+| `V18__order_status_history.sql` | 10, 12 | полная история статусов каждого заказа: создан → в сборке → передан в доставку → доставлен, отмена из ожидания или из сборки; последнее событие совпадает с `orders.status`; 249 966 событий |
 
 ### Если для темы не хватает таблиц или данных
 
@@ -424,10 +433,10 @@ reactive-study/src/main/resources/db/migration/
 | 08 | `08-cte.md` | CTE (`WITH … AS`), `UNION ALL`, `WITH RECURSIVE`, self-JOIN по дереву | `orders`, `departments`, `employees`, `catalog_sections` |
 | 08.2 | `08-2-cross-join.md` | `CROSS JOIN`: каждая строка с каждой; одно число рядом со строками | `employees`, `departments` |
 | 09 | `09-window-functions.md` | Оконные функции: `OVER`, `PARTITION BY`, кадры, ранги, top-N, накопительные итоги, `LAG` / `LEAD` | `employees`, `departments`, `orders`, `payment_attempts` |
-| 10 | `10-datetime.md` | Даты и время: `date_trunc`, интервалы, `EXTRACT` | `orders`, `order_status_events` |
-| 11 | `11-indexes-explain.md` | Индексы и `EXPLAIN` (чтение плана) | индексы на `orders`, `users` |
-| 12 | `12-event-log.md` | Аналитика по логу событий | `order_status_events` |
-| 13 | `13-payments-analytics.md` | Платежи: успех/неудача, повторные попытки | `payment_attempts` + `orders` |
+| 10 | `10-datetime.md` | Даты и время: `date_trunc`, `EXTRACT`, интервалы, `generate_series`, часовые пояса | `orders`, `order_status_events`, `users` |
+| 11 | `11-indexes-explain.md` | Индексы и `EXPLAIN` / `EXPLAIN ANALYZE` (чтение плана) | индексы на `orders`, `users`, `payment_attempts`, `order_status_events` |
+| 12 | `12-event-log.md` | Аналитика по логу событий: путь, последнее событие, состояние на дату, воронка, время в статусе, проверки журнала | `order_status_events` + `orders` |
+| 13 | `13-payments-analytics.md` | Платежи: успешность по попыткам и по заказам, повторные попытки, сверки с заказами | `payment_attempts` + `orders` |
 
 > Порядок тем можно скорректировать по ходу — изменения фиксируются в этом файле.
 
@@ -463,6 +472,45 @@ reactive-study/src/main/resources/db/migration/
 - `LAG` и `LEAD` для соседних событий;
 - бизнес-задачи и типовые вопросы собеседований.
 
+**Тема 10.** Что в неё входит:
+
+- типы `timestamptz`, `date`, `interval`; `pg_typeof`, `::date`;
+- `date_trunc` для отчётов по часам, дням, неделям, месяцам;
+- `EXTRACT`: год, месяц, день недели, час; ловушка «номер месяца склеивает годы»;
+- интервалы: арифметика, разница двух моментов, перевод в часы через `epoch`;
+- фильтр за период полуоткрытым промежутком и почему `BETWEEN` теряет последний день;
+- `generate_series` для дней без заказов; `AT TIME ZONE` для отчёта по местному времени;
+- рост месяц к месяцу через `lag`.
+
+**Тема 11.** Что в неё входит:
+
+- что такое индекс B-tree, `CREATE INDEX` / `DROP INDEX`, список индексов таблицы;
+- `EXPLAIN` и `EXPLAIN ANALYZE`: узлы `Seq Scan`, `Index Scan`, `Bitmap Heap Scan`, `Index Only Scan`, `Nested Loop`, оценка и факт;
+- избирательность: когда планировщик сам выбирает перебор;
+- функция над столбцом выключает индекс; индекс по выражению и требование `IMMUTABLE`;
+- составной индекс и порядок столбцов; `LIKE` по началу строки и `text_pattern_ops`;
+- `ORDER BY … LIMIT` по индексу; цена индекса: место и запись;
+- все демонстрации — внутри `BEGIN … ROLLBACK`.
+
+**Тема 12.** Что в неё входит:
+
+- журнал событий против поля «текущий статус»;
+- путь сущности через `string_agg(… ORDER BY …)`; частота путей;
+- широкая строка на сущность через агрегат с `FILTER`;
+- последнее событие: `row_number` и `DISTINCT ON`; сверка журнала с карточкой;
+- состояние на прошлую дату; воронка через `count(DISTINCT …) FILTER`;
+- время в статусе через `lead`, нарушение срока через `lag`;
+- проверки журнала: недопустимые переходы (`IS NOT DISTINCT FROM`), разрывы цепочки.
+
+**Тема 13.** Что в неё входит:
+
+- успешность по попыткам и по заказам — почему числа разные;
+- успешность по номеру попытки; итог оплаты заказа через `bool_or` / `bool_and`;
+- все заказы по итогу оплаты через `LEFT JOIN` от `orders`;
+- заказы, спасённые повторной попыткой; время до оплаты и между попытками;
+- сверки: отгружено без оплаты, отменено но оплачено, расхождение сумм;
+- доля отказов по месяцам.
+
 ---
 
 ## Текущий прогресс
@@ -479,10 +527,10 @@ reactive-study/src/main/resources/db/migration/
 | 08 | CTE | ✅ | ⬜ | ⬜ | **теория** |
 | 08.2 | CROSS JOIN | ✅ | ⬜ | ⬜ | **теория** |
 | 09 | Оконные функции | ✅ | ⬜ | ⬜ | **теория** |
-| 10 | Даты и время | ⬜ | ⬜ | ⬜ | не начата |
-| 11 | Индексы и EXPLAIN | ⬜ | ⬜ | ⬜ | не начата |
-| 12 | Лог событий | ⬜ | ⬜ | ⬜ | не начата |
-| 13 | Аналитика платежей | ⬜ | ⬜ | ⬜ | не начата |
+| 10 | Даты и время | ✅ | ⬜ | ⬜ | **теория** |
+| 11 | Индексы и EXPLAIN | ✅ | ⬜ | ⬜ | **теория** |
+| 12 | Лог событий | ✅ | ⬜ | ⬜ | **теория** |
+| 13 | Аналитика платежей | ✅ | ⬜ | ⬜ | **теория** |
 
 **Легенда:** ⬜ — не пройдено · ✅ — пройдено
 
@@ -500,4 +548,4 @@ reactive-study/src/main/resources/db/migration/
 
 ---
 
-*Создано: 2026-08-19. Обновлено: 2026-10-20. Тема 09 — теория `09-window-functions.md`, практика `09-window-functions-tasks.md` подготовлена и выдаётся после интервью.*
+*Создано: 2026-08-19. Обновлено: 2026-10-21. Темы 10–13 — теория готова, практика `NN-<slug>-tasks.md` подготовлена и выдаётся после интервью.*

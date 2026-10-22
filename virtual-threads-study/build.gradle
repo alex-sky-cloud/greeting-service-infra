@@ -1,0 +1,43 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(27)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:6.1.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core:3.27.7'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// StructuredTaskScope в JDK 27 — preview API: без --enable-preview код не компилируется и не запускается.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 27
+    options.compilerArgs += ['--enable-preview', '-Xlint:-preview']
+}
+
+tasks.withType(JavaExec).configureEach {
+    jvmArgs '--enable-preview', '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    jvmArgs '--enable-preview', '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+    testLogging {
+        events = ['failed']
+        exceptionFormat = 'full'
+    }
+}
