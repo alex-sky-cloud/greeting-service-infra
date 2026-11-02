@@ -62,13 +62,17 @@ reactive-study/docs/sql-course/
 ├── 00-plan.md                 ← этот документ (план и прогресс)
 ├── 01-select-basics.md        ← тема 1: теория
 ├── 01-select-basics-tasks.md  ← тема 1: практические задания (после интервью)
+├── 01-select-basics-solutions.md ← тема 1: принятые решения из чата
 ├── 02-filtering.md
 ├── 02-filtering-tasks.md
+├── 02-filtering-solutions.md
 ├── …
 ├── 06-subqueries.md
 ├── 06-subqueries-tasks.md
+├── 06-subqueries-solutions.md
 ├── 07-conditional-aggregates.md
 ├── 07-conditional-aggregates-tasks.md
+├── 07-conditional-aggregates-solutions.md
 ├── 08-cte.md
 ├── 08-cte-schema.md           ← схемы деревьев и связей таблиц темы 08
 ├── 08-cte-tree-report.md      ← дерево компании: path, отступы, ORDER BY path
@@ -76,9 +80,11 @@ reactive-study/docs/sql-course/
 ├── 08-cte-join-direction.md   ← условие JOIN: шаг вниз или шаг вверх
 ├── 08-cte-boss-or-child.md    ← крайняя колонка: руководитель или подчинённый
 ├── 08-cte-tasks.md
+├── 08-cte-solutions.md        ← тема 08: принятые решения из чата
 ├── 08-2-cross-join.md         ← тема 08.2: CROSS JOIN, перед темой 09
 ├── 09-window-functions.md     ← тема 09: теория оконных функций
 ├── 09-window-functions-tasks.md ← тема 09: практика после интервью
+├── 09-window-functions-solutions.md ← тема 09: принятые решения из чата
 ├── 10-datetime.md             ← тема 10: даты и время
 ├── 10-datetime-tasks.md
 ├── 11-indexes-explain.md      ← тема 11: индексы и EXPLAIN
@@ -99,6 +105,7 @@ reactive-study/docs/sql-course/
 |---|---|
 | `NN-<slug>.md` | Теория темы (выдаётся первой) |
 | `NN-<slug>-tasks.md` | Практические задания (выдаётся после успешного интервью) |
+| `NN-<slug>-solutions.md` | Принятые решения практики из чата (после сдачи темы) |
 | `NN-<slug>-*.md`, `NN-<slug>.md` без пары `-tasks` | Дополнительный разбор к теме — те же правила оформления, что у теории (п. 13–15) |
 | `<slug>.md` без номера | Сквозное руководство, не привязанное к одной теме |
 
@@ -536,9 +543,9 @@ reactive-study/src/main/resources/db/migration/
 | 05 | JOIN (несколько таблиц) | ✅ | ✅ | ✅ | **завершена** |
 | 06 | Подзапросы | ✅ | ✅ | ✅ | **завершена** |
 | 07 | Условные агрегаты (`FILTER`) | ✅ | ✅ | ✅ | **завершена** |
-| 08 | CTE | ✅ | ⬜ | ⬜ | **теория** |
+| 08 | CTE | ✅ | ⬜ | ✅ | **практика сдана** |
 | 08.2 | CROSS JOIN | ✅ | ⬜ | ⬜ | **теория** |
-| 09 | Оконные функции | ✅ | ⬜ | ⬜ | **теория** |
+| 09 | Оконные функции | ✅ | ✅ | ✅ | **завершена** |
 | 10 | Даты и время | ✅ | ⬜ | ⬜ | **теория** |
 | 11 | Индексы и EXPLAIN | ✅ | ⬜ | ⬜ | **теория** |
 | 12 | Лог событий | ✅ | ⬜ | ⬜ | **теория** |
