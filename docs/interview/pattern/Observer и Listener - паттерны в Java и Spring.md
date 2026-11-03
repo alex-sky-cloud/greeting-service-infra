@@ -9,6 +9,7 @@
 
 ## Оглавление
 
+0. [Коротко: что сказать на собеседовании](#interview-summary)
 1. [Observer в Java — `Observable` / `Observer`](#1-observer-в-java--observable--observer)
 2. [Слушатель в Spring — `ApplicationListener` / `@EventListener`](#2-слушатель-в-spring--applicationlistener--eventlistener)
     - [Пример: `ApplicationReadyEvent`](#application-ready-event)
@@ -17,6 +18,40 @@
 5. [GoF-Observer в Spring без `ApplicationEventPublisher`](#5-gof-observer-в-spring-без-applicationeventpublisher)
 6. [Observer и Listener — сравнительная таблица](#6-observer-и-listener--сравнительная-таблица)
 7. [А где здесь Reactor?](#7-а-где-здесь-reactor)
+
+---
+
+<a id="interview-summary"></a>
+
+## 0. Коротко: что сказать на собеседовании
+
+**Классический Observer (GoF).** Subject (наблюдаемый объект) хранит список наблюдателей, даёт операции `attach` / `detach` для подписки и отписки и при изменении состояния сам оповещает каждого наблюдателя. Subject напрямую знает всех своих подписчиков.
+
+**События Spring.** Между издателем и подписчиками стоит посредник — `ApplicationEventMulticaster`:
+
+- Издатель вызывает `ApplicationEventPublisher.publishEvent(...)`. Этот интерфейс реализует сам `ApplicationContext`, поэтому издатель обращается к контексту и не видит, кто подписан на событие.
+- Контекст передаёт событие в `ApplicationEventMulticaster` (по умолчанию это `SimpleApplicationEventMulticaster`).
+- Multicaster хранит реестр listener'ов, выбирает подходящих по типу события и вызывает их.
+- Listener — это bean, реализующий `ApplicationListener`, или метод с `@EventListener`.
+
+**Синхронно или асинхронно.**
+
+- **По умолчанию синхронно:** listener работает в потоке издателя, `publishEvent()` ждёт его завершения. Плюс — общая транзакция; минус — медленный listener тормозит издателя, а его исключение откатывает операцию.
+- **Асинхронно:** над listener'ом ставят `@Async` (и включают `@EnableAsync`) — так делают для писем, кэша, аудита. Цена: нет транзакции издателя, исключение до него не дойдёт.
+
+> «События Spring по умолчанию синхронные — один поток, одна транзакция. Медленный listener выношу в фон через `@Async`.»
+
+**Частая ошибка.** Событие публикует не multicaster. Издатель — тот, кто вызывает `publishEvent`, а multicaster только рассылает событие подписчикам. Неформально это можно назвать «шиной событий Spring» (event bus), но официального термина Spring Bus нет: в Spring Framework эта шина называется event multicaster.
+
+**Какой это паттерн.** Это Publish-Subscribe Channel из Enterprise Integration Patterns: издатель и подписчики развязаны через канал. Документация Spring называет механизм «essentially the standard Observer design pattern». Противоречия нет: идея та же, что у Observer (оповещение подписчиков), но список подписчиков хранит не издатель, а канал, поэтому точнее говорить publish-subscribe.
+
+**Почему не Mediator.** По GoF Mediator инкапсулирует то, как объекты взаимодействуют, то есть содержит логику координации участников. Multicaster такой логики не содержит: он только доставляет событие всем подходящим подписчикам. Внешне похоже, но по назначению это канал доставки, а не координатор.
+
+**Ответ одной фразой:**
+
+> «События Spring — это Observer, реализованный как publish-subscribe: издатель и подписчики не знают друг о друге, между ними стоит `ApplicationEventMulticaster` — внутрипроцессная шина событий. Это не Mediator: multicaster ничего не координирует, а только доставляет события.»
+
+Источники и цитаты: Spring и EIP — §4, GoF Mediator — §3.
 
 ---
 
@@ -29,8 +64,8 @@
 > **Уточнение:** Spring в официальной документации называет `ApplicationListener` реализацией «standard Observer design pattern».
 > 
 > Это верно **концептуально** (push-уведомление, ослабленная связанность). 
->  - Однако **структурно** модель ближе к **Listener + Mediator**: 
->   - издатель (Publisher) не знает слушателей (**Listeners**) и не вызывает их напрямую — за это отвечает `ApplicationEventMulticaster` как посредник. Подробно — в §3 и §4.
+>  - Точнее, **структурно** это вариант Observer — **Publish–Subscribe** (публикация–подписка) с каналом событий посередине: 
+>   - издатель (Publisher) не знает слушателей (**Listeners**) и не вызывает их напрямую — за это отвечает `ApplicationEventMulticaster`, который играет роль **канала событий** (event channel, event bus). Паттерном Mediator он **не** является, хотя внешне на него частично похож. Подробно — в §3 и §4.
 
 
 # Пояснение к рисунку: почему на схеме есть `ApplicationEventMulticaster`, а в коде его нет
@@ -226,7 +261,7 @@ EmailService
 ## Почему `ApplicationEventMulticaster` есть на схеме
 
 Он нужен на рисунке не потому, что разработчик обязан его писать в коде, а потому что без него трудно объяснить, 
- - **почему Spring structurally ближе к Listener + Mediator, чем к классическому GoF Observer**.
+ - **почему Spring Events структурно — это Observer в варианте Publish–Subscribe (с каналом событий посередине), а не классический GoF Observer**.
 
 В GoF Observer:
 
@@ -237,7 +272,7 @@ EmailService
 
 - издатель **не хранит** список listener'ов;
 - издатель **не вызывает** listener'ы напрямую;
-- эту работу делает `ApplicationEventMulticaster` как центральный посредник.
+- эту работу делает `ApplicationEventMulticaster` как центральный посредник — канал событий (event bus), а не Mediator в смысле GoF.
 
 Именно поэтому на рисунке его показывать правильно.
 
@@ -261,7 +296,7 @@ EmailService
 
 Если задача — **понять паттерн**, тогда важно знать внутреннюю роль `ApplicationEventMulticaster`:
 
-- он выступает **посредником** между _издателем_ и _listener'ами_;
+- он выступает **каналом событий** (посредником-доставщиком) между _издателем_ и _listener'ами_;
 - он решает, какие **listener'ы** подходят _по типу_ **события**;
 - он делает реальную dispatch-**рассылку** внутри Spring.
 
@@ -503,7 +538,7 @@ public class OrderObserverDemo {
 | **Событие** | `ApplicationEvent` (или любой объект, с 4.2) | Объект-сообщение: «произошло X». |
 | **Издатель** | `ApplicationEventPublisher` | Вызывает `publishEvent(event)` — **не** знает список listener'ов и **не** вызывает их напрямую. |
 | **Слушатель** | `ApplicationListener<E>` или метод с `@EventListener` | Bean в контексте; Spring **регистрирует** его и **вызывает** при совпадении типа события. |
-| **Раздача** | `ApplicationEventMulticaster` (внутри контекста) | **Центральный посредник**: находит подходящие listener'ы по типу события и вызывает их (по умолчанию **синхронно** в потоке издателя). |
+| **Раздача** | `ApplicationEventMulticaster` (внутри контекста) | **Канал событий** (event bus): хранит listener'ы, находит подходящие по типу события и вызывает их (по умолчанию это `SimpleApplicationEventMulticaster`, вызов **синхронный**, в потоке издателя). |
 
 **Цепочка в одну строку:** `publishEvent(event)` → `ApplicationEventMulticaster` → `onApplicationEvent(event)` / метод с `@EventListener`.
 
@@ -687,6 +722,16 @@ public class AppStartupListener {
 
 Именно это и есть **Mediator (Посредник)**: объект, через который общаются все остальные. Участники **не знают** друг о друге — они знают только о посреднике.
 
+### Определение GoF
+
+**Источник:** Gamma E., Helm R., Johnson R., Vlissides J. *Design Patterns: Elements of Reusable Object-Oriented Software*. Addison-Wesley, 1994 — глава Mediator, раздел Intent.
+
+> **EN:** «Define an object that encapsulates how a set of objects interact. Mediator promotes loose coupling by keeping objects from referring to each other explicitly, and it lets you vary their interaction independently.»
+
+> **RU:** «Определите объект, который инкапсулирует то, как взаимодействует набор объектов. Mediator ослабляет связанность, избавляя объекты от необходимости явно ссылаться друг на друга, и позволяет независимо изменять их взаимодействие.»
+
+Ключевые слова — **«how a set of objects interact»**: Mediator хранит **логику взаимодействия** (сценарий), а не просто передаёт сообщения. Классический пример GoF — диалоговое окно выбора шрифта: виджеты (список, поле ввода, кнопки) не знают друг о друге и сообщают директору (`DialogDirector`) «я изменился», а конкретный директор (`FontDialogDirector`) **решает**, что из этого следует: например, при выборе шрифта в списке подставляет его название в поле ввода. Каждый виджет при этом и **отправитель**, и **получатель**.
+
 ### Когда нужен Mediator
 
 Без посредника при `N` взаимодействующих объектах связей может быть \( N \times (N-1) \) — каждый знает каждого. Mediator сводит это к `N` связям: все знают только посредника.
@@ -784,18 +829,23 @@ alice.send("Привет всем!");
 // Alice и Bob не знают ничего друг о друге — только о ChatRoom.
 ```
 
-### Как Mediator связан с `ApplicationEventMulticaster`
+### Почему `ApplicationEventMulticaster` — не Mediator
 
-В Spring роль `ChatRoom` играет **`ApplicationEventMulticaster`**. Посмотрите на аналогию:
+Сходство есть: и в Mediator, и в Spring Events участники **не ссылаются друг на друга**, а общаются через промежуточный объект. Эта общая идея — indirection (косвенность: связь через третий объект) — и создаёт впечатление, что `ApplicationEventMulticaster` «играет роль `ChatRoom`». Но по сути это разные паттерны:
 
-| Роль в паттерне Mediator | В Spring Events |
-|--------------------------|-----------------|
-| Посредник (`ChatRoom`) | `ApplicationEventMulticaster` |
-| Участник, отправляющий | `ApplicationEventPublisher` → `publishEvent()` |
-| Участник, получающий | `ApplicationListener` / `@EventListener` |
-| Регистрация у посредника | Spring сам регистрирует bean'ы-listener'ы при старте контекста |
+| Критерий | Mediator (GoF) | `ApplicationEventMulticaster` |
+|----------|----------------|-------------------------------|
+| **Что хранит посредник** | **Логику сценария**: кто, на что и как должен отреагировать (`FontDialogDirector`; даже в `ChatRoom` есть правило «не отправлять самому себе») | Только **реестр listener'ов**; бизнес-логики нет |
+| **Роли участников** | Каждый коллега — и **отправитель**, и **получатель** (`ChatUser` и `send()`, и `receive()`) | Издатель только **публикует**, listener только **получает** — доставка **однонаправленная** |
+| **Как выбирается получатель** | Решает посредник — в зависимости от сценария | Только по **типу события** (плюс `condition` у `@EventListener`) |
+| **Знает ли посредник конкретных участников** | Да — обычно держит ссылки на конкретных коллег и вызывает их специфичные методы | Нет — работает с абстракцией `ApplicationListener`, ему безразлично, кто подписан |
+| **Точное название** | Mediator (посредник) | Publish–Subscribe Channel / event bus (канал / шина событий) |
 
-`ApplicationEventPublisher.publishEvent()` не обходит listener'ы сам — он делегирует `ApplicationEventMulticaster`, который **ищет подходящие listener'ы по типу события** и вызывает их. Это и есть роль Mediator.
+**Итог:** `ApplicationEventMulticaster` **частично похож на Mediator** (общая идея — участники не знают друг друга), но точный термин для него — **канал событий** (event channel, event bus) из модели Publish–Subscribe. Подробно — в §4.
+
+> **Нюанс из GoF:** в главе Observer (раздел Implementation) книга описывает отдельный объект `ChangeManager`, который хранит связи Subject → Observer, определяет стратегию обновления и рассылает уведомления, и называет его примером паттерна Mediator. Простейший его вариант (`SimpleChangeManager`) просто уведомляет всех наблюдателей — по смыслу это близко к `ApplicationEventMulticaster`. Отсюда и источник сходства; однако для Spring Events общепринятое и более точное название — Publish–Subscribe с каналом событий.
+
+Откуда берётся сходство Mediator и Observer, хорошо объясняет Refactoring.Guru:
 
 **Источник:** [Refactoring.Guru — Mediator vs Observer](https://refactoring.guru/design-patterns/observer)
 
@@ -828,16 +878,70 @@ alice.send("Привет всем!");
 | **Идея** | Push-уведомление при изменении состояния | Push-уведомление при наступлении события |
 | **Кто хранит список получателей** | Сам Subject | `ApplicationEventMulticaster` (посредник) |
 | **Знает ли издатель получателей** | **Да** — Subject хранит `List<Observer>` | **Нет** — издатель знает только `ApplicationEventPublisher` |
-| **Посредник** | Отсутствует | `ApplicationEventMulticaster` — явный Mediator |
+| **Посредник** | Отсутствует | `ApplicationEventMulticaster` — канал событий (event bus) модели Publish–Subscribe, **не** Mediator |
 | **Триггер** | Изменение **состояния** объекта | Любой **факт** (событие) |
 
-**Итог:** Spring называет свою систему Observer по **концепции** (push + слабая связанность). Но структурно реализация совмещает три паттерна: **Listener** (интерфейс `EventListener`), **Mediator** (`ApplicationEventMulticaster`) и **Observer** (идея push-уведомления). Именно поэтому в разговорной практике Spring-код с `@EventListener` принято называть listener'ом.
+**Итог:** Spring называет свою систему Observer по **концепции** (push + слабая связанность). Структурно же это **Observer в варианте Publish–Subscribe**: между издателем и listener'ами стоит канал событий — `ApplicationEventMulticaster`. Слово «listener» пришло из интерфейса-маркера `java.util.EventListener`, который расширяет `ApplicationListener`; именно поэтому в разговорной практике Spring-код с `@EventListener` принято называть listener'ом. Паттерна Mediator здесь **нет** — см. §3.
 
 [blog.beezwax.net](https://blog.beezwax.net/did-you-hear-something-observer-pattern-vs-event-listeners/) формулирует практическое разграничение:
 
 > **EN:** «Observers are registered to the subjects they are observing, and **a subject knows all the observers it notifies**. Listeners, on the other hand, are listening for events on a global Events instance … **Any objects that are triggering events will broadcast their events without knowing who they are broadcasting to.**»
 
 > **RU:** «Наблюдатели регистрируются у конкретного Subject, и **Subject знает всех своих Observer'ов**. Listener'ы же слушают события через глобальный экземпляр Events … **Любой объект, публикующий событие, не знает, кто его слушает.**»
+
+### Классический GoF Observer — кто что делает
+
+- **Subject** (наблюдаемый объект) хранит список наблюдателей и предоставляет операции `attach()` / `detach()` (подписка / отписка).
+- При изменении состояния Subject вызывает `notify()`, который **сам обходит** список и у каждого наблюдателя вызывает `Observer.update()`.
+- Посредника нет: Subject напрямую (через абстрактный интерфейс `Observer`) знает каждого подписчика.
+
+> **Путаница в названиях JDK:** в `java.util` роль **Subject** играет класс **`Observable`** (наблюдаемый: `addObserver()` / `deleteObserver()` / `notifyObservers()`), а наблюдатели реализуют интерфейс **`Observer`** с методом `update()`. То есть `Observable` — это **наблюдаемый**, а не наблюдатель. Оба типа помечены `@Deprecated` с Java 9 (см. §1).
+
+### Spring Events — три роли
+
+| Роль | Тип в Spring | Что делает |
+|------|--------------|------------|
+| **Издатель** | `ApplicationEventPublisher` (обычно это сам `ApplicationContext`) | Вызывает `publishEvent()`; **не знает** подписчиков |
+| **Канал событий** | `ApplicationEventMulticaster` (по умолчанию `SimpleApplicationEventMulticaster`) | **Хранит** listener'ы, **подбирает** их по типу события и **вызывает** |
+| **Подписчики** | `ApplicationListener<E>` / методы с `@EventListener` | Получают событие; издателя не знают |
+
+**Источник:** [Javadoc — `ApplicationEventPublisher`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationEventPublisher.html) · [Javadoc — `ApplicationEventMulticaster`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/event/ApplicationEventMulticaster.html) · [Spring Framework — Standard and Custom Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events)
+
+> **EN (`ApplicationEventPublisher`):** «Interface that encapsulates event publication functionality. Serves as a super-interface for ApplicationContext.» / «Such an event publication step is effectively a hand-off to the multicaster and does not imply synchronous/asynchronous execution or even immediate execution at all.»
+
+> **EN (`ApplicationEventMulticaster`):** «Interface to be implemented by objects that can manage a number of ApplicationListener objects and publish events to them. An ApplicationEventPublisher, typically a Spring ApplicationContext, can use an ApplicationEventMulticaster as a delegate for actually publishing events.»
+
+> **EN (Reference):** «Finally, as with classic ApplicationListener implementations, the actual multicasting happens via a context-wide ApplicationEventMulticaster at runtime. By default, this is a SimpleApplicationEventMulticaster with synchronous event publication in the caller thread.»
+
+> **RU:** «Интерфейс, инкапсулирующий функциональность публикации событий. Служит суперинтерфейсом для ApplicationContext.» / «Такая публикация — по сути передача события multicaster'у; она не означает ни синхронного, ни асинхронного, ни даже немедленного выполнения.» / «Интерфейс для объектов, которые управляют набором объектов ApplicationListener и публикуют им события. ApplicationEventPublisher — обычно Spring ApplicationContext — может использовать ApplicationEventMulticaster как делегата для фактической публикации событий.» / «Как и для классических реализаций ApplicationListener, фактическая рассылка во время выполнения идёт через общий для контекста ApplicationEventMulticaster. По умолчанию это SimpleApplicationEventMulticaster с синхронной публикацией в потоке вызывающего кода.»
+
+### Правильное название — Publish–Subscribe
+
+Модель, в которой издатель не знает подписчиков, а между ними стоит канал, называется **Publish–Subscribe** (публикация–подписка). В книге *Enterprise Integration Patterns* (Gregor Hohpe, Bobby Woolf, 2003) она описана как паттерн **Publish-Subscribe Channel** (канал публикации–подписки).
+
+**Источник:** [Enterprise Integration Patterns — Publish-Subscribe Channel](https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html)
+
+> **EN:** «Send the event on a Publish-Subscribe Channel, which delivers a copy of a particular event to each receiver.»
+
+> **RU:** «Отправьте событие в Publish-Subscribe Channel, который доставляет копию этого события каждому получателю.»
+
+Внутри одного процесса (одного `ApplicationContext`) роль такого канала играет `ApplicationEventMulticaster`. Поэтому его можно назвать **шиной событий** (event bus), а всю систему — неформально «Spring event bus». Это **неофициальное** название: типа с именем `EventBus` в Spring Framework нет (не путать, например, с классом `EventBus` из Guava).
+
+Отличие от EIP: там канал — это инфраструктура обмена сообщениями между приложениями (брокер, топик), а в Spring это обычный объект в памяти, который по умолчанию вызывает listener'ы синхронно в потоке издателя.
+
+### Почему Spring сам называет это Observer
+
+**Источник:** [Spring Framework — Standard and Custom Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events)
+
+> **EN:** «Essentially, this is the standard Observer design pattern.»
+
+> **RU:** «По сути, это стандартный паттерн проектирования Observer.»
+
+Это **упрощение**, а не ошибка. Publish–Subscribe — вариант Observer, в котором между Subject и наблюдателями появляется посредник-канал: идея та же (push-уведомление подписчиков), меняется лишь то, **кто хранит список и рассылает уведомления**. GoF и сами приводят Publish-Subscribe среди альтернативных названий Observer (раздел Also Known As). Поэтому оба утверждения верны каждое на своём уровне: «это Observer» — по идее, «это Publish–Subscribe с каналом событий» — по структуре.
+
+### Формулировка для собеседования
+
+> События Spring — это Observer в варианте Publish–Subscribe: издатель (`ApplicationEventPublisher`) не знает подписчиков, а `ApplicationEventMulticaster` работает как канал событий (event bus) и доставляет их listener-ам по типу события.
 
 ---
 
@@ -977,7 +1081,7 @@ public class AppSetup {
 |---|---|---|
 | Кто хранит список | `StockPriceTracker` сам | `ApplicationEventMulticaster` |
 | Знает ли издатель получателей | **Да** — `observers` список | **Нет** |
-| Отписка в runtime | `removeObserver()` | Нет встроенного механизма |
+| Отписка в runtime | `removeObserver()` | Только для listener'а, добавленного вручную через `addApplicationListener()`: `ConfigurableApplicationContext.removeApplicationListener()` (с Spring 6.0). Bean с `@EventListener` так не отписывают |
 | Посредник | Нет | `ApplicationEventMulticaster` |
 
 ---
@@ -990,17 +1094,17 @@ public class AppSetup {
 |---|---|---|
 | **API** | `Observable` + `Observer` | `ApplicationEvent` + `ApplicationListener` / `@EventListener` |
 | **Кто хранит подписчиков** | **Сам Subject** (`addObserver`) | **Контекст** (`ApplicationEventMulticaster`) |
-| **Как уведомляют** | Subject вызывает `notifyObservers()` → `update()` напрямую | Издатель вызывает `publishEvent()` → **посредник** вызывает listener'ы |
+| **Как уведомляют** | Subject вызывает `notifyObservers()` → `update()` напрямую | Издатель вызывает `publishEvent()` → **канал событий** (`ApplicationEventMulticaster`) вызывает listener'ы |
 | **Связь издатель ↔ получатель** | Subject **знает** и **хранит** список Observer'ов | Издатель **не знает** listener'ов — только публикует событие |
 | **Триггер** | Изменение **состояния** объекта (`setChanged`) | Факт **события** (`BlockedListEvent`, `ApplicationReadyEvent`, …) |
-| **Посредник** | Отсутствует | `ApplicationEventMulticaster` — явный Mediator |
-| **Отписка в runtime** | `removeObserver()` | Нет встроенного механизма |
+| **Посредник / паттерн** | Отсутствует — классический GoF Observer | `ApplicationEventMulticaster` — канал событий (event bus); паттерн Publish–Subscribe, **не** Mediator |
+| **Отписка в runtime** | `removeObserver()` | Только для listener'а, добавленного вручную: `addApplicationListener()` / `removeApplicationListener()` у `ConfigurableApplicationContext` (с Spring 6.0) |
 | **Типичный кейс** | Модель MVC, push-потоки данных, legacy | Доменные и lifecycle-события в Spring-приложении |
 
 ### Практическое правило
 
 - **Observer (GoF)** — «мой объект **сам ведёт** список и **сам зовёт** `update()` у каждого наблюдателя».
-- **Listener (Spring)** — «я **публикую событие** в контекст, посредник (`ApplicationEventMulticaster`) **сам найдёт** bean'ы и **вызовет** обработчик».
+- **Listener (Spring)** — «я **публикую событие** в контекст, канал событий (`ApplicationEventMulticaster`) **сам найдёт** bean'ы и **вызовет** обработчик».
 
 ---
 
@@ -1033,7 +1137,7 @@ Flux.just("a", "b", "c")
 
 **Краткий ответ:** 
    - JDK **Observer** — push от **одного объекта** с **явным списком** observers. 
-   - Spring Events — push через **посредника** (`ApplicationEventMulticaster`) и **тип события** (издатель не знает слушателей). 
+   - Spring Events — push через **канал событий** (`ApplicationEventMulticaster`, модель Publish–Subscribe) и **тип события** (издатель не знает слушателей). 
    - Reactor — push **потока данных** по контракту **Publisher / Subscriber** с backpressure; 
       - ближе к Observer по идее, дальше от Spring `@EventListener` по API и сценарию (HTTP, БД, Kafka, а не lifecycle bean'ов).
 
@@ -1048,5 +1152,8 @@ Flux.just("a", "b", "c")
 | Observer vs Listener (практика) | [blog.beezwax.net — Did You Hear Something?](https://blog.beezwax.net/did-you-hear-something-observer-pattern-vs-event-listeners/) |
 | Spring Events | [Application Events (Reference)](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events) |
 | ApplicationListener | [Javadoc](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationListener.html) |
+| ApplicationEventPublisher / ApplicationEventMulticaster | [Javadoc — Publisher](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationEventPublisher.html), [Javadoc — Multicaster](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/event/ApplicationEventMulticaster.html) |
+| Publish-Subscribe Channel | [Enterprise Integration Patterns](https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html) (Hohpe, Woolf) |
+| GoF Mediator (Intent) | Gamma, Helm, Johnson, Vlissides — *Design Patterns: Elements of Reusable Object-Oriented Software*, Addison-Wesley, 1994 |
 | ApplicationReadyEvent | [Spring Boot](https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners), [Javadoc](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/context/event/ApplicationReadyEvent.html) |
 | Reactor | [Introduction to Reactive Programming](https://projectreactor.io/docs/core/release/reference/reactiveProgramming.html) |
