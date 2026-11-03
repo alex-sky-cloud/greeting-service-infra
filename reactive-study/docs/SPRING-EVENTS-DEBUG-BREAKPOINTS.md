@@ -1,6 +1,6 @@
 # Spring Events — точки останова (Publisher → Multicaster → Listener)
 
-> Лаборатория к [`Observer и Listener — паттерны в Java и Spring`](../../interview/pattern/Observer%20и%20Listener%20-%20паттерны%20в%20Java%20и%20Spring.md).  
+> Лаборатория к [`Observer и Listener — паттерны в Java и Spring`](../../docs/interview/pattern/Observer%20и%20Listener%20-%20паттерны%20в%20Java%20и%20Spring.md).  
 > Модуль: **reactive-study**, порт **8083**.
 
 Минимальный пример из документации Spring реализован в пакетах:
@@ -256,7 +256,7 @@ Spring Events — как раз этот случай: **Observer по идее,
 3. Отладка (#6–#8) **доказывает** наличие посредника и адаптера — без них до `onBlocked` не дойти.
 4. На собеседовании: *«Spring Events — push-модель Observer по идее, но архитектурно это Listener + Mediator; издатель не хранит и не вызывает listener'ы»*.
 
-Подробнее: [`Observer и Listener — паттерны в Java и Spring`](../../interview/pattern/Observer%20и%20Listener%20-%20паттерны%20в%20Java%20и%20Spring.md), §3–§4.
+Подробнее: [`Observer и Listener — паттерны в Java и Spring`](../../docs/interview/pattern/Observer%20и%20Listener%20-%20паттерны%20в%20Java%20и%20Spring.md), §3–§4.
 
 ---
 
