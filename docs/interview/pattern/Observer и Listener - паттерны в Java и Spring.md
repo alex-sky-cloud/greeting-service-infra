@@ -45,46 +45,69 @@
 **Синхронно или асинхронно.**
 
 **По умолчанию — синхронно.** 
-- **Listener** выполняется в том же потоке, в котором **publisher** вызвал `publishEvent()`. Для **publisher** это выглядит как обычный вызов метода: управление вернётся к нему **только после того**, как все listener'ы закончат работу.
+- **Listener** выполняется в том же потоке, в котором **publisher** вызвал `publishEvent()`. Для **publisher** это выглядит как обычный вызов метода: управление вернётся к нему `только после того`, как все **listener** закончат работу.
 
 _Пример_: `OrderService.createOrder()` в транзакции сохраняет заказ и публикует `OrderCreatedEvent`, а **listener** на этот **event** отправляет клиенту письмо. 
 
 Что из этого следует:
 
-- **Listener** работает внутри **той же транзакции**, что и **publisher.** Если **listener** тоже пишет в базу (например, сохраняет запись **аудита**), эта запись сохранится или откатится вместе с заказом. Это полезно, когда данные должны быть согласованы.
+- **Listener** работает внутри `той же транзакции`, что и **publisher**. Если **listener** тоже пишет в базу (например, сохраняет запись аудита), эта запись сохранится или откатится вместе с заказом. Это полезно, когда данные должны быть согласованы.
    - `Медленный` **listener** задерживает **publisher.** Например, если письмо отправляется 3 секунды, `createOrder()` завершится на 3 секунды позже, и пользователь дольше ждёт ответа.
   
-- **Исключение** (возникновение ошибки в момент обработки события) в listener'е прерывает **publisher.** 
-  - **Исключение** долетает до `createOrder()`, и если его не перехватить, транзакция откатывается: из-за ошибки при отправке письма не сохранится и сам заказ.
+- **exception** в **listener** прерывает **publisher**.
+  - **exception** долетает до `createOrder()`, и если его не перехватить, **transaction** откатывается: из-за ошибки при отправке письма не сохранится и сам заказ.
 
-**createOrder()** сохраняет заказ и в этом же вызове вызывает **publishEvent**.
+`createOrder()` сохраняет заказ и в этом же вызове вызывает `publishEvent`.
 
-**Listener** по умолчанию выполняется в этом же вызове. Если при отправке письма, **listener** бросает **exception**, оно выходит из **publishEvent** в **createOrder()**. 
+**Listener** по умолчанию выполняется в этом же вызове. Если при отправке письма **listener** бросает **exception**, оно выходит из `publishEvent` в `createOrder()`.
 
-Если **createOrder()** не перехватывает данный **exception** и метод помечен **@Transactional**, Spring откатывает транзакцию: заказ в базе не остаётся.
+Если `createOrder()` не перехватывает этот **exception** и метод помечен `@Transactional`, Spring откатывает **transaction**: заказ в базе не остаётся.
 
-Это верно, пока **listener** синхронный. Если на нём стоит **@Async**, исключение в **createOrder()** не приходит, и заказ остаётся сохранённым.
+Это верно, пока **listener** синхронный. Если на нём стоит `@Async`, **exception** в `createOrder()` не приходит, и заказ остаётся сохранённым.
 
 -----
 
 **Асинхронно — через `@Async`.** Если пометить метод listener'а аннотацией `@Async` и включить `@EnableAsync` в конфигурации, Spring выполнит listener в отдельном потоке из пула. `publishEvent()` вернёт управление сразу, не дожидаясь listener'а. Так делают для действий, которые не должны задерживать основную операцию: отправка писем, обновление кэша, запись аудита. 
 
 Чем за это платят:
-- **Listener работает вне транзакции publisher.** Если ему нужна транзакция, он открывает свою.
-- **Publisher не узнает об ошибке listener'а.** Исключение возникает в другом потоке и до `createOrder()` не доходит: заказ сохранится, даже если письмо не ушло. Поэтому ошибку нужно обработать или записать в лог в самом listener'е.
+- **Listener** работает `вне транзакции` **publisher**. Если ему нужна **transaction**, он открывает свою.
+- **Publisher** не узнает об ошибке **listener**. **exception** возникает в другом потоке и до `createOrder()` не доходит: заказ сохранится, даже если письмо не ушло. Поэтому ошибку нужно обработать или записать в лог в самом **listener**.
 
-> «По умолчанию events Spring синхронные: listener выполняется в потоке publisher и внутри его транзакции. Поэтому медленный listener задерживает publisher, а его исключение может откатить всю операцию. Если listener не должен влиять на основную операцию, я помечаю его `@Async` — он выполняется в отдельном потоке.»
+> По умолчанию events Spring синхронные: listener выполняется в потоке publisher и внутри его транзакции. Поэтому медленный listener задерживает publisher, а его исключение может откатить всю операцию. Если listener не должен влиять на основную операцию, я помечаю его `@Async` — он выполняется в отдельном потоке.
 
 **Частые заблуждения.**
 
-- **«Event публикует multicaster».** Нет. Publisher — тот, кто вызывает `publishEvent()`, а multicaster только рассылает event подходящим listeners. Неформально его можно назвать «шиной events Spring» (event bus), но официального термина Spring Bus нет: в Spring Framework он называется event multicaster.
-- **«Multicaster подписывается на publisher».** Нет. `ApplicationContext` сам вызывает у multicaster метод `multicastEvent(...)` и передаёт ему event.
-- **«Multicaster сам собирает реестр listeners».** Нет. Реестр хранится внутри multicaster, но заполняет его `ApplicationContext`: `registerListeners()`, `ApplicationListenerDetector` и `EventListenerMethodProcessor` (подробно — [«Кто заполняет реестр listeners»](#multicaster-registry)).
-- **«Multicaster хранит список publishers и список типов events».** Нет. Он хранит только listeners. Типа event в реестре нет: при `publishEvent(...)` multicaster читает тип у объекта event и по нему оставляет подходящих listeners.
-- **«Класс, который публикует event, сам реализует `ApplicationEventPublisher`».** Нет. Интерфейс реализует `ApplicationContext`. Класс только хранит этот общий `ApplicationEventPublisher` и вызывает у него `publishEvent`. Подробно — [«Какой объект лежит в поле publisher»](#publisher-field).
-- **«Event должен наследовать `ApplicationEvent`».** Нет. С Spring 4.2 `publishEvent` принимает любой объект, а метод с `@EventListener` принимает этот объект параметром. В `implements ApplicationListener<OrderCreated>` такой класс не подставить: параметр типа должен быть наследником `ApplicationEvent`. Подробно — [«Любой объект как event»](#event-any-object).
-- **«В WebFlux listener выполняется в другом потоке».** Нет. `publishEvent` и в WebFlux вызывает listeners в том потоке, который его вызвал. Подробно — [«Публикация event в WebFlux»](#event-webflux).
-- **«Достаточно написать класс с `implements ApplicationListener`».** Нет. Класс должен быть bean в контексте (например, с `@Component`), иначе Spring его не зарегистрирует и event до него не дойдёт.
+**Event** публикует **multicaster**.
+
+  - Нет. **Publisher** — тот, кто вызывает `publishEvent()`, а **multicaster** только рассылает **event** подходящим **listeners**. Неформально его можно назвать шиной **events** Spring (event bus), но официального термина Spring Bus нет: в Spring Framework он называется event multicaster.
+
+**Multicaster** подписывается на **publisher**.
+
+  - Нет. `ApplicationContext` сам вызывает у **multicaster** метод `multicastEvent(...)` и передаёт ему **event**.
+
+**Multicaster** сам собирает реестр **listeners**.
+
+  - Нет. Реестр хранится внутри **multicaster**, но заполняет его `ApplicationContext`: `registerListeners()`, `ApplicationListenerDetector` и `EventListenerMethodProcessor` (подробно — [Кто заполняет реестр listeners](#multicaster-registry)).
+
+**Multicaster** хранит список **publishers** и список типов **events**.
+
+  - Нет. Он хранит только **listeners**. Типа **event** в реестре нет: при `publishEvent(...)` **multicaster** читает тип у объекта **event** и по нему оставляет подходящих **listeners**.
+
+Класс, который публикует **event**, сам реализует `ApplicationEventPublisher`.
+
+  - Нет. Интерфейс реализует `ApplicationContext`. Класс только хранит этот общий `ApplicationEventPublisher` и вызывает у него `publishEvent`. Подробно — [Какой объект лежит в поле publisher](#publisher-field).
+
+**Event** должен наследовать `ApplicationEvent`.
+
+  - Нет. С Spring 4.2 `publishEvent` принимает любой объект, а метод с `@EventListener` принимает этот объект параметром. В `implements ApplicationListener<OrderCreated>` такой класс не подставить: параметр типа должен быть наследником `ApplicationEvent`. Подробно — [Любой объект как event](#event-any-object).
+
+В WebFlux **listener** выполняется в другом потоке.
+
+  - Нет. `publishEvent` и в WebFlux вызывает **listeners** в том потоке, который его вызвал. Подробно — [Публикация event в WebFlux](#event-webflux).
+
+Достаточно написать класс с `implements ApplicationListener`.
+
+  - Нет. Класс должен быть **bean** в `ApplicationContext` (например, с `@Component`), иначе Spring его не зарегистрирует и **event** до него не дойдёт.
 
 **Какой это паттерн: Observer или Publish-Subscribe?**
 
