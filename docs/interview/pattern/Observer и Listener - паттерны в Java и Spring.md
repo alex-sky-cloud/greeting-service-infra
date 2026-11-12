@@ -10,14 +10,18 @@
 ## Оглавление
 
 0. [Коротко: что сказать на собеседовании](#interview-summary)
+    - [Пояснение к рисунку: почему на схеме есть `ApplicationEventMulticaster`, а в коде его нет](#figure-explanation)
+    - [Кто заполняет реестр listeners и как multicaster находит нужных](#multicaster-registry)
 1. [Observer в Java — `Observable` / `Observer`](#1-observer-в-java--observable--observer)
-2. [Слушатель в Spring — `ApplicationListener` / `@EventListener`](#2-слушатель-в-spring--applicationlistener--eventlistener)
+2. [Listener в Spring — `ApplicationListener` / `@EventListener`](#2-слушатель-в-spring--applicationlistener--eventlistener)
     - [Пример: `ApplicationReadyEvent`](#application-ready-event)
+    - [Любой объект как event](#event-any-object)
+    - [Какой объект лежит в поле publisher](#publisher-field)
+    - [Публикация event в WebFlux](#event-webflux)
 3. [Паттерн Mediator — что это и при чём тут Spring](#3-паттерн-mediator--что-это-и-при-чём-тут-spring)
 4. [Observer, Listener, Mediator — три синонима или три разных паттерна?](#4-observer-listener-mediator--три-синонима-или-три-разных-паттерна)
 5. [GoF-Observer в Spring без `ApplicationEventPublisher`](#5-gof-observer-в-spring-без-applicationeventpublisher)
 6. [Observer и Listener — сравнительная таблица](#6-observer-и-listener--сравнительная-таблица)
-7. [А где здесь Reactor?](#7-а-где-здесь-reactor)
 
 ---
 
@@ -30,35 +34,45 @@
 **Subject** (наблюдаемый объект) хранит список наблюдателей, даёт операции `attach` / `detach` для подписки и отписки и при изменении состояния сам оповещает каждого наблюдателя. 
 **Subject** напрямую знает всех своих подписчиков.
 
-**События Spring.** Между издателем и подписчиками стоит посредник — `ApplicationEventMulticaster`:
+**Spring Events.** Между publisher и подписчиками стоит **посредник** — `ApplicationEventMulticaster`:
 
-- Издатель вызывает `ApplicationEventPublisher.publishEvent(...)`. Этот интерфейс реализует сам `ApplicationContext`: издатель передаёт событие контексту и не знает, какие слушатели его получат.
-- Контекст передаёт событие в `ApplicationEventMulticaster` (по умолчанию это `SimpleApplicationEventMulticaster`).
-- Multicaster хранит реестр listener'ов, выбирает подходящих по типу события и вызывает их.
-- Listener — это bean, реализующий `ApplicationListener`, или метод с `@EventListener`.
+- Класс, который публикует event, хранит `ApplicationEventPublisher` и вызывает у него `publishEvent`. Этот `ApplicationEventPublisher` один на всё приложение: его получает каждый такой класс. 
+  - Интерфейс реализует `ApplicationContext`, поэтому объект в поле — `ApplicationContext`. Класс, который публикует **event**, не знает, какие **listeners** его получат.
+- **ApplicationContext** передаёт event в `ApplicationEventMulticaster` (по умолчанию это `SimpleApplicationEventMulticaster`).
+- **Multicaster** хранит реестр **listener**'ов, выбирает подходящих по типу **event** и вызывает их.
+- **Listener** — это **bean**, реализующий `ApplicationListener`, или метод с аннотацией `@EventListener`.
 
 **Синхронно или асинхронно.**
 
-**По умолчанию — синхронно.** Listener выполняется в том же потоке, в котором издатель вызвал `publishEvent()`. Для издателя это выглядит как обычный вызов метода: управление вернётся к нему только после того, как все listener'ы закончат работу.
+**По умолчанию — синхронно.** 
+- **Listener** выполняется в том же потоке, в котором **publisher** вызвал `publishEvent()`. Для **publisher** это выглядит как обычный вызов метода: управление вернётся к нему **только после того**, как все listener'ы закончат работу.
 
-Пример: `OrderService.createOrder()` в транзакции сохраняет заказ и публикует `OrderCreatedEvent`, а listener на это событие отправляет клиенту письмо. Что из этого следует:
-- **Listener работает внутри той же транзакции, что и издатель.** Если listener тоже пишет в базу (например, сохраняет запись аудита), эта запись сохранится или откатится вместе с заказом. Это полезно, когда данные должны быть согласованы.
-- **Медленный listener задерживает издателя.** Если письмо отправляется 3 секунды, `createOrder()` завершится на 3 секунды позже, и пользователь дольше ждёт ответа.
-- **Исключение в listener'е прерывает издателя.** Исключение долетает до `createOrder()`, и если его не перехватить, транзакция откатывается: из-за ошибки при отправке письма не сохранится и сам заказ.
+_Пример_: `OrderService.createOrder()` в транзакции сохраняет заказ и публикует `OrderCreatedEvent`, а **listener** на этот **event** отправляет клиенту письмо. 
+
+Что из этого следует:
+
+- **Listener** работает внутри **той же транзакции**, что и **publisher.** Если **listener** тоже пишет в базу (например, сохраняет запись аудита), эта запись сохранится или откатится вместе с заказом. Это полезно, когда данные должны быть согласованы.
+   - `Медленный` **listener** задерживает **publisher.** Например, Если письмо отправляется 3 секунды, `createOrder()` завершится на 3 секунды позже, и пользователь дольше ждёт ответа.
+  
+- **Исключение** (возникновение ошибки в момент обратотки события) в listener'е прерывает **publisher.** 
+  - **Исключение** долетает до `createOrder()`, и если его не перехватить, транзакция откатывается: из-за ошибки при отправке письма не сохранится и сам заказ.
 
 **Асинхронно — через `@Async`.** Если пометить метод listener'а аннотацией `@Async` и включить `@EnableAsync` в конфигурации, Spring выполнит listener в отдельном потоке из пула. `publishEvent()` вернёт управление сразу, не дожидаясь listener'а. Так делают для действий, которые не должны задерживать основную операцию: отправка писем, обновление кэша, запись аудита. Чем за это платят:
-- **Listener работает вне транзакции издателя.** Если ему нужна транзакция, он открывает свою.
-- **Издатель не узнает об ошибке listener'а.** Исключение возникает в другом потоке и до `createOrder()` не доходит: заказ сохранится, даже если письмо не ушло. Поэтому ошибку нужно обработать или записать в лог в самом listener'е.
+- **Listener работает вне транзакции publisher.** Если ему нужна транзакция, он открывает свою.
+- **Publisher не узнает об ошибке listener'а.** Исключение возникает в другом потоке и до `createOrder()` не доходит: заказ сохранится, даже если письмо не ушло. Поэтому ошибку нужно обработать или записать в лог в самом listener'е.
 
-> «По умолчанию события Spring синхронные: listener выполняется в потоке издателя и внутри его транзакции. Поэтому медленный listener задерживает издателя, а его исключение может откатить всю операцию. Если listener не должен влиять на основную операцию, я помечаю его `@Async` — он выполняется в отдельном потоке.»
+> «По умолчанию events Spring синхронные: listener выполняется в потоке publisher и внутри его транзакции. Поэтому медленный listener задерживает publisher, а его исключение может откатить всю операцию. Если listener не должен влиять на основную операцию, я помечаю его `@Async` — он выполняется в отдельном потоке.»
 
 **Частые заблуждения.**
 
-- **«Событие публикует multicaster».** Нет. Издатель — тот, кто вызывает `publishEvent()`, а multicaster только рассылает событие подписчикам. Неформально его можно назвать «шиной событий Spring» (event bus), но официального термина Spring Bus нет: в Spring Framework он называется event multicaster.
-- **«Multicaster подписывается на издателя».** Нет. Контекст сам вызывает у multicaster'а метод `multicastEvent(...)` и передаёт ему событие.
-- **«Издатель реализует `ApplicationEventPublisher`».** Нет. Этот интерфейс реализует `ApplicationContext`, а ваш сервис получает его внедрением через конструктор и только вызывает `publishEvent()`.
-- **«Событие обязано наследовать `ApplicationEvent`».** Нет. Начиная со Spring 4.2 можно публиковать любой объект и принимать его в методе с `@EventListener`.
-- **«Достаточно написать класс с `implements ApplicationListener`».** Нет. Класс должен быть bean в контексте (например, с `@Component`), иначе Spring его не зарегистрирует и событие до него не дойдёт.
+- **«Event публикует multicaster».** Нет. Publisher — тот, кто вызывает `publishEvent()`, а multicaster только рассылает event подходящим listeners. Неформально его можно назвать «шиной events Spring» (event bus), но официального термина Spring Bus нет: в Spring Framework он называется event multicaster.
+- **«Multicaster подписывается на publisher».** Нет. `ApplicationContext` сам вызывает у multicaster метод `multicastEvent(...)` и передаёт ему event.
+- **«Multicaster сам собирает реестр listeners».** Нет. Реестр хранится внутри multicaster, но заполняет его `ApplicationContext`: `registerListeners()`, `ApplicationListenerDetector` и `EventListenerMethodProcessor` (подробно — [«Кто заполняет реестр listeners»](#multicaster-registry)).
+- **«Multicaster хранит список publishers и список типов events».** Нет. Он хранит только listeners. Типа event в реестре нет: при `publishEvent(...)` multicaster читает тип у объекта event и по нему оставляет подходящих listeners.
+- **«Класс, который публикует event, сам реализует `ApplicationEventPublisher`».** Нет. Интерфейс реализует `ApplicationContext`. Класс только хранит этот общий `ApplicationEventPublisher` и вызывает у него `publishEvent`. Подробно — [«Какой объект лежит в поле publisher»](#publisher-field).
+- **«Event должен наследовать `ApplicationEvent`».** Нет. С Spring 4.2 `publishEvent` принимает любой объект, а метод с `@EventListener` принимает этот объект параметром. В `implements ApplicationListener<OrderCreated>` такой класс не подставить: параметр типа должен быть наследником `ApplicationEvent`. Подробно — [«Любой объект как event»](#event-any-object).
+- **«В WebFlux listener выполняется в другом потоке».** Нет. `publishEvent` и в WebFlux вызывает listeners в том потоке, который его вызвал. Подробно — [«Публикация event в WebFlux»](#event-webflux).
+- **«Достаточно написать класс с `implements ApplicationListener`».** Нет. Класс должен быть bean в контексте (например, с `@Component`), иначе Spring его не зарегистрирует и event до него не дойдёт.
 
 **Какой это паттерн: Observer или Publish-Subscribe?**
 
@@ -71,68 +85,68 @@
  - Когда заказ меняется, он сам обходит свой список и у каждого наблюдателя вызывает `update()`.
  - Итог: заказ знает всех своих наблюдателей, а наблюдатель знает, на какой заказ подписан.
 
-**Шаг 2. Как устроены события Spring.**
+**Шаг 2. Как устроены events Spring.**
 Действия те же — хранить список, подписать, разослать, — но выполняет их не ваш сервис:
  - **Список подписчиков** хранит `ApplicationEventMulticaster` внутри `ApplicationContext`. Он один на всё приложение.
- - **Подписывает слушателей сам Spring** при создании bean, а отписывает при его уничтожении. Ваш код только объявляет слушателя через `implements ApplicationListener` или `@EventListener`.
- - **Рассылает тоже multicaster.** Ваш сервис вызывает `publishEvent()`, контекст передаёт событие multicaster'у, а тот находит слушателей по **типу события** и вызывает их.
- - Итог: сервис-издатель не знает слушателей, слушатели не знают издателя. Их связывает только тип события.
+ - **Подписывает listeners сам Spring** при создании bean, а отписывает при его уничтожении. Ваш код только объявляет listener через `implements ApplicationListener` или `@EventListener`.
+ - **Рассылает тоже multicaster.** Ваш сервис вызывает `publishEvent()`, контекст передаёт event multicaster'у, а тот находит listeners по **типу event** и вызывает их.
+ - Итог: сервис-publisher не знает listeners, listeners не знают publisher. Их связывает только тип event.
 
 **Шаг 3. Сравнение.**
 
-| Действие | Классический Observer | События Spring |
+| Действие | Классический Observer | Spring Events |
 |----------|-----------------------|----------------|
 | Кто хранит список подписчиков | Сам наблюдаемый объект | `ApplicationEventMulticaster`, один на контекст |
 | Кто подписывает | Код приложения вызывает `attach()` | Spring при создании bean |
-| На что подписываются | На конкретный объект | На тип события (`BlockedListEvent`) |
+| На что подписываются | На конкретный объект | На тип event (`BlockedListEvent`) |
 | Кто рассылает | Сам наблюдаемый объект | Multicaster |
-| Знают ли издатель и подписчики друг о друге | Да | Нет |
+| Знают ли publisher и подписчики друг о друге | Да | Нет |
 
 **Шаг 4. Почему Spring называет это Observer.**
-Если считать наблюдаемым объектом не ваш сервис, а контекст вместе с multicaster'ом, все роли Observer на месте: есть список, подписка, отписка и рассылка. Слушатель — это наблюдатель, а его `onApplicationEvent()` — это `update()`. Поэтому документация пишет «essentially the standard Observer design pattern» — «по сути это стандартный Observer».
+Если считать наблюдаемым объектом не ваш сервис, а контекст вместе с multicaster'ом, все роли Observer на месте: есть список, подписка, отписка и рассылка. Listener — это наблюдатель, а его `onApplicationEvent()` — это `update()`. Поэтому документация пишет «essentially the standard Observer design pattern» — «по сути это стандартный Observer».
 
 **Шаг 5. Почему это одновременно Publish-Subscribe.**
-Посмотрим на тот же механизм глазами ваших компонентов. Сервис-издатель отдаёт событие в общий канал, слушатели получают события нужного типа, и друг о друге они ничего не знают. Именно так в книге _Enterprise Integration Patterns_ описан **Publish-Subscribe Channel**.
+Посмотрим на тот же механизм глазами ваших компонентов. Сервис-publisher отдаёт event в общий канал, listeners получают events нужного типа, и друг о друге они ничего не знают. Именно так в книге _Enterprise Integration Patterns_ описан **Publish-Subscribe Channel**.
 
 **Итог: два уровня, два названия.**
- - **Уровень реализации — Observer.** У контекста с multicaster'ом есть список слушателей, подписка, отписка и рассылка.
- - **Уровень взаимодействия компонентов — Publish-Subscribe.** Ваш сервис и слушатели связаны только типом события и не знают друг о друге.
+ - **Уровень реализации — Observer.** У контекста с multicaster'ом есть список listeners, подписка, отписка и рассылка.
+ - **Уровень взаимодействия компонентов — Publish-Subscribe.** Ваш сервис и listeners связаны только типом event и не знают друг о друге.
 
-Поэтому выбирать одно из двух названий не нужно. Путаница возникает, когда Subject'ом считают ваш сервис-издатель: у него действительно нет ни списка подписчиков, ни рассылки, и кажется, что Observer здесь нет. Но Subject в Spring — это контекст вместе с multicaster'ом (шаг 4).
+Поэтому выбирать одно из двух названий не нужно. Путаница возникает, когда Subject'ом считают ваш сервис-publisher: у него действительно нет ни списка подписчиков, ни рассылки, и кажется, что Observer здесь нет. Но Subject в Spring — это контекст вместе с multicaster'ом (шаг 4).
 
-> Технически Spring подписывает слушателей двумя компонентами: класс с `implements ApplicationListener` регистрирует `ApplicationListenerDetector`, а метод с `@EventListener` — `EventListenerMethodProcessor`.
+> Технически Spring подписывает listeners двумя компонентами: класс с `implements ApplicationListener` регистрирует `ApplicationListenerDetector`, а метод с `@EventListener` — `EventListenerMethodProcessor`.
 
 _Mediator_ («Посредник») — паттерн, при котором объекты взаимодействуют не напрямую, а через отдельный объект, управляющий их взаимодействием.
 
 **Почему Multicater не является классическим паттерном Mediator:** 
  - **Mediator по GoF** — это посредник, который содержит логику взаимодействия участников: 
    - он решает, кто и как должен отреагировать на действие другого участника. 
- - **Multicaster** такой логики не содержит: он ничего не решает, а **доставляет** событие всем слушателям подходящего типа. 
+ - **Multicaster** такой логики не содержит: он ничего не решает, а **доставляет** event всем listeners подходящего типа. 
 
  - Сходство только в том, что в обоих случаях участники общаются ч**ерез промежуточный объект** и не ссылаются друг на друга. 
  - Поэтому **multicaster** — канал доставки, а не координатор (подробно — §3).
 
 ---
 
-Вы говорите, что мультикастер «не содержит логики маршрутизации». Это **не совсем так**: он выбирает слушателей по типу события (`supportsEventType`), то есть простая фильтрация по подписке у него есть. 
+Вы говорите, что мультикастер «не содержит логики маршрутизации». Это **не совсем так**: он выбирает listeners по типу event (`supportsEventType`), то есть простая фильтрация по подписке у него есть. 
  - Нет другого: логики, которая координирует участников между собой, а это **и отличает** _Mediator_. 
  - Так и стоит сказать на собеседовании.
 
 **Итог для собеседования.** 
- - Можно сказать так: «Внутри мультикастер устроен как **Observer** (список слушателей, рассылка), но по архитектуре Spring Events — это Publish-Subscribe: издатель и **Listeners** развязаны через канал-мультикастер, а настоящий Subject с состоянием здесь **не нужен**».
+ - Можно сказать так: «Внутри мультикастер устроен как **Observer** (список listeners, рассылка), но по архитектуре Spring Events — это Publish-Subscribe: publisher и **Listeners** развязаны через канал-мультикастер, а настоящий Subject с состоянием здесь **не нужен**».
 
 ---
 
-«При старте контекст регистрирует всех слушателей в мультикастере. Когда издатель вызывает `publishEvent`, контекст передаёт событие мультикастеру. Мультикастер по типу события выбирает подписанных слушателей из своего реестра и вызывает каждого».
+«При старте контекст регистрирует всех listeners в мультикастере. Когда publisher вызывает `publishEvent`, контекст передаёт event мультикастеру. Мультикастер по типу event выбирает подписанных listeners из своего реестра и вызывает каждого».
 
 Одно уточнение: 
- - по умолчанию слушатели вызываются синхронно, в том же потоке, что и издатель. Асинхронность включается отдельно, например через `@Async` или через `TaskExecutor` в мультикастере.
+ - по умолчанию listeners вызываются синхронно, в том же потоке, что и publisher. Асинхронность включается отдельно, например через `@Async` или через `TaskExecutor` в мультикастере.
 
 ---
 
 **Ответ одной фразой:**
 
-> «Внутри события Spring устроены как Observer: `ApplicationEventMulticaster` хранит слушателей и рассылает им события. Для моих компонентов это publish-subscribe: издатель и слушатели не знают друг о друге и связаны только типом события. Это не Mediator: multicaster ничего не координирует, а только доставляет события.»
+> «Внутри events Spring устроены как Observer: `ApplicationEventMulticaster` хранит listeners и рассылает им events. Для моих компонентов это publish-subscribe: publisher и listeners не знают друг о друге и связаны только типом event. Это не Mediator: multicaster ничего не координирует, а только доставляет events.»
 
 Источники и цитаты: Spring и EIP — §4, GoF Mediator — §3.
 
@@ -142,16 +156,18 @@ _Mediator_ («Посредник») — паттерн, при котором о
 
 **Как читать рисунок:** 
   - слева — **классический Observer** (Subject **сам хранит** список наблюдателей и **сам вызывает** `update()`). 
-  - Справа — **события Spring** (издатель публикует событие в контекст, а `ApplicationEventMulticaster` — центральный посредник — находит нужные listener'ы по типу события и вызывает их).
+  - Справа — **events Spring** (publisher публикует event в контекст, а `ApplicationEventMulticaster` — центральный посредник — находит нужные listener'ы по типу event и вызывает их).
 
-**ApplicationEventMulticaster** имеет методы регистрации и удаления слушателей.
+**ApplicationEventMulticaster** имеет методы регистрации и удаления listeners.
 
 > **Уточнение:** Spring в официальной документации называет `ApplicationListener` реализацией «standard Observer design pattern».
 > 
 > Это верно **концептуально** (push-уведомление, ослабленная связанность). 
->  - Точнее, **структурно** это вариант Observer — **Publish–Subscribe** (публикация–подписка) с каналом событий посередине: 
->   - издатель (Publisher) не знает слушателей (**Listeners**) и не вызывает их напрямую — за это отвечает `ApplicationEventMulticaster`, который играет роль **канала событий** (event channel, event bus). Паттерном Mediator он **не** является, хотя внешне на него частично похож. Подробно — в §3 и §4.
+>  - Точнее, **структурно** это вариант Observer — **Publish–Subscribe** (публикация–подписка) с каналом events посередине: 
+>   - publisher (Publisher) не знает listeners (**Listeners**) и не вызывает их напрямую — за это отвечает `ApplicationEventMulticaster`, который играет роль **канала events** (event channel, event bus). Паттерном Mediator он **не** является, хотя внешне на него частично похож. Подробно — в §3 и §4.
 
+
+<a id="figure-explanation"></a>
 
 # Пояснение к рисунку: почему на схеме есть `ApplicationEventMulticaster`, а в коде его нет
 
@@ -162,7 +178,7 @@ _Mediator_ («Посредник») — паттерн, при котором о
 
 На самом деле противоречия нет: 
  - код показывает **публичный API Spring**, 
- - а рисунок показывает **внутреннюю архитектурную цепочку доставки события**.
+ - а рисунок показывает **внутреннюю архитектурную цепочку доставки events**.
 
 ---
 
@@ -170,21 +186,21 @@ _Mediator_ («Посредник») — паттерн, при котором о
 
 В обычном Spring-коде разработчик работает только со следующими сущностями:
 
-- `ApplicationEvent` — объект события.
-- `ApplicationEventPublisher` — API для публикации события.
-- `ApplicationListener<E>` или `@EventListener` — обработчик события.
+- `ApplicationEvent` — объект events.
+- `ApplicationEventPublisher` — API для публикации event.
+- `ApplicationListener<E>` или `@EventListener` — обработчик events.
 
 Именно поэтому в минимальном примере нет явного `ApplicationEventMulticaster`: его обычно **не создают и не вызывают вручную**.
 
 ---
 
-### Минимальный пример (доменное событие — из документации Spring)
+### Минимальный пример (доменный event — из документации Spring)
 
-**1. Событие:**
+**1. Event:**
 
 ```java
 /**
- * Доменное событие: адрес добавлен в чёрный список.
+ * Доменный event: адрес добавлен в чёрный список.
  * <p>Расширяет {@link ApplicationEvent}: Spring автоматически
  * передаст объект всем listener'ам, подписанным на этот тип.</p>
  */
@@ -193,7 +209,7 @@ public class BlockedListEvent extends ApplicationEvent {
     private final String address;
 
     /**
-     * @param source  объект, опубликовавший событие (обычно {@code this})
+     * @param source  объект, опубликовавший event (обычно {@code this})
      * @param address e-mail адрес, попавший в чёрный список
      */
     public BlockedListEvent(Object source, String address) {
@@ -213,7 +229,7 @@ public class BlockedListEvent extends ApplicationEvent {
  * Сервис рассылки.
  * <p>Реализует {@link ApplicationEventPublisherAware}, чтобы Spring
  * автоматически внедрил {@link ApplicationEventPublisher} — через него
- * сервис публикует события, <em>не зная</em>, кто на них подписан.</p>
+ * сервис публикует events, <em>не зная</em>, кто на них подписан.</p>
  */
 @Service
 public class EmailService implements ApplicationEventPublisherAware {
@@ -227,9 +243,9 @@ public class EmailService implements ApplicationEventPublisherAware {
     }
 
     /**
-     * Добавляет адрес в чёрный список и публикует событие.
-     * <p>Издатель не вызывает listener'ы напрямую —
-     * он лишь «бросает» событие в контекст.</p>
+     * Добавляет адрес в чёрный список и публикует event.
+     * <p>Publisher не вызывает listener'ы напрямую —
+     * он лишь «бросает» event в контекст.</p>
      *
      * @param address адрес для блокировки
      */
@@ -239,7 +255,7 @@ public class EmailService implements ApplicationEventPublisherAware {
 }
 ```
 
-**3. Слушатель** — стиль `ApplicationListener`:
+**3. Listener** — стиль `ApplicationListener`:
 
 ```java
 /**
@@ -253,9 +269,9 @@ public class BlockedListNotifier implements ApplicationListener<BlockedListEvent
 
     /**
      * Вызывается Spring'ом (через {@code ApplicationEventMulticaster}),
-     * <em>не</em> вызывается издателем напрямую.
+     * <em>не</em> вызывается publisher напрямую.
      *
-     * @param event опубликованное событие
+     * @param event опубликованный event
      */
     @Override
     public void onApplicationEvent(BlockedListEvent event) {
@@ -264,13 +280,13 @@ public class BlockedListNotifier implements ApplicationListener<BlockedListEvent
 }
 ```
 
-**4. Тот же слушатель** — стиль `@EventListener` (рекомендуемый):
+**4. Тот же listener** — стиль `@EventListener` (рекомендуемый):
 
 ```java
 /**
  * Listener в аннотационном стиле.
  * <p>{@link EventListener} заменяет реализацию интерфейса —
- * Spring сам определяет тип события по параметру метода.</p>
+ * Spring сам определяет тип events по параметру метода.</p>
  */
 @Component
 public class BlockedListNotifier {
@@ -278,7 +294,7 @@ public class BlockedListNotifier {
     /**
      * Вызывается контекстом при публикации {@link BlockedListEvent}.
      *
-     * @param event опубликованное событие
+     * @param event опубликованный event
      */
     @EventListener
     public void onBlocked(BlockedListEvent event) {
@@ -287,7 +303,7 @@ public class BlockedListNotifier {
 }
 ```
 ---
-.... для метода с `@EventListener` Spring создаёт отдельный объект-adapter, который реализует `ApplicationListener` и передаёт событие в ваш метод.
+.... для метода с `@EventListener` Spring создаёт отдельный объект-adapter, который реализует `ApplicationListener` и передаёт event в ваш метод.
 
 ... Каждый такой метод становится отдельным ApplicationListener.
 
@@ -304,14 +320,14 @@ publisher.publishEvent(new BlockedListEvent(this, address));
 ```
 
 - это не означает, что `EmailService` сам ищет нужные **listener**'ы и вызывает их. 
-  - На практике **вызов** уходит внутрь `ApplicationContext`, а дальше **событие** передаётся компоненту `ApplicationEventMulticaster`, который уже находит подходящие **listener**'ы и вызывает их.
+  - На практике **вызов** уходит внутрь `ApplicationContext`, а дальше **event** передаётся компоненту `ApplicationEventMulticaster`, который уже находит подходящие **listener**'ы и вызывает их.
 
 ```java
 /**
 * Сервис рассылки.
 * <p>Реализует {@link ApplicationEventPublisherAware}, чтобы Spring
 * автоматически внедрил {@link ApplicationEventPublisher} — через него
-* сервис публикует события, <em>не зная</em>, кто на них подписан.</p>
+* сервис публикует events, <em>не зная</em>, кто на них подписан.</p>
   */
   @Service
   public class EmailService implements ApplicationEventPublisherAware {
@@ -325,9 +341,9 @@ publisher.publishEvent(new BlockedListEvent(this, address));
   }
 
   /**
-    * Добавляет адрес в чёрный список и публикует событие.
-    * <p>Издатель не вызывает listener'ы напрямую —
-    * он лишь «бросает» событие в контекст.</p>
+    * Добавляет адрес в чёрный список и публикует event.
+    * <p>Publisher не вызывает listener'ы напрямую —
+    * он лишь «бросает» event в контекст.</p>
     *
     * @param address адрес для блокировки
       */
@@ -349,12 +365,91 @@ EmailService
 
 - Именно эту внутреннюю цепочку рисунок и показывает.
 
+<a id="multicaster-registry"></a>
+
+### Кто заполняет реестр listeners и как multicaster находит нужных
+
+**Коротко.**
+
+- **Реестр listeners.** Он хранится внутри `ApplicationEventMulticaster`. Заполняет его не сам multicaster, а `ApplicationContext` и его помощники: `registerListeners()`, `ApplicationListenerDetector`, `EventListenerMethodProcessor`.
+- **Реестра publishers нет.** `ApplicationContext` не ведёт список тех, кто вызывает `publishEvent(...)`. Вызвать этот метод может любой код, которому внедрили `ApplicationEventPublisher`.
+- **Списка типов events нет.** Multicaster не хранит каталог типов events. Тип он читает из объекта event в момент `publishEvent(...)`, затем перебирает реестр listeners и оставляет тех, чей параметр принимает этот тип.
+
+Каталога типов нет, и сравнение типов при этом есть: тип не ищут в заранее составленном списке. Его берут у конкретного объекта event, который только что опубликовали.
+
+**Шаг 1. Создание пустого канала.** В методе `AbstractApplicationContext.refresh()` контекст вызывает `initApplicationEventMulticaster()`. Если в контексте есть bean с именем `applicationEventMulticaster`, контекст берёт его, иначе создаёт `SimpleApplicationEventMulticaster`. На этом шаге реестр listeners пустой.
+
+**Шаг 2. Регистрация bean-listeners по имени.** Сразу после этого контекст вызывает `registerListeners()`:
+- передаёт в multicaster listeners, которых добавили вручную через `addApplicationListener(...)` до запуска контекста, методом `multicaster.addApplicationListener(listener)`;
+- ищет имена всех bean, которые реализуют `ApplicationListener`, и передаёт каждое имя методом `multicaster.addApplicationListenerBean(beanName)`. Передаются **имена bean**, а не объекты: сами bean на этом шаге ещё не созданы;
+- рассылает «ранние» events (early events), опубликованные до появления multicaster'а.
+
+**Шаг 3. Регистрация готовых объектов listeners.** Когда контейнер создаёт bean, который реализует `ApplicationListener`, `ApplicationListenerDetector` (это `BeanPostProcessor`) добавляет готовый объект в multicaster через `addApplicationListener(...)`.
+
+**Шаг 4. Регистрация методов с `@EventListener`.** `registerListeners()` такие методы **не** регистрирует. Это делает `EventListenerMethodProcessor` в методе `afterSingletonsInstantiated()`, то есть после создания всех singleton-bean. Для каждого метода с `@EventListener` он создаёт объект-адаптер `ApplicationListenerMethodAdapter` и добавляет его в multicaster через `context.addApplicationListener(...)`.
+
+**Что хранит multicaster после старта.** Две коллекции: `Set<ApplicationListener<?>>` с объектами-listeners и `Set<String>` с именами bean-listeners. Плюс кэш `Map<ListenerCacheKey, CachedListenerRetriever>`, который заполняется позже, при публикации (шаг 6).
+
+**Чего multicaster не хранит:**
+- **Реестра publishers.** Публиковать event может любой код, у которого есть `ApplicationEventPublisher`; заранее его никто не регистрирует.
+- **Списка типов events.** Тип multicaster читает из объекта event только в момент вызова `publishEvent(...)`. Заранее составленного списка типов у него нет.
+
+**Шаг 5. Публикация.** Publisher вызывает `publishEvent(event)`. Если `event` не наследует `ApplicationEvent` (например, это обычный объект `OrderCreated`), контекст оборачивает его в `PayloadApplicationEvent<OrderCreated>`. Затем контекст определяет тип event (`ResolvableType`) и вызывает `multicaster.multicastEvent(event, eventType)`.
+
+**Шаг 6. Подбор listeners по типу event.** Внутри `multicastEvent(...)` multicaster вызывает `getApplicationListeners(event, eventType)`:
+- строит ключ кэша `ListenerCacheKey` из двух частей: тип event и класс источника этого event (`event.getSource().getClass()`);
+- если по этому ключу в кэше уже есть готовый список listeners, сразу берёт его;
+- если нет — перебирает весь реестр и для каждого listener вызывает `supportsEvent(...)`. Для обычного `ApplicationListener<OrderCreatedEvent>` тип event берётся из generic-параметра через `GenericApplicationListenerAdapter`; для метода с `@EventListener` — из параметра метода через `ApplicationListenerMethodAdapter`;
+- сортирует подходящих listeners по `@Order` и кладёт список в кэш.
+
+**Шаг 7. Вызов.** Multicaster по очереди вызывает `onApplicationEvent(event)` у каждого listener из списка: по умолчанию в потоке publisher, а если multicaster'у задан `TaskExecutor` — в потоках этого executor'а.
+
+Когда в реестр добавляют или из него удаляют listener (`addApplicationListener`, `removeApplicationListener`), multicaster очищает кэш, и при следующей публикации список подбирается заново.
+
+**Схема:**
+
+```text
+AbstractApplicationContext.refresh()
+  ├── initApplicationEventMulticaster()   создать пустой SimpleApplicationEventMulticaster
+  ├── registerListeners()                 добавить имена bean с implements ApplicationListener
+  ├── finishBeanFactoryInitialization()   создать singleton-bean:
+  │     ├── ApplicationListenerDetector   добавить готовые объекты listeners
+  │     └── EventListenerMethodProcessor  добавить адаптеры для методов с @EventListener
+  └── ...
+
+publishEvent(new OrderCreated(42))
+  → PayloadApplicationEvent<OrderCreated>
+  → multicaster.multicastEvent(event, eventType)
+  → getApplicationListeners: ключ (тип event, класс источника) → кэш или перебор реестра + supportsEvent
+  → onApplicationEvent(...) у каждого подходящего listener
+```
+
+**Источник:** [Spring Framework, исходный код — `AbstractApplicationContext.registerListeners()`](https://github.com/spring-projects/spring-framework/blob/main/spring-context/src/main/java/org/springframework/context/support/AbstractApplicationContext.java)
+
+> **EN:** «Add beans that implement ApplicationListener as listeners. Doesn't affect other listeners, which can be added without being beans.» / «Do not initialize FactoryBeans here: We need to leave all regular beans uninitialized to let post-processors apply to them!»
+
+> **RU:** «Добавляет bean, реализующие ApplicationListener, как listeners. Не затрагивает других listeners, которые можно добавить, не делая их bean.» / «Не инициализировать здесь FactoryBean: все обычные bean нужно оставить неинициализированными, чтобы к ним применились post-processor'ы!»
+
+**Источник:** [Spring Framework, исходный код — `AbstractApplicationEventMulticaster`](https://github.com/spring-projects/spring-framework/blob/main/spring-context/src/main/java/org/springframework/context/event/AbstractApplicationEventMulticaster.java)
+
+> **EN:** «Return a Collection of ApplicationListeners matching the given event type. Non-matching listeners get excluded early.» / «Cache key for ListenerRetrievers, based on event type and source type.»
+
+> **RU:** «Возвращает коллекцию ApplicationListener, подходящих под данный тип event. Неподходящие listeners отсеиваются заранее.» / «Ключ кэша для ListenerRetriever, основанный на типе event и типе источника.»
+
+**Источник:** [Javadoc — `EventListenerMethodProcessor`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/event/EventListenerMethodProcessor.html)
+
+> **EN:** «Registers EventListener methods as individual ApplicationListener instances.»
+
+> **RU:** «Регистрирует методы с EventListener как отдельные экземпляры ApplicationListener.»
+
+> **На собеседовании:** «Реестр listeners лежит внутри multicaster, а заполняет его `ApplicationContext`. Реестра publishers нет, и каталога типов events тоже нет. При `publishEvent(...)` multicaster читает тип у объекта event, перебирает listeners, проверяет `supportsEvent` и кэширует результат по ключу „тип event + класс источника“.»
+
 ---
 
 ## Почему `ApplicationEventMulticaster` есть на схеме
 
 Он нужен на рисунке не потому, что разработчик обязан его писать в коде, а потому что без него трудно объяснить, 
- - **почему Spring Events структурно — это Observer в варианте Publish–Subscribe (с каналом событий посередине), а не классический GoF Observer**.
+ - **почему Spring Events структурно — это Observer в варианте Publish–Subscribe (с каналом events посередине), а не классический GoF Observer**.
 
 В GoF Observer:
 
@@ -363,9 +458,9 @@ EmailService
 
 В Spring Events:
 
-- издатель **не хранит** список listener'ов;
-- издатель **не вызывает** listener'ы напрямую;
-- эту работу делает `ApplicationEventMulticaster` как центральный посредник — канал событий (event bus), а не Mediator в смысле GoF.
+- publisher **не хранит** список listener'ов;
+- publisher **не вызывает** listener'ы напрямую;
+- эту работу делает `ApplicationEventMulticaster` как центральный посредник — канал events (event bus), а не Mediator в смысле GoF.
 
 Именно поэтому на рисунке его показывать правильно.
 
@@ -379,8 +474,8 @@ EmailService
 
 Если задача — писать Spring-приложение, достаточно помнить следующее:
 
-- событие создаётся как `ApplicationEvent` или обычный объект;
-- событие публикуется через `ApplicationEventPublisher`;
+- event создаётся как `ApplicationEvent` или обычный объект;
+- event публикуется через `ApplicationEventPublisher`;
 - обработка делается через `ApplicationListener` или `@EventListener`.
 
 На этом уровне `ApplicationEventMulticaster` можно вообще не трогать.
@@ -389,8 +484,8 @@ EmailService
 
 Если задача — **понять паттерн**, тогда важно знать внутреннюю роль `ApplicationEventMulticaster`:
 
-- он выступает **каналом событий** (посредником-доставщиком) между _издателем_ и _listener'ами_;
-- он решает, какие **listener'ы** подходят _по типу_ **события**;
+- он выступает **каналом events** (посредником-доставщиком) между _publisher_ и _listener'ами_;
+- он решает, какие **listener'ы** подходят _по типу_ **events**;
 - он делает реальную dispatch-**рассылку** внутри Spring.
 
 ---
@@ -399,11 +494,11 @@ EmailService
 
 Самая удобная формулировка такая:
 
-> В примере кода показан **внешний API**, с которым работает разработчик, а на рисунке показан **внутренний механизм доставки события** внутри Spring.
+> В примере кода показан **внешний API**, с которым работает разработчик, а на рисунке показан **внутренний механизм доставки events** внутри Spring.
 
 Или ещё короче:
 
-> `publishEvent()` — это то, что пишет разработчик; `ApplicationEventMulticaster` — это то, через что Spring реально доставляет событие listener'ам.
+> `publishEvent()` — это то, что пишет разработчик; `ApplicationEventMulticaster` — это то, через что Spring реально доставляет event listener'ам.
 
 ---
 
@@ -414,7 +509,7 @@ EmailService
 
 Для текущего документа логичнее оставить `ApplicationEventMulticaster` на рисунке, но рядом с примером кода добавить короткое пояснение в отдельной теме:
 
-> `ApplicationEventMulticaster` не участвует в пользовательском коде напрямую, но участвует во внутренней доставке события внутри `ApplicationContext`.
+> `ApplicationEventMulticaster` не участвует в пользовательском коде напрямую, но участвует во внутренней доставке events внутри `ApplicationContext`.
 
 Так схема и код перестают конфликтовать: 
   - один показывает **что пишет разработчик**, другой — **как это реально работает внутри Spring**.
@@ -620,7 +715,9 @@ public class OrderObserverDemo {
 
 <a id="pattern-listener"></a>
 
-## 2. Слушатель в Spring — `ApplicationListener` / `@EventListener`
+<a id="2-слушатель-в-spring--applicationlistener--eventlistener"></a>
+
+## 2. Listener в Spring — `ApplicationListener` / `@EventListener`
 
 ### Как выглядит паттерн в Spring
 
@@ -628,20 +725,20 @@ public class OrderObserverDemo {
 
 | Роль | Класс / API в Spring | Что происходит |
 |------|----------------------|----------------|
-| **Событие** | `ApplicationEvent` (или любой объект, с 4.2) | Объект-сообщение: «произошло X». |
-| **Издатель** | `ApplicationEventPublisher` | Вызывает `publishEvent(event)` — **не** знает список listener'ов и **не** вызывает их напрямую. |
-| **Слушатель** | `ApplicationListener<E>` или метод с `@EventListener` | Bean в контексте; Spring **регистрирует** его и **вызывает** при совпадении типа события. |
-| **Раздача** | `ApplicationEventMulticaster` (внутри контекста) | **Канал событий** (event bus): хранит listener'ы, находит подходящие по типу события и вызывает их (по умолчанию это `SimpleApplicationEventMulticaster`, вызов **синхронный**, в потоке издателя). |
+| **Event** | `ApplicationEvent` (или любой объект, с 4.2) | Объект-сообщение: «произошло X». |
+| **Publisher** | `ApplicationEventPublisher` | Вызывает `publishEvent(event)` — **не** знает список listener'ов и **не** вызывает их напрямую. |
+| **Listener** | `ApplicationListener<E>` или метод с `@EventListener` | Bean в контексте; Spring **регистрирует** его и **вызывает** при совпадении типа event. |
+| **Раздача** | `ApplicationEventMulticaster` (внутри контекста) | **Канал events** (event bus): хранит listener'ы, находит подходящие по типу event и вызывает их (по умолчанию это `SimpleApplicationEventMulticaster`, вызов **синхронный**, в потоке publisher). |
 
 **Цепочка в одну строку:** `publishEvent(event)` → `ApplicationEventMulticaster` → `onApplicationEvent(event)` / метод с `@EventListener`.
 
-### Минимальный пример (доменное событие — из документации Spring)
+### Минимальный пример (доменный event — из документации Spring)
 
-**1. Событие:**
+**1. Event:**
 
 ```java
 /**
- * Доменное событие: адрес добавлен в чёрный список.
+ * Доменный event: адрес добавлен в чёрный список.
  * <p>Расширяет {@link ApplicationEvent}: Spring автоматически
  * передаст объект всем listener'ам, подписанным на этот тип.</p>
  */
@@ -650,7 +747,7 @@ public class BlockedListEvent extends ApplicationEvent {
     private final String address;
 
     /**
-     * @param source  объект, опубликовавший событие (обычно {@code this})
+     * @param source  объект, опубликовавший event (обычно {@code this})
      * @param address e-mail адрес, попавший в чёрный список
      */
     public BlockedListEvent(Object source, String address) {
@@ -670,7 +767,7 @@ public class BlockedListEvent extends ApplicationEvent {
  * Сервис рассылки.
  * <p>Реализует {@link ApplicationEventPublisherAware}, чтобы Spring
  * автоматически внедрил {@link ApplicationEventPublisher} — через него
- * сервис публикует события, <em>не зная</em>, кто на них подписан.</p>
+ * сервис публикует events, <em>не зная</em>, кто на них подписан.</p>
  */
 @Service
 public class EmailService implements ApplicationEventPublisherAware {
@@ -684,9 +781,9 @@ public class EmailService implements ApplicationEventPublisherAware {
     }
 
     /**
-     * Добавляет адрес в чёрный список и публикует событие.
-     * <p>Издатель не вызывает listener'ы напрямую —
-     * он лишь «бросает» событие в контекст.</p>
+     * Добавляет адрес в чёрный список и публикует event.
+     * <p>Publisher не вызывает listener'ы напрямую —
+     * он лишь «бросает» event в контекст.</p>
      *
      * @param address адрес для блокировки
      */
@@ -696,7 +793,7 @@ public class EmailService implements ApplicationEventPublisherAware {
 }
 ```
 
-**3. Слушатель** — стиль `ApplicationListener`:
+**3. Listener** — стиль `ApplicationListener`:
 
 ```java
 /**
@@ -710,9 +807,9 @@ public class BlockedListNotifier implements ApplicationListener<BlockedListEvent
 
     /**
      * Вызывается Spring'ом (через {@code ApplicationEventMulticaster}),
-     * <em>не</em> вызывается издателем напрямую.
+     * <em>не</em> вызывается publisher напрямую.
      *
-     * @param event опубликованное событие
+     * @param event опубликованный event
      */
     @Override
     public void onApplicationEvent(BlockedListEvent event) {
@@ -721,13 +818,13 @@ public class BlockedListNotifier implements ApplicationListener<BlockedListEvent
 }
 ```
 
-**4. Тот же слушатель** — стиль `@EventListener` (рекомендуемый):
+**4. Тот же listener** — стиль `@EventListener` (рекомендуемый):
 
 ```java
 /**
  * Listener в аннотационном стиле.
  * <p>{@link EventListener} заменяет реализацию интерфейса —
- * Spring сам определяет тип события по параметру метода.</p>
+ * Spring сам определяет тип events по параметру метода.</p>
  */
 @Component
 public class BlockedListNotifier {
@@ -735,7 +832,7 @@ public class BlockedListNotifier {
     /**
      * Вызывается контекстом при публикации {@link BlockedListEvent}.
      *
-     * @param event опубликованное событие
+     * @param event опубликованный event
      */
     @EventListener
     public void onBlocked(BlockedListEvent event) {
@@ -744,7 +841,7 @@ public class BlockedListNotifier {
 }
 ```
 
-> `ApplicationListener` **extends** `java.util.EventListener` — это **Java-интерфейс-маркер** для callback-модели (Swing, servlet events и т.д.). Spring строит на нём **свой** механизм событий контекста.
+> `ApplicationListener` **extends** `java.util.EventListener` — это **Java-интерфейс-маркер** для callback-модели (Swing, servlet events и т.д.). Spring строит на нём свой механизм events `ApplicationContext`.
 
 **Источник:** [Spring Framework — Application Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events) · [Javadoc — `ApplicationListener`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationListener.html)
 
@@ -752,7 +849,88 @@ public class BlockedListNotifier {
 
 > **EN (Javadoc):** «Interface to be implemented by application event listeners. Based on the standard EventListener interface for the Observer design pattern.»
 
-> **RU:** «Обработка событий в ApplicationContext идёт через ApplicationEvent и ApplicationListener. Если bean с ApplicationListener развёрнут в контексте, при каждой публикации ApplicationEvent он получает уведомление. По сути, это стандартный паттерн Observer.» / «Интерфейс слушателя событий приложения. Основан на стандартном EventListener — интерфейсе для паттерна Observer.»
+> **RU:** «Обработка events в ApplicationContext идёт через ApplicationEvent и ApplicationListener. Если bean с ApplicationListener развёрнут в ApplicationContext, при каждой публикации ApplicationEvent он получает уведомление. По сути, это стандартный паттерн Observer.» / «Интерфейс listener events приложения. Основан на стандартном EventListener — интерфейсе для паттерна Observer.»
+
+<a id="event-any-object"></a>
+
+### Любой объект как event
+
+Коротко.
+
+- Аннотация на класс event не нужна. `publishEvent` с Spring 4.2 принимает любой объект, например `new OrderCreated("A-1")`.
+- Listener нужен по-прежнему. Без метода `@EventListener` или без `ApplicationListener` event никто не получит.
+- `implements ApplicationListener<OrderCreated>` не компилируется, если `OrderCreated` не наследует `ApplicationEvent`. Параметр типа этого интерфейса — наследник `ApplicationEvent`.
+
+Как `ApplicationContext` выбирает listener.
+
+1. Publisher вызывает `publisher.publishEvent(new OrderCreated("A-1"))`.
+2. `ApplicationContext` видит, что `OrderCreated` не наследует `ApplicationEvent`, и оборачивает объект в `PayloadApplicationEvent<OrderCreated>`.
+3. `ApplicationEventMulticaster` смотрит реестр listeners. У каждого listener записан тип, который он принимает: у метода `@EventListener` это тип параметра метода.
+4. У метода `void onCreated(OrderCreated event)` записан тип `OrderCreated`. Multicaster сравнивает его с типом объекта внутри `PayloadApplicationEvent`. Типы совпадают, метод вызывается, в параметр приходит `OrderCreated`, не обёртка.
+5. `ApplicationListener<BlockedListEvent>` этот вызов не получает: у него записан тип `BlockedListEvent`.
+
+Для обычного объекта через интерфейс, а не через `@EventListener`, listener объявляют как `ApplicationListener<PayloadApplicationEvent<OrderCreated>>`. С Spring 5.3 то же самое делает `ApplicationListener.forPayload`.
+
+```java
+
+public class OrderCreated {
+
+    private final String id;
+
+    public OrderCreated(String id) {
+        this.id = id;
+    }
+
+    public String getId() {
+        return id;
+    }
+}
+
+@Component
+public class OrderCreatedListener {
+
+    @EventListener
+    public void onCreated(OrderCreated event) {
+        System.out.println(event.getId());
+    }
+}
+
+```
+
+**Источник:** [Spring Framework — Application Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events) · [Javadoc — `ApplicationListener`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationListener.html)
+
+> **EN:** «As of Spring 4.2, the event infrastructure … offers … the ability to publish any arbitrary event (that is, an object that does not necessarily extend from ApplicationEvent). When such an object is published, we wrap it in an event for you.»
+
+> **EN (Javadoc):** «E - the specific ApplicationEvent subclass to listen to.»
+
+> **RU:** «С Spring 4.2 можно публиковать любой объект, который не обязательно наследует `ApplicationEvent`. Когда такой объект публикуют, Spring оборачивает его в event.» / «E — конкретный подкласс `ApplicationEvent`, который listener принимает.»
+
+<a id="publisher-field"></a>
+
+### Какой объект лежит в поле publisher
+
+`ApplicationEventPublisher` — один общий объект. `ApplicationContext` подставляет его в каждый класс, который публикует events. Класс `ApplicationContext` реализует интерфейс `ApplicationEventPublisher`, поэтому этот объект — сам `ApplicationContext`.
+
+Класс, который публикует event, например `EmailService`, хранит `ApplicationEventPublisher` в поле. Публикация — это вызов `publishEvent` на этом поле. `EmailService` интерфейс `ApplicationEventPublisher` не реализует.
+
+Когда `ApplicationContext` создаёт bean `EmailService`, он вызывает `setApplicationEventPublisher` и передаёт туда себя. То же самое он передаёт в `OrderService` и в любой другой такой класс: во всех полях один объект.
+
+<a id="event-webflux"></a>
+
+### Публикация event в WebFlux
+
+Коротко.
+
+- WebFlux не подменяет `ApplicationEventMulticaster`. Метод `publishEvent` остаётся методом `void`.
+- Listener выполняется в том потоке, который вызвал `publishEvent`. Если вызов идёт из контроллера WebFlux, это поток event loop. Долгая работа в listener занимает этот поток.
+- Если метод `@EventListener` возвращает `Mono` или `Flux`, порядок такой. `ApplicationListenerMethodAdapter` сразу вызывает `subscribe` и не ждёт, пока `Mono` завершится. Затем `publishEvent` возвращает управление в класс, который его вызвал. Этот класс продолжает работу и `Mono` не ждёт. Элементы, которые `Mono` выдаст позже, адаптер публикует как новые events.
+- Если этот `Mono` позже завершается ошибкой, исключение возникает уже после возврата из `publishEvent`. Класс, который вызвал `publishEvent`, исключение не получает и не может его поймать. `ApplicationListenerMethodAdapter` в `onError` пишет в лог текст `Unexpected error occurred in asynchronous listener` и само исключение.
+
+**Источник:** [ApplicationListenerMethodAdapter](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-context/src/main/java/org/springframework/context/event/ApplicationListenerMethodAdapter.java)
+
+> **EN:** «if (reactiveStreamsPresent && new ReactiveResultHandler().subscribeToPublisher(result))» / «adapter.toPublisher(result).subscribe(new EventPublicationSubscriber());» / «public void onNext(Object o) { publishEvents(o); }» / «logger.error("Unexpected error occurred in asynchronous listener", t);»
+
+> **RU:** «Если метод listener вернул `Mono`, адаптер сразу вызывает `subscribe` и не ждёт завершения. `publishEvent` после этого возвращается в класс, который его вызвал. Если `Mono` позже завершается ошибкой, адаптер пишет исключение в лог. Класс, который вызвал `publishEvent`, это исключение не получает.»
 
 ---
 
@@ -781,7 +959,7 @@ public class AppStartupListener {
     /**
      * Вызывается контекстом, когда приложение готово обслуживать запросы.
      *
-     * @param event событие готовности приложения; содержит ссылку
+     * @param event event готовности приложения; содержит ссылку
      *              на {@link org.springframework.boot.SpringApplication}
      */
     @EventListener(ApplicationReadyEvent.class)
@@ -794,14 +972,14 @@ public class AppStartupListener {
 | Шаг | Кто | Действие |
 |-----|-----|----------|
 | 1 | Spring Boot | Публикует `ApplicationReadyEvent` **после** runners |
-| 2 | `ApplicationContext` | Передаёт событие `ApplicationEventMulticaster` |
+| 2 | `ApplicationContext` | Передаёт event `ApplicationEventMulticaster` |
 | 3 | Ваш bean | Метод `onAppReady` вызывается **контекстом**, не вами |
 
 **Источник:** [Spring Boot — Application events](https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners) · [Javadoc — `ApplicationReadyEvent`](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/context/event/ApplicationReadyEvent.html)
 
 > **EN:** «An ApplicationReadyEvent is sent after any application and command-line runners have been called.» / «Event published as late as conceivably possible to indicate that the application is ready to service requests.»
 
-> **RU:** «ApplicationReadyEvent отправляется после выполнения всех ApplicationRunner и CommandLineRunner.» / «Событие публикуется максимально поздно при старте — приложение готово обслуживать запросы.»
+> **RU:** «ApplicationReadyEvent отправляется после выполнения всех ApplicationRunner и CommandLineRunner.» / «Event публикуется максимально поздно при старте — приложение готово обслуживать запросы.»
 
 ---
 
@@ -929,14 +1107,18 @@ alice.send("Привет всем!");
 | Критерий | Mediator (GoF) | `ApplicationEventMulticaster` |
 |----------|----------------|-------------------------------|
 | **Что хранит посредник** | **Логику сценария**: кто, на что и как должен отреагировать (`FontDialogDirector`; даже в `ChatRoom` есть правило «не отправлять самому себе») | Только **реестр listener'ов**; бизнес-логики нет |
-| **Роли участников** | Каждый коллега — и **отправитель**, и **получатель** (`ChatUser` и `send()`, и `receive()`) | Издатель только **публикует**, listener только **получает** — доставка **однонаправленная** |
-| **Как выбирается получатель** | Решает посредник — в зависимости от сценария | Только по **типу события** (плюс `condition` у `@EventListener`) |
+| **Роли участников** | Каждый коллега — и **отправитель**, и **получатель** (`ChatUser` и `send()`, и `receive()`) | Publisher только **публикует**, listener только **получает** — доставка **однонаправленная** |
+| **Как выбирается получатель** | Решает посредник — в зависимости от сценария | Только по **типу event** (плюс `condition` у `@EventListener`) |
 | **Знает ли посредник конкретных участников** | Да — обычно держит ссылки на конкретных коллег и вызывает их специфичные методы | Нет — работает с абстракцией `ApplicationListener`, ему безразлично, кто подписан |
-| **Точное название** | Mediator (посредник) | Publish–Subscribe Channel / event bus (канал / шина событий) |
+| **Точное название** | Mediator (посредник) | Publish–Subscribe Channel / event bus (канал / шина events) |
 
-**Итог:** `ApplicationEventMulticaster` **частично похож на Mediator** (общая идея — участники не знают друг друга), но точный термин для него — **канал событий** (event channel, event bus) из модели Publish–Subscribe. Подробно — в §4.
+**Аналогия для собеседования:**
+- **Mediator — диспетчерская вышка аэропорта.** Вышка знает каждый самолёт и решает за них: «борт 1 садится, борт 2 ждёт, борт 3 уходит на второй круг». Самолёты общаются только через вышку и по её правилам.
+- **Multicaster — радиоэфир.** В эфир передают «рейс 42 приземлился». Все, кто настроен на эту частоту (такси, уборка, табло), сами решают, что делать. Эфир никого не координирует и не знает, кто его слушает.
 
-> **Нюанс из GoF:** в главе Observer (раздел Implementation) книга описывает отдельный объект `ChangeManager`, который хранит связи Subject → Observer, определяет стратегию обновления и рассылает уведомления, и называет его примером паттерна Mediator. Простейший его вариант (`SimpleChangeManager`) просто уведомляет всех наблюдателей — по смыслу это близко к `ApplicationEventMulticaster`. Отсюда и источник сходства; однако для Spring Events общепринятое и более точное название — Publish–Subscribe с каналом событий.
+**Итог:** `ApplicationEventMulticaster` **частично похож на Mediator** (общая идея — участники не знают друг друга), но точный термин для него — **канал events** (event channel, event bus) из модели Publish–Subscribe. Подробно — в §4.
+
+> **Нюанс из GoF:** в главе Observer (раздел Implementation) книга описывает отдельный объект `ChangeManager`, который хранит связи Subject → Observer, определяет стратегию обновления и рассылает уведомления, и называет его примером паттерна Mediator. Простейший его вариант (`SimpleChangeManager`) просто уведомляет всех наблюдателей — по смыслу это близко к `ApplicationEventMulticaster`. Отсюда и источник сходства; однако для Spring Events общепринятое и более точное название — Publish–Subscribe с каналом events.
 
 Откуда берётся сходство Mediator и Observer, хорошо объясняет Refactoring.Guru:
 
@@ -944,7 +1126,7 @@ alice.send("Привет всем!");
 
 > **EN:** «The primary goal of Mediator is to eliminate mutual dependencies among a set of system components. Instead, these components become dependent on a single mediator object … There's a popular implementation of the Mediator pattern that relies on Observer. The mediator object plays the role of publisher, and the components act as subscribers … When Mediator is implemented this way, it may look very similar to Observer.»
 
-> **RU:** «Цель Mediator — устранить прямые зависимости между компонентами, сделав их зависимыми от единственного объекта-посредника … Существует популярная реализация паттерна Mediator, основанная на Observer: объект-посредник играет роль издателя, а компоненты — подписчиков. В таком виде Mediator очень похож на Observer.»
+> **RU:** «Цель Mediator — устранить прямые зависимости между компонентами, сделав их зависимыми от единственного объекта-посредника … Существует популярная реализация паттерна Mediator, основанная на Observer: объект-посредник играет роль publisher, а компоненты — подписчиков. В таком виде Mediator очень похож на Observer.»
 
 ---
 
@@ -968,19 +1150,19 @@ alice.send("Привет всем!");
 
 | Критерий | GoF Observer | Spring Events (Listener) |
 |----------|-------------|--------------------------|
-| **Идея** | Push-уведомление при изменении состояния | Push-уведомление при наступлении события |
+| **Идея** | Push-уведомление при изменении состояния | Push-уведомление при наступлении events |
 | **Кто хранит список получателей** | Сам Subject | `ApplicationEventMulticaster` (посредник) |
-| **Знает ли издатель получателей** | **Да** — Subject хранит `List<Observer>` | **Нет** — издатель знает только `ApplicationEventPublisher` |
-| **Посредник** | Отсутствует | `ApplicationEventMulticaster` — канал событий (event bus) модели Publish–Subscribe, **не** Mediator |
-| **Триггер** | Изменение **состояния** объекта | Любой **факт** (событие) |
+| **Знает ли publisher получателей** | **Да** — Subject хранит `List<Observer>` | **Нет** — publisher знает только `ApplicationEventPublisher` |
+| **Посредник** | Отсутствует | `ApplicationEventMulticaster` — канал events (event bus) модели Publish–Subscribe, **не** Mediator |
+| **Триггер** | Изменение **состояния** объекта | Любой **факт** (event) |
 
-**Итог:** Spring называет свою систему Observer по **концепции** (push + слабая связанность). Структурно же это **Observer в варианте Publish–Subscribe**: между издателем и listener'ами стоит канал событий — `ApplicationEventMulticaster`. Слово «listener» пришло из интерфейса-маркера `java.util.EventListener`, который расширяет `ApplicationListener`; именно поэтому в разговорной практике Spring-код с `@EventListener` принято называть listener'ом. Паттерна Mediator здесь **нет** — см. §3.
+**Итог:** Spring называет свою систему Observer по **концепции** (push + слабая связанность). Структурно же это **Observer в варианте Publish–Subscribe**: между publisher и listener'ами стоит канал events — `ApplicationEventMulticaster`. Слово «listener» пришло из интерфейса-маркера `java.util.EventListener`, который расширяет `ApplicationListener`; именно поэтому в разговорной практике Spring-код с `@EventListener` принято называть listener'ом. Паттерна Mediator здесь **нет** — см. §3.
 
 [blog.beezwax.net](https://blog.beezwax.net/did-you-hear-something-observer-pattern-vs-event-listeners/) формулирует практическое разграничение:
 
 > **EN:** «Observers are registered to the subjects they are observing, and **a subject knows all the observers it notifies**. Listeners, on the other hand, are listening for events on a global Events instance … **Any objects that are triggering events will broadcast their events without knowing who they are broadcasting to.**»
 
-> **RU:** «Наблюдатели регистрируются у конкретного Subject, и **Subject знает всех своих Observer'ов**. Listener'ы же слушают события через глобальный экземпляр Events … **Любой объект, публикующий событие, не знает, кто его слушает.**»
+> **RU:** «Наблюдатели регистрируются у конкретного Subject, и **Subject знает всех своих Observer'ов**. Listener'ы же слушают events через глобальный экземпляр Events … **Любой объект, публикующий event, не знает, кто его слушает.**»
 
 ### Классический GoF Observer — кто что делает
 
@@ -994,9 +1176,9 @@ alice.send("Привет всем!");
 
 | Роль | Тип в Spring | Что делает |
 |------|--------------|------------|
-| **Издатель** | `ApplicationEventPublisher` (обычно это сам `ApplicationContext`) | Вызывает `publishEvent()`; **не знает** подписчиков |
-| **Канал событий** | `ApplicationEventMulticaster` (по умолчанию `SimpleApplicationEventMulticaster`) | **Хранит** listener'ы, **подбирает** их по типу события и **вызывает** |
-| **Подписчики** | `ApplicationListener<E>` / методы с `@EventListener` | Получают событие; издателя не знают |
+| **Publisher** | `ApplicationEventPublisher` (обычно это сам `ApplicationContext`) | Вызывает `publishEvent()`; **не знает** подписчиков |
+| **Канал events** | `ApplicationEventMulticaster` (по умолчанию `SimpleApplicationEventMulticaster`) | **Хранит** listener'ы, **подбирает** их по типу event и **вызывает** |
+| **Подписчики** | `ApplicationListener<E>` / методы с `@EventListener` | Получают event; publisher не знают |
 
 **Источник:** [Javadoc — `ApplicationEventPublisher`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationEventPublisher.html) · [Javadoc — `ApplicationEventMulticaster`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/event/ApplicationEventMulticaster.html) · [Spring Framework — Standard and Custom Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events)
 
@@ -1006,21 +1188,21 @@ alice.send("Привет всем!");
 
 > **EN (Reference):** «Finally, as with classic ApplicationListener implementations, the actual multicasting happens via a context-wide ApplicationEventMulticaster at runtime. By default, this is a SimpleApplicationEventMulticaster with synchronous event publication in the caller thread.»
 
-> **RU:** «Интерфейс, инкапсулирующий функциональность публикации событий. Служит суперинтерфейсом для ApplicationContext.» / «Такая публикация — по сути передача события multicaster'у; она не означает ни синхронного, ни асинхронного, ни даже немедленного выполнения.» / «Интерфейс для объектов, которые управляют набором объектов ApplicationListener и публикуют им события. ApplicationEventPublisher — обычно Spring ApplicationContext — может использовать ApplicationEventMulticaster как делегата для фактической публикации событий.» / «Как и для классических реализаций ApplicationListener, фактическая рассылка во время выполнения идёт через общий для контекста ApplicationEventMulticaster. По умолчанию это SimpleApplicationEventMulticaster с синхронной публикацией в потоке вызывающего кода.»
+> **RU:** «Интерфейс, инкапсулирующий функциональность публикации events. Служит суперинтерфейсом для ApplicationContext.» / «Такая публикация — по сути передача events multicaster'у; она не означает ни синхронного, ни асинхронного, ни даже немедленного выполнения.» / «Интерфейс для объектов, которые управляют набором объектов ApplicationListener и публикуют им events. ApplicationEventPublisher — обычно Spring ApplicationContext — может использовать ApplicationEventMulticaster как делегата для фактической публикации events.» / «Как и для классических реализаций ApplicationListener, фактическая рассылка во время выполнения идёт через общий для контекста ApplicationEventMulticaster. По умолчанию это SimpleApplicationEventMulticaster с синхронной публикацией в потоке вызывающего кода.»
 
 ### Правильное название — Publish–Subscribe
 
-Модель, в которой издатель не знает подписчиков, а между ними стоит канал, называется **Publish–Subscribe** (публикация–подписка). В книге *Enterprise Integration Patterns* (Gregor Hohpe, Bobby Woolf, 2003) она описана как паттерн **Publish-Subscribe Channel** (канал публикации–подписки).
+Модель, в которой publisher не знает подписчиков, а между ними стоит канал, называется **Publish–Subscribe** (публикация–подписка). В книге *Enterprise Integration Patterns* (Gregor Hohpe, Bobby Woolf, 2003) она описана как паттерн **Publish-Subscribe Channel** (канал публикации–подписки).
 
 **Источник:** [Enterprise Integration Patterns — Publish-Subscribe Channel](https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html)
 
 > **EN:** «Send the event on a Publish-Subscribe Channel, which delivers a copy of a particular event to each receiver.»
 
-> **RU:** «Отправьте событие в Publish-Subscribe Channel, который доставляет копию этого события каждому получателю.»
+> **RU:** «Отправьте event в Publish-Subscribe Channel, который доставляет копию этого event каждому получателю.»
 
-Внутри одного процесса (одного `ApplicationContext`) роль такого канала играет `ApplicationEventMulticaster`. Поэтому его можно назвать **шиной событий** (event bus), а всю систему — неформально «Spring event bus». Это **неофициальное** название: типа с именем `EventBus` в Spring Framework нет (не путать, например, с классом `EventBus` из Guava).
+Внутри одного процесса (одного `ApplicationContext`) роль такого канала играет `ApplicationEventMulticaster`. Поэтому его можно назвать **шиной events** (event bus), а всю систему — неформально «Spring event bus». Это **неофициальное** название: типа с именем `EventBus` в Spring Framework нет (не путать, например, с классом `EventBus` из Guava).
 
-Отличие от EIP: там канал — это инфраструктура обмена сообщениями между приложениями (брокер, топик), а в Spring это обычный объект в памяти, который по умолчанию вызывает listener'ы синхронно в потоке издателя.
+Отличие от EIP: там канал — это инфраструктура обмена сообщениями между приложениями (брокер, топик), а в Spring это обычный объект в памяти, который по умолчанию вызывает listener'ы синхронно в потоке publisher.
 
 ### Почему Spring сам называет это Observer
 
@@ -1030,11 +1212,11 @@ alice.send("Привет всем!");
 
 > **RU:** «По сути, это стандартный паттерн проектирования Observer.»
 
-Это **упрощение**, а не ошибка. Publish–Subscribe — вариант Observer, в котором между Subject и наблюдателями появляется посредник-канал: идея та же (push-уведомление подписчиков), меняется лишь то, **кто хранит список и рассылает уведомления**. GoF и сами приводят Publish-Subscribe среди альтернативных названий Observer (раздел Also Known As). Поэтому оба утверждения верны каждое на своём уровне: «это Observer» — по идее, «это Publish–Subscribe с каналом событий» — по структуре.
+Это **упрощение**, а не ошибка. Publish–Subscribe — вариант Observer, в котором между Subject и наблюдателями появляется посредник-канал: идея та же (push-уведомление подписчиков), меняется лишь то, **кто хранит список и рассылает уведомления**. GoF и сами приводят Publish-Subscribe среди альтернативных названий Observer (раздел Also Known As). Поэтому оба утверждения верны каждое на своём уровне: «это Observer» — по идее, «это Publish–Subscribe с каналом events» — по структуре.
 
 ### Формулировка для собеседования
 
-> События Spring — это Observer в варианте Publish–Subscribe: издатель (`ApplicationEventPublisher`) не знает подписчиков, а `ApplicationEventMulticaster` работает как канал событий (event bus) и доставляет их listener-ам по типу события.
+> Spring Events — это Observer в варианте Publish–Subscribe: publisher (`ApplicationEventPublisher`) не знает подписчиков, а `ApplicationEventMulticaster` работает как канал events (event bus) и доставляет их listener-ам по типу event.
 
 ---
 
@@ -1048,7 +1230,7 @@ alice.send("Привет всем!");
 
 ### Ключевое отличие от Spring Events (перед кодом)
 
-В Spring Events издатель вызывает `publishEvent()` и **не знает**, кто получит событие. В GoF-Observer ниже `StockPriceTracker` **сам хранит** `List<StockObserver>` и **сам вызывает** каждого — никакого `ApplicationEventMulticaster` посередине нет.
+В Spring Events publisher вызывает `publishEvent()` и **не знает**, кто получит event. В GoF-Observer ниже `StockPriceTracker` **сам хранит** `List<StockObserver>` и **сам вызывает** каждого — никакого `ApplicationEventMulticaster` посередине нет.
 
 ### Пример
 
@@ -1145,7 +1327,7 @@ public class AlertService implements StockObserver {
  * <p>В GoF-Observer подписку настраивают явно: здесь
  * {@link AlertService} регистрируется у {@link StockPriceTracker}.
  * Subject знает конкретного Observer'а — в отличие от Spring Events,
- * где издатель не знает listener'ов.</p>
+ * где publisher не знает listener'ов.</p>
  */
 @Component
 public class AppSetup {
@@ -1173,8 +1355,8 @@ public class AppSetup {
 | | GoF-Observer выше | Spring `@EventListener` |
 |---|---|---|
 | Кто хранит список | `StockPriceTracker` сам | `ApplicationEventMulticaster` |
-| Знает ли издатель получателей | **Да** — `observers` список | **Нет** |
-| Отписка в runtime | `removeObserver()` | Возможна, если listener добавлен в контекст вручную через `addApplicationListener()`: тогда его удаляют через `removeApplicationListener()` (методы `ConfigurableApplicationContext`, удаление — с Spring 6.0). Слушателей, которых Spring зарегистрировал сам (bean с `ApplicationListener`, методы с `@EventListener`), из кода приложения обычно не отписывают |
+| Знает ли publisher получателей | **Да** — `observers` список | **Нет** |
+| Отписка в runtime | `removeObserver()` | Возможна, если listener добавлен в контекст вручную через `addApplicationListener()`: тогда его удаляют через `removeApplicationListener()` (методы `ConfigurableApplicationContext`, удаление — с Spring 6.0). Listeners, которых Spring зарегистрировал сам (bean с `ApplicationListener`, методы с `@EventListener`), из кода приложения обычно не отписывают |
 | Посредник | Нет | `ApplicationEventMulticaster` |
 
 ---
@@ -1187,52 +1369,17 @@ public class AppSetup {
 |---|---|---|
 | **API** | `Observable` + `Observer` | `ApplicationEvent` + `ApplicationListener` / `@EventListener` |
 | **Кто хранит подписчиков** | **Сам Subject** (`addObserver`) | **Контекст** (`ApplicationEventMulticaster`) |
-| **Как уведомляют** | Subject вызывает `notifyObservers()` → `update()` напрямую | Издатель вызывает `publishEvent()` → **канал событий** (`ApplicationEventMulticaster`) вызывает listener'ы |
-| **Связь издатель ↔ получатель** | Subject **знает** и **хранит** список Observer'ов | Издатель **не знает** listener'ов — только публикует событие |
-| **Триггер** | Изменение **состояния** объекта (`setChanged`) | Факт **события** (`BlockedListEvent`, `ApplicationReadyEvent`, …) |
-| **Посредник / паттерн** | Отсутствует — классический GoF Observer | `ApplicationEventMulticaster` — канал событий (event bus); паттерн Publish–Subscribe, **не** Mediator |
-| **Отписка в runtime** | `removeObserver()` | Возможна, если listener добавлен в контекст вручную через `addApplicationListener()`: тогда его удаляют через `removeApplicationListener()` (с Spring 6.0). Слушателей, которых Spring зарегистрировал сам, из кода приложения обычно не отписывают |
-| **Типичный кейс** | Модель MVC, push-потоки данных, legacy | Доменные и lifecycle-события в Spring-приложении |
+| **Как уведомляют** | Subject вызывает `notifyObservers()` → `update()` напрямую | Publisher вызывает `publishEvent()` → **канал events** (`ApplicationEventMulticaster`) вызывает listener'ы |
+| **Связь publisher ↔ получатель** | Subject **знает** и **хранит** список Observer'ов | Publisher **не знает** listener'ов — только публикует event |
+| **Триггер** | Изменение **состояния** объекта (`setChanged`) | Факт **events** (`BlockedListEvent`, `ApplicationReadyEvent`, …) |
+| **Посредник / паттерн** | Отсутствует — классический GoF Observer | `ApplicationEventMulticaster` — канал events (event bus); паттерн Publish–Subscribe, **не** Mediator |
+| **Отписка в runtime** | `removeObserver()` | Возможна, если listener добавлен в контекст вручную через `addApplicationListener()`: тогда его удаляют через `removeApplicationListener()` (с Spring 6.0). Listeners, которых Spring зарегистрировал сам, из кода приложения обычно не отписывают |
+| **Типичный кейс** | Модель MVC, push-потоки данных, legacy | Доменные и lifecycle-events в Spring-приложении |
 
 ### Практическое правило
 
 - **Observer (GoF)** — «мой объект **сам ведёт** список и **сам зовёт** `update()` у каждого наблюдателя».
-- **Listener (Spring)** — «я **публикую событие** в контекст, канал событий (`ApplicationEventMulticaster`) **сам найдёт** bean'ы и **вызовет** обработчик».
-
----
-
-<a id="reactor-and-observer"></a>
-
-## 7. А где здесь Reactor?
-
-Reactor — **не** `@EventListener` и **не** `Observable`. Это **Reactive Streams**: `Publisher` → `Subscriber`.
-
-| Роль | В Reactor | Аналогия |
-|------|-----------|----------|
-| Источник | `Flux` / `Mono` | Как Subject, но шлёт **поток** `onNext` / `onError` / `onComplete` |
-| Подписчик | `subscribe(...)` / `Subscriber` | Как Observer, но с протоколом **request(n)** (backpressure) |
-| Спецификация | [Reactive Streams](https://www.reactive-streams.org/) → `java.util.concurrent.Flow` (Java 9+) | Стандарт JVM для асинхронных push-потоков |
-
-```java
-// Reactor: подписались на поток — не Spring Event, не Observable.addObserver
-Flux.just("a", "b", "c")
-    .map(String::toUpperCase)
-    .subscribe(System.out::println);
-```
-
-**Источник:** [Reactor — Introduction to Reactive Programming](https://projectreactor.io/docs/core/release/reference/reactiveProgramming.html) · [Reactor — Introduction (Reactive Streams)](https://projectreactor.io/docs/core/release/reference/#intro-reactor)
-
-> **EN:** «The reactive programming paradigm is often presented in object-oriented languages as an extension of the Observer design pattern. … In reactive streams, the equivalent … is Publisher-Subscriber. But it is the Publisher that notifies the Subscriber of newly available values as they come, and this push aspect is the key to being reactive.»
-
-> **RU:** «Парадигму реактивного программирования в ОО-языках часто представляют как развитие паттерна Observer. … В reactive streams аналог — Publisher-Subscriber: Publisher уведомляет Subscriber о новых значениях по мере поступления; этот push-аспект и делает модель реактивной.»
-
-**Вопрос на собеседовании:** *How does reactive programming relate to Observer vs Spring ApplicationListener?*
-
-**Краткий ответ:** 
-   - JDK **Observer** — push от **одного объекта** с **явным списком** observers. 
-   - Spring Events — push через **канал событий** (`ApplicationEventMulticaster`, модель Publish–Subscribe) и **тип события** (издатель не знает слушателей). 
-   - Reactor — push **потока данных** по контракту **Publisher / Subscriber** с backpressure; 
-      - ближе к Observer по идее, дальше от Spring `@EventListener` по API и сценарию (HTTP, БД, Kafka, а не lifecycle bean'ов).
+- **Listener (Spring)** — «я **публикую event** в контекст, канал events (`ApplicationEventMulticaster`) **сам найдёт** bean'ы и **вызовет** обработчик».
 
 ---
 
@@ -1246,7 +1393,8 @@ Flux.just("a", "b", "c")
 | Spring Events | [Application Events (Reference)](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events) |
 | ApplicationListener | [Javadoc](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationListener.html) |
 | ApplicationEventPublisher / ApplicationEventMulticaster | [Javadoc — Publisher](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationEventPublisher.html), [Javadoc — Multicaster](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/event/ApplicationEventMulticaster.html) |
+| Реестр listeners и подбор по типу event | [AbstractApplicationContext (исходный код)](https://github.com/spring-projects/spring-framework/blob/main/spring-context/src/main/java/org/springframework/context/support/AbstractApplicationContext.java), [AbstractApplicationEventMulticaster (исходный код)](https://github.com/spring-projects/spring-framework/blob/main/spring-context/src/main/java/org/springframework/context/event/AbstractApplicationEventMulticaster.java), [Javadoc — EventListenerMethodProcessor](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/event/EventListenerMethodProcessor.html) |
 | Publish-Subscribe Channel | [Enterprise Integration Patterns](https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html) (Hohpe, Woolf) |
 | GoF Mediator (Intent) | Gamma, Helm, Johnson, Vlissides — *Design Patterns: Elements of Reusable Object-Oriented Software*, Addison-Wesley, 1994 |
 | ApplicationReadyEvent | [Spring Boot](https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners), [Javadoc](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/context/event/ApplicationReadyEvent.html) |
-| Reactor | [Introduction to Reactive Programming](https://projectreactor.io/docs/core/release/reference/reactiveProgramming.html) |
+| Любой объект как event, поле publisher, WebFlux | [Application Events (Reference)](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events), [ApplicationListenerMethodAdapter](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-context/src/main/java/org/springframework/context/event/ApplicationListenerMethodAdapter.java) |
