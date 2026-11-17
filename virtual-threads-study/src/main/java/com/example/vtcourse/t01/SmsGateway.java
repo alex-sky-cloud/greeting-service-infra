@@ -22,4 +22,14 @@ public class SmsGateway {
     public CallStats stats() {
         return stats;
     }
+
+}
+
+@Component
+public class OrderMailListener {
+
+    @TransactionalEventListener
+    public void onOrderCreated(OrderCreatedEvent event) {
+        mailSender.send(event.email(), "Заказ создан");
+    }
 }

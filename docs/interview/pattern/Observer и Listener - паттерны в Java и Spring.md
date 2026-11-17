@@ -20,8 +20,7 @@
     - [Публикация event в WebFlux](#event-webflux)
 3. [Паттерн Mediator — что это и при чём тут Spring](#3-паттерн-mediator--что-это-и-при-чём-тут-spring)
 4. [Observer, Listener, Mediator — три синонима или три разных паттерна?](#4-observer-listener-mediator--три-синонима-или-три-разных-паттерна)
-5. [GoF-Observer в Spring без `ApplicationEventPublisher`](#5-gof-observer-в-spring-без-applicationeventpublisher)
-6. [Observer и Listener — сравнительная таблица](#6-observer-и-listener--сравнительная-таблица)
+5. [Observer и Listener — сравнительная таблица](#5-observer-и-listener--сравнительная-таблица)
 
 ---
 
@@ -65,6 +64,14 @@ _Пример_: `OrderService.createOrder()` в транзакции сохра�
 
 Это верно, пока **listener** синхронный. Если на нём стоит `@Async`, **exception** в `createOrder()` не приходит, и заказ остаётся сохранённым.
 
+Есть и обратная ситуация: письмо ушло, а заказ не создан. **Listener** отправил письмо до commit, а потом `createOrder()` бросил **exception** или commit упал на ограничении базы. Rollback отменяет запись заказа, но не письмо. Чтобы письмо уходило только после commit, на тот же метод ставят `@TransactionalEventListener` вместо `@EventListener`. Это всё ещё **listener**: на объявлении `@TransactionalEventListener` стоит `@EventListener`, и `EventListenerMethodProcessor` регистрирует метод так же. Меняется момент вызова: не сразу в `publishEvent`, а после commit. Подробно — [Listener и transaction](listener%20in%20imperative%20and%20reactive.md#письмо-ушло-а-заказ-не-создан).
+
+**Источник:** [TransactionalEventListener.java, Spring Framework 6.2.11](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-tx/src/main/java/org/springframework/transaction/event/TransactionalEventListener.java) · [EventListenerMethodProcessor.java](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-context/src/main/java/org/springframework/context/event/EventListenerMethodProcessor.java)
+
+> **EN:** «An EventListener that is invoked according to a TransactionPhase.» / `@EventListener public @interface TransactionalEventListener` / `AnnotatedElementUtils.findMergedAnnotation(method, EventListener.class)`
+
+> **RU:** «Это `@EventListener`, который вызывается в фазе **transaction**.» / «На типе `@TransactionalEventListener` стоит аннотация `@EventListener`.» / «`EventListenerMethodProcessor` ищет на методе `@EventListener`, в том числе если `@EventListener` стоит на другой аннотации.»
+
 -----
 
 **Асинхронно — через `@Async`.** Если пометить метод listener'а аннотацией `@Async` и включить `@EnableAsync` в конфигурации, Spring выполнит listener в отдельном потоке из пула. `publishEvent()` вернёт управление сразу, не дожидаясь listener'а. Так делают для действий, которые не должны задерживать основную операцию: отправка писем, обновление кэша, запись аудита. 
@@ -99,11 +106,19 @@ _Пример_: `OrderService.createOrder()` в транзакции сохра�
 
 **Event** должен наследовать `ApplicationEvent`.
 
-  - Нет. С Spring 4.2 `publishEvent` принимает любой объект, а метод с `@EventListener` принимает этот объект параметром. В `implements ApplicationListener<OrderCreated>` такой класс не подставить: параметр типа должен быть наследником `ApplicationEvent`. Подробно — [Любой объект как event](#event-any-object).
+  - Нет, если тип стоит в `publishEvent` или в параметре `@EventListener`. Да, если тип стоит в скобках `ApplicationListener<OrderCreated>`: там нужен наследник `ApplicationEvent`. Подробно — [Любой объект как event](#event-any-object).
 
 В WebFlux **listener** выполняется в другом потоке.
 
   - Нет. `publishEvent` и в WebFlux вызывает **listeners** в том потоке, который его вызвал. Подробно — [Публикация event в WebFlux](#event-webflux).
+
+`@TransactionalEventListener` — это уже не **listener**.
+
+  - Нет. На объявлении `@TransactionalEventListener` стоит `@EventListener`. `EventListenerMethodProcessor` находит метод через `findMergedAnnotation` и регистрирует его в **multicaster**. Другая аннотация меняет только момент вызова.
+
+**Exception** из `@TransactionalEventListener` с фазой `AFTER_COMMIT` дойдёт до `createOrder()`.
+
+  - Нет. Это тот же **listener**: на аннотации стоит `@EventListener`. Spring вызывает его из `afterCompletion` и пишет его **exception** в лог. Заказ остаётся сохранённым, а `createOrder()` о потерянном письме не узнаёт. Подробно — [Письмо упало после commit](listener%20in%20imperative%20and%20reactive.md#письмо-упало-после-commit).
 
 Достаточно написать класс с `implements ApplicationListener`.
 
@@ -738,7 +753,7 @@ public class OrderObserverDemo {
 ### Когда встречается сегодня
 
 - Учебные и legacy-коды на `Observable` / `Observer`.
-- **Reactor / Reactive Streams** — та же **push-идея** («источник уведомляет подписчика»), но через `Publisher` / `Subscriber` и с backpressure (§7).
+- **Reactor / Reactive Streams** — та же **push-идея** («источник уведомляет подписчика»), но через `Publisher` / `Subscriber` и с backpressure. Подробно это разобрано в [project-reactor-interview-guide.md](../project-reactor-interview-guide.md).
 
 **Источник:** [Oracle — `Observable` (Java SE 8)](https://docs.oracle.com/javase/8/docs/api/java/util/Observable.html) · [`Observer`](https://docs.oracle.com/javase/8/docs/api/java/util/Observer.html)
 
@@ -890,21 +905,15 @@ public class BlockedListNotifier {
 
 ### Любой объект как event
 
-Коротко.
+Класс `OrderCreated` может не наследовать `ApplicationEvent`. Это решает не аннотация на классе, а строка, в которую вы подставляете `OrderCreated`.
 
-- Аннотация на класс event не нужна. `publishEvent` с Spring 4.2 принимает любой объект, например `new OrderCreated("A-1")`.
-- Listener нужен по-прежнему. Без метода `@EventListener` или без `ApplicationListener` event никто не получит.
-- `implements ApplicationListener<OrderCreated>` не компилируется, если `OrderCreated` не наследует `ApplicationEvent`. Параметр типа этого интерфейса — наследник `ApplicationEvent`.
+В вызове `publishEvent(new OrderCreated("A-1"))` и в параметре `onCreated(OrderCreated event)` наследовать `ApplicationEvent` не нужно. С Spring 4.2 такой вызов доходит до метода с `@EventListener`.
 
-Как `ApplicationContext` выбирает listener.
+В объявлении `implements ApplicationListener<OrderCreated>` наследовать нужно. Компилятор принимает в этих угловых скобках только наследника `ApplicationEvent`. Обычный `OrderCreated` туда не встаёт, и класс **listener** не компилируется.
 
-1. Publisher вызывает `publisher.publishEvent(new OrderCreated("A-1"))`.
-2. `ApplicationContext` видит, что `OrderCreated` не наследует `ApplicationEvent`, и оборачивает объект в `PayloadApplicationEvent<OrderCreated>`.
-3. `ApplicationEventMulticaster` смотрит реестр listeners. У каждого listener записан тип, который он принимает: у метода `@EventListener` это тип параметра метода.
-4. У метода `void onCreated(OrderCreated event)` записан тип `OrderCreated`. Multicaster сравнивает его с типом объекта внутри `PayloadApplicationEvent`. Типы совпадают, метод вызывается, в параметр приходит `OrderCreated`, не обёртка.
-5. `ApplicationListener<BlockedListEvent>` этот вызов не получает: у него записан тип `BlockedListEvent`.
+Без `@EventListener` и без `ApplicationListener` вызов `publishEvent` некому доставить. Класс **event** сам по себе подписчика не создаёт.
 
-Для обычного объекта через интерфейс, а не через `@EventListener`, listener объявляют как `ApplicationListener<PayloadApplicationEvent<OrderCreated>>`. С Spring 5.3 то же самое делает `ApplicationListener.forPayload`.
+Класс `OrderCreated` без `ApplicationEvent`.
 
 ```java
 
@@ -921,6 +930,25 @@ public class OrderCreated {
     }
 }
 
+```
+
+Этот **listener** не компилируется: `OrderCreated` стоит в угловых скобках `ApplicationListener`.
+
+```java
+
+public class OrderCreatedListener implements ApplicationListener<OrderCreated> {
+
+    @Override
+    public void onApplicationEvent(OrderCreated event) {
+    }
+}
+
+```
+
+Этот **listener** компилируется: `OrderCreated` стоит в параметре метода `onCreated`.
+
+```java
+
 @Component
 public class OrderCreatedListener {
 
@@ -931,6 +959,14 @@ public class OrderCreatedListener {
 }
 
 ```
+
+Как `publishEvent(new OrderCreated("A-1"))` доходит до `onCreated`.
+
+1. **Publisher** вызывает `publisher.publishEvent(new OrderCreated("A-1"))`.
+2. `ApplicationContext` кладёт этот объект в `PayloadApplicationEvent<OrderCreated>`.
+3. У метода `onCreated` записан тип `OrderCreated`. Multicaster сравнивает его с типом внутри обёртки и вызывает метод. В параметр приходит `OrderCreated`, не обёртка.
+
+Чтобы принять тот же объект через интерфейс, в скобках пишут обёртку: `ApplicationListener<PayloadApplicationEvent<OrderCreated>>`. С Spring 5.3 то же делает `ApplicationListener.forPayload`.
 
 **Источник:** [Spring Framework — Application Events](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events) · [Javadoc — `ApplicationListener`](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/ApplicationListener.html)
 
@@ -954,18 +990,144 @@ public class OrderCreatedListener {
 
 ### Публикация event в WebFlux
 
-Коротко.
+Сначала два свойства Reactor, без них дальше непонятно.
 
-- WebFlux не подменяет `ApplicationEventMulticaster`. Метод `publishEvent` остаётся методом `void`.
-- Listener выполняется в том потоке, который вызвал `publishEvent`. Если вызов идёт из контроллера WebFlux, это поток event loop. Долгая работа в listener занимает этот поток.
-- Если метод `@EventListener` возвращает `Mono` или `Flux`, порядок такой. `ApplicationListenerMethodAdapter` сразу вызывает `subscribe` и не ждёт, пока `Mono` завершится. Затем `publishEvent` возвращает управление в класс, который его вызвал. Этот класс продолжает работу и `Mono` не ждёт. Элементы, которые `Mono` выдаст позже, адаптер публикует как новые events.
-- Если этот `Mono` позже завершается ошибкой, исключение возникает уже после возврата из `publishEvent`. Класс, который вызвал `publishEvent`, исключение не получает и не может его поймать. `ApplicationListenerMethodAdapter` в `onError` пишет в лог текст `Unexpected error occurred in asynchronous listener` и само исключение.
+`Mono` ничего не делает, пока на нём не вызвали `subscribe`. Тот, кто вызвал `subscribe`, становится **subscriber** этой цепочки.
 
-**Источник:** [ApplicationListenerMethodAdapter](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-context/src/main/java/org/springframework/context/event/ApplicationListenerMethodAdapter.java)
+Сигналы `onNext`, `onComplete`, `onError` идут только по той цепочке, на которой вызвали `subscribe`, и приходят только её **subscriber**. В другую цепочку сигнал сам не переходит.
 
-> **EN:** «if (reactiveStreamsPresent && new ReactiveResultHandler().subscribeToPublisher(result))» / «adapter.toPublisher(result).subscribe(new EventPublicationSubscriber());» / «public void onNext(Object o) { publishEvents(o); }» / «logger.error("Unexpected error occurred in asynchronous listener", t);»
+```java
 
-> **RU:** «Если метод listener вернул `Mono`, адаптер сразу вызывает `subscribe` и не ждёт завершения. `publishEvent` после этого возвращается в класс, который его вызвал. Если `Mono` позже завершается ошибкой, адаптер пишет исключение в лог. Класс, который вызвал `publishEvent`, это исключение не получает.»
+@Transactional
+public Mono<Void> createOrder(Order order) {
+    return repository.save(order)
+        .doOnNext(saved -> publisher.publishEvent(new OrderCreated(saved.getId())));
+}
+
+```
+
+Что делает `@Transactional` с этой цепочкой.
+
+1. Контроллер возвращает `Mono` метода `createOrder`. WebFlux вызывает на нём `subscribe`.
+2. `@Transactional` перед этим открывает **transaction** и встаёт **subscriber** цепочки `createOrder`.
+3. Цепочка прислала `onComplete` — Spring делает commit.
+4. Цепочка прислала `onError` — Spring делает rollback.
+
+Ход цепочки `createOrder`.
+
+1. `repository.save` пишет заказ в базу внутри **transaction**. Commit ещё не было.
+2. `repository.save` присылает `onNext` с сохранённым заказом.
+3. На этом `onNext` выполняется `doOnNext`, и внутри него вызывается `publishEvent`.
+4. Что будет дальше, зависит от того, что возвращает метод **listener**.
+
+**Listener** возвращает `void`.
+
+```java
+
+@EventListener
+public void onCreated(OrderCreated event) {
+    mail.send(event.getId());
+}
+
+```
+
+```plantuml
+@startuml
+title onCreated возвращает void: exception откатывает transaction
+
+participant "WebFlux" as WF
+participant "@Transactional" as TX
+participant "Цепочка createOrder" as CO
+participant "publishEvent" as PUB
+participant "onCreated (void)" as L
+
+WF -> TX : subscribe
+TX -> TX : открыть transaction
+TX -> CO : subscribe
+CO -> CO : repository.save
+CO -> CO : onNext, вызов doOnNext
+CO -> PUB : publishEvent(OrderCreated)
+PUB -> L : onCreated(event)
+L -> L : mail.send бросает exception
+L --> PUB : exception
+PUB --> CO : exception из лямбды doOnNext
+CO --> TX : onError
+TX -> TX : rollback
+TX --> WF : onError
+@enduml
+```
+
+Что происходит на диаграмме.
+
+1. `publishEvent` вызывает `onCreated` обычным вызовом метода и ждёт возврата.
+2. `mail.send` бросает **exception**. Оно выходит из `onCreated`, из `publishEvent` и из лямбды внутри `doOnNext`.
+3. Reactor ловит **exception**, брошенное внутри `doOnNext`, и превращает его в сигнал `onError` цепочки `createOrder`.
+4. `onError` доходит до `@Transactional`. Spring делает rollback. Заказа в базе нет.
+
+Это **exception** можно поймать в цепочке `createOrder`, например оператором `onErrorResume` после `doOnNext`. Если `onErrorResume` вернёт обычное значение, цепочка закончится `onComplete`, и Spring сделает commit.
+
+**Listener** возвращает `Mono<Void>`.
+
+```java
+
+@EventListener
+public Mono<Void> onCreated(OrderCreated event) {
+    return mail.send(event.getId());
+}
+
+```
+
+```plantuml
+@startuml
+title onCreated возвращает Mono: exception письма не откатывает transaction
+
+participant "WebFlux" as WF
+participant "@Transactional" as TX
+participant "Цепочка createOrder" as CO
+participant "publishEvent" as PUB
+participant "ApplicationListenerMethodAdapter" as AD
+participant "onCreated (Mono)" as L
+participant "Цепочка mail.send" as M
+
+WF -> TX : subscribe
+TX -> TX : открыть transaction
+TX -> CO : subscribe
+CO -> CO : repository.save
+CO -> CO : onNext, вызов doOnNext
+CO -> PUB : publishEvent(OrderCreated)
+PUB -> AD : вызвать listener
+AD -> L : onCreated(event)
+L --> AD : Mono отправки, письмо не ушло
+AD -> M : subscribe(EventPublicationSubscriber)
+AD --> PUB : возврат
+PUB --> CO : возврат без exception
+CO --> TX : onComplete
+TX -> TX : commit, заказ сохранён
+TX --> WF : onComplete
+M -> M : отправка письма падает
+M --> AD : onError в EventPublicationSubscriber
+AD -> AD : запись exception в лог
+@enduml
+```
+
+Что происходит на диаграмме.
+
+1. `publishEvent` вызывает `onCreated`. `mail.send` письмо не отправляет, а возвращает новый `Mono` отправки. На нём ещё никто не вызвал `subscribe`, поэтому письмо пока не ушло.
+2. `ApplicationListenerMethodAdapter` получает этот `Mono` и сам вызывает на нём `subscribe`. **Subscriber** цепочки письма — объект адаптера `EventPublicationSubscriber`, а не цепочка `createOrder`.
+3. `onCreated` вернулся без **exception**, поэтому `publishEvent` тоже возвращается нормально. Лямбда в `doOnNext` закончилась без ошибки.
+4. Цепочка `createOrder` присылает `onComplete`. Spring делает commit. Заказ в базе.
+5. Письмо отправляется уже после этого. Если отправка падает, цепочка письма присылает `onError`. Этот `onError` получает только **subscriber** цепочки письма — `EventPublicationSubscriber`.
+6. `EventPublicationSubscriber.onError` пишет **exception** в лог: `Unexpected error occurred in asynchronous listener`. В `doOnNext` и в `createOrder` этот сигнал не попадает: цепочку письма никто не соединил с цепочкой `createOrder`.
+
+Если письмо должно откатывать заказ, его вызывают в самой цепочке `createOrder`, например `.flatMap(saved -> mail.send(saved.getId()))`, а не через **event**. Тогда `onError` письма идёт по цепочке `createOrder`.
+
+В обоих случаях письмо уходит до commit. Если после этого **transaction** откатится, письмо о несуществующем заказе уже у клиента. Чтобы письмо уходило после commit, на тот же метод ставят `@TransactionalEventListener`. Это тот же **listener**: на аннотации стоит `@EventListener`. `TransactionalEventPublisher` только кладёт `TransactionContext` в **event**, чтобы этот **listener** дождался фазы реактивной **transaction**. Подробно — [Listener и transaction, реактивный стек](listener%20in%20imperative%20and%20reactive.md#контекст-передаётся-через-source).
+
+**Источник:** [TransactionalOperatorImpl](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-tx/src/main/java/org/springframework/transaction/reactive/TransactionalOperatorImpl.java) · [ApplicationListenerMethodAdapter](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-context/src/main/java/org/springframework/context/event/ApplicationListenerMethodAdapter.java)
+
+> **EN:** `Flux.usingWhen(..., this.transactionManager::commit, this::rollbackOnException, this.transactionManager::rollback)` / `adapter.toPublisher(result).subscribe(new EventPublicationSubscriber())` / `logger.error("Unexpected error occurred in asynchronous listener", t)`
+
+> **RU:** «Реактивная **transaction** фиксируется, когда завершается `Mono` метода `createOrder`. Если `onCreated` вернул `Mono` метода `mail.send`, адаптер только подписывается на него. Ошибку этой подписки адаптер пишет в лог.»
 
 ---
 
@@ -977,7 +1139,13 @@ public class OrderCreatedListener {
 
 ![Sequence: старт Spring Boot → ApplicationReadyEvent](../../Images-docs/reactor-seq-spring-boot-startup.png)
 
-**Цепочка:** `SpringApplication.run()` → контекст поднят → runners → **`ApplicationReadyEvent`** → ваш `@EventListener`.
+Что на рисунке происходит по порядку.
+
+1. `SpringApplication.run()` поднимает `ApplicationContext` и создаёт beans.
+2. Затем выполняются `ApplicationRunner` и `CommandLineRunner`.
+3. Когда они закончили, Spring Boot публикует `ApplicationReadyEvent`. Это сигнал, что приложение уже может принимать запросы. Поэтому такой **listener** ставят на прогрев кэша или регистрацию в service discovery, а не на создание заказа.
+4. `ApplicationContext` передаёт этот **event** в `ApplicationEventMulticaster`.
+5. Multicaster находит метод с `@EventListener` на `ApplicationReadyEvent` и вызывает `onAppReady`. Этот метод вызывает multicaster, не код сервиса.
 
 ```java
 /**
@@ -1004,12 +1172,6 @@ public class AppStartupListener {
 }
 ```
 
-| Шаг | Кто | Действие |
-|-----|-----|----------|
-| 1 | Spring Boot | Публикует `ApplicationReadyEvent` **после** runners |
-| 2 | `ApplicationContext` | Передаёт event `ApplicationEventMulticaster` |
-| 3 | Ваш bean | Метод `onAppReady` вызывается **контекстом**, не вами |
-
 **Источник:** [Spring Boot — Application events](https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners) · [Javadoc — `ApplicationReadyEvent`](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/context/event/ApplicationReadyEvent.html)
 
 > **EN:** «An ApplicationReadyEvent is sent after any application and command-line runners have been called.» / «Event published as late as conceivably possible to indicate that the application is ready to service requests.»
@@ -1022,150 +1184,19 @@ public class AppStartupListener {
 
 ## 3. Паттерн Mediator — что это и при чём тут Spring
 
-### Идея простыми словами
+Mediator по GoF — объект, который хранит сценарий: он решает, кто на чьё действие как отвечает.
 
-Представьте диспетчерскую вышку аэропорта. Самолёты не договариваются друг с другом напрямую — каждый говорит только с вышкой, а она решает, кому что передать. Убрать вышку — и все начнут кричать друг на друга.
+`ApplicationEventMulticaster` сценария не хранит. Он держит реестр **listeners** и вызывает тех, чей тип совпал с типом **event**. **Publisher** только публикует, **listener** только получает. Multicaster не решает, что им делать дальше.
 
-Именно это и есть **Mediator (Посредник)**: объект, через который общаются все остальные. Участники **не знают** друг о друге — они знают только о посреднике.
+Поэтому `ApplicationEventMulticaster` — канал **events**, не Mediator.
 
-### Определение GoF
-
-**Источник:** Gamma E., Helm R., Johnson R., Vlissides J. *Design Patterns: Elements of Reusable Object-Oriented Software*. Addison-Wesley, 1994 — глава Mediator, раздел Intent.
+**Источник:** Gamma, Helm, Johnson, Vlissides — *Design Patterns*, Addison-Wesley, 1994, глава Mediator, раздел Intent.
 
 > **EN:** «Define an object that encapsulates how a set of objects interact. Mediator promotes loose coupling by keeping objects from referring to each other explicitly, and it lets you vary their interaction independently.»
 
 > **RU:** «Определите объект, который инкапсулирует то, как взаимодействует набор объектов. Mediator ослабляет связанность, избавляя объекты от необходимости явно ссылаться друг на друга, и позволяет независимо изменять их взаимодействие.»
 
-Ключевые слова — **«how a set of objects interact»**: Mediator хранит **логику взаимодействия** (сценарий), а не просто передаёт сообщения. Классический пример GoF — диалоговое окно выбора шрифта: виджеты (список, поле ввода, кнопки) не знают друг о друге и сообщают директору (`DialogDirector`) «я изменился», а конкретный директор (`FontDialogDirector`) **решает**, что из этого следует: например, при выборе шрифта в списке подставляет его название в поле ввода. Каждый виджет при этом и **отправитель**, и **получатель**.
-
-### Когда нужен Mediator
-
-Без посредника при `N` взаимодействующих объектах связей может быть \( N \times (N-1) \) — каждый знает каждого. Mediator сводит это к `N` связям: все знают только посредника.
-
-### Минимальный пример паттерна
-
-```java
-/**
- * Посредник: знает всех участников чата и маршрутизирует сообщения.
- * <p>Ни один {@link ChatUser} не хранит ссылок на других пользователей —
- * все сообщения проходят только через {@code ChatRoom}.</p>
- */
-class ChatRoom {
-
-    /** Список всех участников, известных посреднику. */
-    private final List<ChatUser> users = new ArrayList<>();
-
-    /**
-     * Регистрирует участника в посреднике.
-     *
-     * @param user новый участник чата
-     */
-    public void join(ChatUser user) {
-        users.add(user);
-    }
-
-    /**
-     * Рассылает сообщение всем участникам, кроме отправителя.
-     * <p>Отправитель не знает, кто получит сообщение —
-     * это решение посредника.</p>
-     *
-     * @param sender  участник, отправивший сообщение
-     * @param message текст сообщения
-     */
-    public void send(ChatUser sender, String message) {
-        for (ChatUser user : users) {
-            if (user != sender) {              // не отправлять самому себе
-                user.receive(sender.getName(), message);
-            }
-        }
-    }
-}
-
-/**
- * Участник чата.
- * <p>Знает только посредника {@link ChatRoom} —
- * не знает других {@code ChatUser} напрямую.</p>
- */
-class ChatUser {
-
-    private final String name;
-    private final ChatRoom room; // единственная зависимость — посредник
-
-    /**
-     * @param name имя участника
-     * @param room посредник (чат-комната)
-     */
-    public ChatUser(String name, ChatRoom room) {
-        this.name = name;
-        this.room = room;
-        room.join(this); // регистрация у посредника
-    }
-
-    /**
-     * Отправляет сообщение через посредника.
-     *
-     * @param message текст сообщения
-     */
-    public void send(String message) {
-        room.send(this, message); // делегируем посреднику
-    }
-
-    /**
-     * Получает сообщение от посредника.
-     *
-     * @param from    имя отправителя
-     * @param message текст сообщения
-     */
-    public void receive(String from, String message) {
-        System.out.println(name + " получил от " + from + ": " + message);
-    }
-
-    public String getName() { return name; }
-}
-
-// ── Использование ──────────────────────────────────────────────────────
-ChatRoom room = new ChatRoom();        // посредник
-ChatUser alice = new ChatUser("Alice", room);
-ChatUser bob   = new ChatUser("Bob",   room);
-ChatUser carol = new ChatUser("Carol", room);
-
-alice.send("Привет всем!");
-// → Bob получил от Alice: Привет всем!
-// → Carol получил от Alice: Привет всем!
-// Alice и Bob не знают ничего друг о друге — только о ChatRoom.
-```
-
-### Почему `ApplicationEventMulticaster` — не Mediator
-
-Сходство есть: и в Mediator, и в Spring Events участники **не ссылаются друг на друга**, а общаются через промежуточный объект. Эта общая идея — indirection (косвенность: связь через третий объект) — и создаёт впечатление, что `ApplicationEventMulticaster` «играет роль `ChatRoom`». Но по сути это разные паттерны:
-
-| Критерий | Mediator (GoF) | `ApplicationEventMulticaster` |
-|----------|----------------|-------------------------------|
-| **Что хранит посредник** | **Логику сценария**: кто, на что и как должен отреагировать (`FontDialogDirector`; даже в `ChatRoom` есть правило «не отправлять самому себе») | Только **реестр listener'ов**; бизнес-логики нет |
-| **Роли участников** | Каждый коллега — и **отправитель**, и **получатель** (`ChatUser` и `send()`, и `receive()`) | Publisher только **публикует**, listener только **получает** — доставка **однонаправленная** |
-| **Как выбирается получатель** | Решает посредник — в зависимости от сценария | Только по **типу event** (плюс `condition` у `@EventListener`) |
-| **Знает ли посредник конкретных участников** | Да — обычно держит ссылки на конкретных коллег и вызывает их специфичные методы | Нет — работает с абстракцией `ApplicationListener`, ему безразлично, кто подписан |
-| **Точное название** | Mediator (посредник) | Publish–Subscribe Channel / event bus (канал / шина events) |
-
-**Аналогия для собеседования:**
-- **Mediator — диспетчерская вышка аэропорта.** Вышка знает каждый самолёт и решает за них: «борт 1 садится, борт 2 ждёт, борт 3 уходит на второй круг». Самолёты общаются только через вышку и по её правилам.
-- **Multicaster — радиоэфир.** В эфир передают «рейс 42 приземлился». Все, кто настроен на эту частоту (такси, уборка, табло), сами решают, что делать. Эфир никого не координирует и не знает, кто его слушает.
-
-**Итог:** `ApplicationEventMulticaster` **частично похож на Mediator** (общая идея — участники не знают друг друга), но точный термин для него — **канал events** (event channel, event bus) из модели Publish–Subscribe. Подробно — в §4.
-
-> **Нюанс из GoF:** в главе Observer (раздел Implementation) книга описывает отдельный объект `ChangeManager`, который хранит связи Subject → Observer, определяет стратегию обновления и рассылает уведомления, и называет его примером паттерна Mediator. Простейший его вариант (`SimpleChangeManager`) просто уведомляет всех наблюдателей — по смыслу это близко к `ApplicationEventMulticaster`. Отсюда и источник сходства; однако для Spring Events общепринятое и более точное название — Publish–Subscribe с каналом events.
-
-Откуда берётся сходство Mediator и Observer, хорошо объясняет Refactoring.Guru:
-
-**Источник:** [Refactoring.Guru — Mediator vs Observer](https://refactoring.guru/design-patterns/observer)
-
-> **EN:** «The primary goal of Mediator is to eliminate mutual dependencies among a set of system components. Instead, these components become dependent on a single mediator object … There's a popular implementation of the Mediator pattern that relies on Observer. The mediator object plays the role of publisher, and the components act as subscribers … When Mediator is implemented this way, it may look very similar to Observer.»
-
-> **RU:** «Цель Mediator — устранить прямые зависимости между компонентами, сделав их зависимыми от единственного объекта-посредника … Существует популярная реализация паттерна Mediator, основанная на Observer: объект-посредник играет роль publisher, а компоненты — подписчиков. В таком виде Mediator очень похож на Observer.»
-
 ---
-
-<a id="observer-listener-mediator-diff"></a>
 
 ## 4. Observer, Listener, Mediator — три синонима или три разных паттерна?
 
@@ -1255,150 +1286,9 @@ alice.send("Привет всем!");
 
 ---
 
-<a id="gof-observer-spring"></a>
-
-## 5. GoF-Observer в Spring без `ApplicationEventPublisher`
-
-### Зачем это нужно
-
-Если вам нужен именно **GoF-Observer** — где Subject **сам** хранит список и **сам** обходит его — это можно сделать в Spring вручную, не используя механизм `ApplicationEvent`. Такой подход используют, когда хотят явно управлять подпиской: добавлять и удалять наблюдателей в runtime, или когда Subject должен знать своих конкретных подписчиков.
-
-### Ключевое отличие от Spring Events (перед кодом)
-
-В Spring Events publisher вызывает `publishEvent()` и **не знает**, кто получит event. В GoF-Observer ниже `StockPriceTracker` **сам хранит** `List<StockObserver>` и **сам вызывает** каждого — никакого `ApplicationEventMulticaster` посередине нет.
-
-### Пример
-
-```java
-/**
- * Интерфейс Observer'а (наблюдателя).
- * <p>Любой объект, желающий следить за ценой акции,
- * должен реализовать этот интерфейс.</p>
- */
-public interface StockObserver {
-
-    /**
-     * Вызывается Subject'ом при изменении цены.
-     *
-     * @param ticker   тикер акции, например {@code "AAPL"}
-     * @param newPrice новая цена
-     */
-    void onPriceChanged(String ticker, double newPrice);
-}
-
-/**
- * Subject (наблюдаемый объект) — GoF-Observer в рамках Spring-бина.
- *
- * <p><b>Ключевое отличие от Spring Events:</b> этот класс
- * <em>сам хранит</em> {@code List<StockObserver>} и <em>сам вызывает</em>
- * каждого наблюдателя. Нет никакого {@code ApplicationEventPublisher},
- * нет {@code ApplicationEventMulticaster} — чистый GoF-паттерн.</p>
- */
-@Component
-public class StockPriceTracker {
-
-    /**
-     * Список наблюдателей.
-     * <p>Subject <em>знает</em> каждого Observer'а — это главный
-     * признак GoF-Observer в отличие от Spring Events (Listener).</p>
-     */
-    private final List<StockObserver> observers = new ArrayList<>();
-
-    /**
-     * Регистрирует нового наблюдателя.
-     *
-     * @param observer наблюдатель, которого нужно уведомлять об изменениях
-     */
-    public void addObserver(StockObserver observer) {
-        observers.add(observer);
-    }
-
-    /**
-     * Удаляет наблюдателя (отписка в runtime).
-     *
-     * @param observer наблюдатель для удаления
-     */
-    public void removeObserver(StockObserver observer) {
-        observers.remove(observer);
-    }
-
-    /**
-     * Обновляет цену и уведомляет всех наблюдателей.
-     * <p>Subject <em>сам обходит</em> список — аналог
-     * {@code notifyObservers()} из {@link java.util.Observable}.</p>
-     *
-     * @param ticker   тикер акции
-     * @param newPrice новая цена
-     */
-    public void updatePrice(String ticker, double newPrice) {
-        // Subject сам идёт по списку — это и есть GoF Observer
-        observers.forEach(observer -> observer.onPriceChanged(ticker, newPrice));
-    }
-}
-
-/**
- * Конкретный Observer: отправляет алерт при изменении цены.
- * <p>Реализует {@link StockObserver}: ничего не знает о других
- * Observer'ах и не знает, когда именно будет вызван — Subject решает.</p>
- */
-@Component
-public class AlertService implements StockObserver {
-
-    /**
-     * Вызывается Subject'ом ({@link StockPriceTracker}) напрямую.
-     *
-     * @param ticker   тикер акции
-     * @param newPrice новая цена
-     */
-    @Override
-    public void onPriceChanged(String ticker, double newPrice) {
-        System.out.println("ALERT: " + ticker + " → " + newPrice);
-    }
-}
-
-/**
- * Конфигурация подписок при старте приложения.
- *
- * <p>В GoF-Observer подписку настраивают явно: здесь
- * {@link AlertService} регистрируется у {@link StockPriceTracker}.
- * Subject знает конкретного Observer'а — в отличие от Spring Events,
- * где publisher не знает listener'ов.</p>
- */
-@Component
-public class AppSetup {
-
-    /**
-     * @param tracker      Subject — будет хранить ссылку на alertService
-     * @param alertService Observer — регистрируется у Subject'а вручную
-     */
-    @Autowired
-    public AppSetup(StockPriceTracker tracker, AlertService alertService) {
-        tracker.addObserver(alertService); // Subject теперь ЗНАЕТ alertService
-    }
-}
-
-// ── Использование ──────────────────────────────────────────────────────
-// tracker.updatePrice("AAPL", 195.50);
-// → "ALERT: AAPL → 195.5"
-//
-// Хотите отписаться в runtime? Просто:
-// tracker.removeObserver(alertService);
-```
-
-### Что здесь отличает от Spring Events
-
-| | GoF-Observer выше | Spring `@EventListener` |
-|---|---|---|
-| Кто хранит список | `StockPriceTracker` сам | `ApplicationEventMulticaster` |
-| Знает ли publisher получателей | **Да** — `observers` список | **Нет** |
-| Отписка в runtime | `removeObserver()` | Возможна, если listener добавлен в контекст вручную через `addApplicationListener()`: тогда его удаляют через `removeApplicationListener()` (методы `ConfigurableApplicationContext`, удаление — с Spring 6.0). Listeners, которых Spring зарегистрировал сам (bean с `ApplicationListener`, методы с `@EventListener`), из кода приложения обычно не отписывают |
-| Посредник | Нет | `ApplicationEventMulticaster` |
-
----
-
 <a id="observer-listener-diff"></a>
 
-## 6. Observer и Listener — сравнительная таблица
+## 5. Observer и Listener — сравнительная таблица
 
 | | **Observer (GoF / JDK)** | **Listener (Spring Events)** |
 |---|---|---|
@@ -1432,4 +1322,6 @@ public class AppSetup {
 | Publish-Subscribe Channel | [Enterprise Integration Patterns](https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html) (Hohpe, Woolf) |
 | GoF Mediator (Intent) | Gamma, Helm, Johnson, Vlissides — *Design Patterns: Elements of Reusable Object-Oriented Software*, Addison-Wesley, 1994 |
 | ApplicationReadyEvent | [Spring Boot](https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners), [Javadoc](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/context/event/ApplicationReadyEvent.html) |
+| `@TransactionalEventListener` остаётся `@EventListener` | [TransactionalEventListener.java](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-tx/src/main/java/org/springframework/transaction/event/TransactionalEventListener.java), [EventListenerMethodProcessor.java](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-context/src/main/java/org/springframework/context/event/EventListenerMethodProcessor.java) |
+| Listener и transaction, фазы `@TransactionalEventListener` | [Listener и transaction](listener%20in%20imperative%20and%20reactive.md), [Transaction-bound Events (Reference)](https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html) |
 | Любой объект как event, поле publisher, WebFlux | [Application Events (Reference)](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events), [ApplicationListenerMethodAdapter](https://github.com/spring-projects/spring-framework/blob/v6.2.11/spring-context/src/main/java/org/springframework/context/event/ApplicationListenerMethodAdapter.java) |
