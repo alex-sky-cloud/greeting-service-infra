@@ -662,31 +662,25 @@ bucket 3 → пусто                  без изменений
 @startuml
 skinparam shadowing false
 skinparam defaultFontName Arial
+skinparam dpi 140
+skinparam activityFontSize 22
+skinparam activityDiamondFontSize 18
+skinparam activityPadding 16
 start
 :map.remove(key);
-:getTreeNode находит удаляемый узел
-в дереве bucket;
-:removeTreeNode исключает узел
-из списка next / prev.
-В дереве узел пока остаётся;
+:getTreeNode находит удаляемый узел\nв дереве bucket;
+:removeTreeNode исключает узел из списка next и prev.\nВ дереве узел пока остаётся;
 :removeTreeNode находит корень root;
-if (Удаление через Iterator.remove()?\n(movable = false)) then (да)
-  :Форму не проверять.
-  Удалить узел из дерева
-  и перебалансировать;
+if (удаление через Iterator.remove, movable = false) then (да)
+  :Форму не проверять.\nУдалить узел из дерева и перебалансировать;
   stop
 else (нет)
 endif
-if (root.right == null\nили root.left == null\nили root.left.left == null?) then (да, дерево деградировало)
-  :untreeify: пройти по списку next,
-  на каждый оставшийся ключ создать обычный Node,
-  положить эту цепочку в bucket.
-  Дерево выбрасывается; <<#ffdddd>>
+if (root.right == null или root.left == null или root.left.left == null) then (да)
+  #ffdddd:untreeify проходит список next.\nНа каждый оставшийся ключ создаётся обычный Node.\nЦепочка кладётся в bucket, дерево выбрасывается;
   stop
 else (нет)
-  :Удалить узел из дерева
-  и перебалансировать (balanceDeletion).
-  bucket остаётся деревом; <<#ddffdd>>
+  #ddffdd:Удалить узел из дерева и перебалансировать.\nBucket остаётся деревом;
   stop
 endif
 @enduml
